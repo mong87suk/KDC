@@ -27,6 +27,7 @@ struct _Client {
     int fd;
     int file_offset;
     int read_state;
+    DList *stream_buf_list;
 };
 
 static void destroy_client(void *client) {
@@ -37,7 +38,7 @@ static void destroy_client(void *client) {
         return;
     }
     remove_client = (Client*) client;
-    
+
     if (close(remove_client->fd) < 0) {
         printf("Falied to close client fd\n");
     }
@@ -47,7 +48,6 @@ static void destroy_client(void *client) {
 static int match_client(void *client, void *fd) {
 
     if (((Client*) client)->fd == *((int*) fd)) {
-        printf("matched client data:%d\n", ((Client*) client)->fd);
         return 1;
     } else {
         return 0;
@@ -85,17 +85,12 @@ static void add_client(Server *server, int fd) {
 }
 
 static void remove_client(Server *server, int fd) {
-    Client *remove_client;
-    DList *list;
-
-    list = server->client_list;
-    remove_client = find_client(server, fd);
-
-    if (!remove_client) {
-        printf("There is no client to remove\n");
+    if (!server && !server->client_list) {
+        printf("Can't remove Client\n");
+        return;
     }
 
-    server->client_list = d_list_remove_nth_with_data(list, remove_client, destroy_client);
+    server->client_list = d_list_remove_with_user_data(server->client_list, &fd, match_client, destroy_client);
 }
 
 static void read_packet(int fd) {
@@ -130,9 +125,9 @@ static int handle_accept_event(Server *server) {
         printf("Failed to accept socket\n");
         return -1;
     }
-    printf("connected client:%d\n", client_fd);
 
     add_client(server, client_fd);
+    printf("connected:%d\n", client_fd);
     return client_fd;
 }
 

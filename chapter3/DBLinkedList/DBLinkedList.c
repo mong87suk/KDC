@@ -76,7 +76,7 @@ int d_list_length(DList *list) {
     return lenght;
 }
 
-DList* d_list_remove_nth_with_data(DList *list, void *data, void(*free_data)(void *data)) {
+DList* d_list_remove_with_data(DList *list, void *data, void(*free_data)(void *data)) {
     DList *tmp;
     tmp = list;
     while (tmp) {
@@ -87,6 +87,24 @@ DList* d_list_remove_nth_with_data(DList *list, void *data, void(*free_data)(voi
             break;
         }
     }
+    return list;
+}
+
+DList* d_list_remove_with_user_data(DList *list, void *user_data, int(*find_data)(void *data, void *user_data), void(*free_data)(void *data)) {
+    DList *remove_data;
+
+    if (!list) {
+        printf("There is nothing to point DList\n");
+        return NULL;
+    }
+    remove_data = d_list_find_data(list, find_data, user_data);
+
+    if (!remove_data) {
+        printf("There is nothing to point  DList to remove\n");
+        return NULL;
+    }
+
+    list = d_list_remove_with_data(list, remove_data, free_data);
     return list;
 }
 

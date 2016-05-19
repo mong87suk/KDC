@@ -16,7 +16,6 @@ struct _Client
 {
     int fd;
     Looper *looper;
-    DList *buffer_list;
 };
 
 static int get_buffer_size(Client *client) {
@@ -97,6 +96,7 @@ static void handle_stdin_event(Client* client, int fd) {
     int n_byte;
     int input_size;
     char request_num;
+    DList *stream_buf_list;
 
     buf = (char*) malloc(BUF_SIZE);
     if (!buf) {
@@ -218,7 +218,6 @@ Client* new_client(Looper *looper) {
     }
 
     client->fd = client_fd;
-    client->buffer_list = NULL;
 
     add_watcher(looper, STDIN_FILENO, handle_events, client, POLLIN);
     add_watcher(looper, client_fd, handle_events, client, POLLIN);
