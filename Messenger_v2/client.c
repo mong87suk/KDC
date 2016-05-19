@@ -95,29 +95,30 @@ static void handle_stdin_event(Client* client, int fd) {
     char *buf, *input_str;
     int n_byte;
     int input_size;
+    int used_size;
     char request_num;
     DList *stream_buf_list;
+    Stream_Buf *stream_buf;
 
-    buf = (char*) malloc(BUF_SIZE);
-    if (!buf) {
-        printf("There is no a pointer to buf");
-        return;
-    }
-    memset(buf, 0, BUF_SIZE);
-    client->buffer_list = NULL;
+    stream_buf_list = NULL;
+    stream_buf = new_stream_buf(1024);
 
-    while ((n_byte = read(fd, buf, BUF_SIZE - 1))) {
-        client->buffer_list = d_list_append(client->buffer_list, buf);
-        if (buf[n_byte - 1] == '\n') {
-            break;
-        }
-
-        buf = (char*) malloc(BUF_SIZE);
-        if (!buf) {
-            printf("There is no a pointer to buf");
+    while ((n_byte = read(fd, get_available_buf(stream_buf), 1024))) {
+        if (n_byte < 0) {
+            printf("Failed to read\n");
             return;
         }
-        memset(buf, 0, BUF_SIZE);
+
+        sum_used_n_byte(stream_buf, n_byte);
+        buf = get_available_buf(stream_buf);
+        stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+        used_size = get_used_n_byte(stream);
+
+        if (buf[used_size - 1] == '\n') {
+            break;
+        } else if (used_size >= 1024) {
+            stream_buf = new_stream_buf(1024);
+        }
     }
 
     input_size = get_buffer_size(client);
