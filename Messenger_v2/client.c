@@ -11,6 +11,8 @@
 #include "looper.h"
 #include "socket.h"
 #include "DBLinkedList.h"
+#include "stream_buf.h"
+#include "packet.h"
 
 struct _Client
 {
@@ -18,50 +20,68 @@ struct _Client
     Looper *looper;
 };
 
-static int get_buffer_size(Client *client) {
-    DList *list, *next;
+static void sum_used_buf_size(void *data, void *user_data) {
+    int *size;
+    Stream_Buf *stream_buf;
+
+    stream_buf = (Stream_Buf*) data;
+    size = (int*) user_data;
+
+    *size += get_used_size(stream_buf);
+}
+
+static int get_buffer_size(DList *stream_buf_list) {
     int size;
-    char *buf;
 
     size = 0;
-    list = client->buffer_list;
-
-    while (list) {
-        next = d_list_next(list);
-        buf = (char*) d_list_get_data(list);
-        if (!buf) {
-            printf("There is no a pointer to buf\n");
-            break;
-        }
-        size += strlen(buf);
-        list = next;
-    }
+    d_list_foreach(stream_buf_list, sum_used_buf_size, &size);
     return size;
 }
 
-static void copy_data(void *user_data, void *data) {
+static void append_data(void *data, void *user_data) {
     char *dest, *src;
     int beginIndex, n;
+    Stream_Buf *stream_buf;
 
+    stream_buf = (Stream_Buf*) data;
     dest = (char*) user_data;
-    src = (char*) data;
+
+    if (!stream_buf) {
+        printf("There is nothing to point Stream_Buf\n");
+        return;
+    }
+
+    src = get_available_buf(stream_buf);
+
+    if (!src) {
+        printf("There is nothing to point buf\n");
+        return;
+    }
 
     beginIndex = strlen(user_data);
-    n = strlen(src);
+    n = get_used_size(stream_buf);
 
     memcpy(dest + beginIndex, src, n);
 }
 
-static void copy_buffer_list_data(Client *client, char *buf) {
-    DList *list;
-    list = client->buffer_list;
+static void destroy_stream_buf_list(void *data) {
+    Stream_Buf *stream_buf;
 
-    if (!list) {
-        printf("There is no a pointer to buffer\n");
+    stream_buf = (Stream_Buf*) data;
+
+    if (!stream_buf) {
+        printf("There is nothing to remove the Stream_Buf\n");
         return;
     }
-    d_list_foreach(list, copy_data, buf);
-    d_list_free(list, free);
+    destroy_stream_buf(stream_buf);
+}
+
+static void append_data_to_buffer(DList *stream_buf_list, char *buf) {
+    if (!stream_buf_list) {
+        printf("There is no a pointer to Stream_Buf\n");
+        return;
+    }
+    d_list_foreach(stream_buf_list, append_data, buf);
 }
 
 static void read_packet(int fd) {
@@ -76,8 +96,21 @@ static void handle_disconnect(Client *client, int fd) {
 
 }
 
-static char* create_req_all_mesg_packet() {
-    printf("create_req_all_mesg_packet\n");
+static Packet* create_req_all_mesg_packet() {
+    Packet *packet;
+    Header *header;
+    Body *body;
+    Tail *tail;
+    short check_sum;
+
+    header = new_header(SOP, REQ_ALL_MSG, 0);
+    body = new_body(NULL);
+    tail = new_tail(EOP, 0);
+
+    packet = new_packet(header, body, tail);
+    check_sum = do_check_sum(packet);
+    set_check_sum(packet, check_sum);
+
     return NULL;
 }
 
@@ -91,76 +124,96 @@ static char* create_req_first_or_last_mesg_packet(char *input_str) {
     return NULL;
 }
 
-static void handle_stdin_event(Client* client, int fd) {
+static char* create_req_packet(char *input_str) {
+    int input_strlen;
+    char request_num;
+    Packet *packet;
+
+    if (!input_str) {
+        printf("There is nothing to point input_str\n");
+        return NULL;
+    }
+
+    input_strlen = strlen(input_str);
+
+    if (input_strlen >= REQ_STR_MIN_LEN && (strncasecmp(input_str, REQ_STR, strlen(REQ_STR))) == 0) {
+        printf("input_str:%s", input_str);
+        request_num = input_str[8] - '0';
+
+        switch(request_num) {
+        case REQ_ALL_MSG:
+            if (input_strlen == REQ_STR_MIN_LEN) {
+                packet = create_req_all_mesg_packet();
+            }
+            break;
+        case SND_MSG:
+            if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
+                packet = create_req_snd_mesg_packet(input_str);
+            }
+            break;
+        case REQ_FIRST_OR_LAST_MSG:
+            if (input_strlen == REQ_FIRST_OR_LAST_MESG_PACKET_SIZE && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
+                packet = create_req_first_or_last_mesg_packet(input_str);
+            }
+            break;
+        default:
+            printf("Your request number is %c Please recommand\n", request_num);
+            return NULL;
+        }
+    }
+    
+}
+
+
+static char* handle_stdin_event(Client* client, int fd) {
     char *buf, *input_str;
     int n_byte;
     int input_size;
     int used_size;
-    char request_num;
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
 
     stream_buf_list = NULL;
-    stream_buf = new_stream_buf(1024);
+    stream_buf = new_stream_buf(2);
 
-    while ((n_byte = read(fd, get_available_buf(stream_buf), 1024))) {
+    while ((n_byte = read(fd, get_available_buf(stream_buf), 2))) {
         if (n_byte < 0) {
             printf("Failed to read\n");
-            return;
+            return NULL;
         }
 
         sum_used_n_byte(stream_buf, n_byte);
         buf = get_available_buf(stream_buf);
         stream_buf_list = d_list_append(stream_buf_list, stream_buf);
-        used_size = get_used_n_byte(stream);
+        used_size = get_used_size(stream_buf);
 
         if (buf[used_size - 1] == '\n') {
             break;
-        } else if (used_size >= 1024) {
-            stream_buf = new_stream_buf(1024);
+        } else if (used_size >= 2) {
+            stream_buf = new_stream_buf(2);
         }
     }
 
-    input_size = get_buffer_size(client);
+    input_size = get_buffer_size(stream_buf_list);
     input_str = (char*) malloc(input_size);
     printf("input_size:%d\n", input_size);
 
     if (!input_str) {
         printf("Failed to make input str\n");
-        return;
+        return NULL;
     }
 
-    memset(input_str, 0, input_size);
-    copy_buffer_list_data(client, input_str);
+    memset(input_str, 0, input_size + 1);
+    append_data_to_buffer(stream_buf_list, input_str);
+    d_list_free(stream_buf_list, destroy_stream_buf_list);
+    stream_buf_list = NULL;
 
-    if (input_size >= REQ_STR_MIN_LEN && (strncasecmp(input_str, REQ_STR, strlen(REQ_STR))) == 0) {
-        printf("input_str:%s", input_str);
-        request_num = input_str[8];
-
-        switch(request_num) {
-            case '1':
-                if (input_size == REQ_STR_MIN_LEN) {
-                    create_req_all_mesg_packet();
-                }
-                break;
-            case '3':
-                if (input_size > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
-                    create_req_snd_mesg_packet(input_str);
-                }
-                break;
-            case '5':
-                if (input_size == REQ_FIRST_OR_LAST_MESG_PACKET_SIZE && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
-                    create_req_first_or_last_mesg_packet(input_str);
-                }
-                break;
-            default:
-                printf("Your request number is %c Please recommand\n", request_num);
-        }
-    }
+    return input_str;
 }
 
 static void handle_events(int fd, void *user_data, int revents) {
     Client *client = (Client*) user_data;
+    char *input_str;
 
     if (!client) {
         printf("There is no a pointer to Client\n");
@@ -173,7 +226,12 @@ static void handle_events(int fd, void *user_data, int revents) {
         if (fd == client->fd) {
             handle_res_events(client, fd);
         } else if (fd == STDIN_FILENO) {
-            handle_stdin_event(client, fd);
+            input_str = handle_stdin_event(client, fd);
+            if (!input_str) {
+                printf("There is nothing to pointer input_str\n");
+                return;
+            }
+            create_req_packet(input_str);
         } else {
             printf("There is no fd to handle event\n");
             return;

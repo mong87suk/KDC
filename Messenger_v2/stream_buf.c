@@ -1,3 +1,7 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "stream_buf.h"
 
 struct _Stream_Buf {
@@ -15,7 +19,7 @@ Stream_Buf* new_stream_buf(int len) {
     }
 
     stream_buf = (Stream_Buf*) malloc(sizeof(Stream_Buf));
-    stream_buf->buf = (char*) malloc(len);    
+    stream_buf->buf = (char*) malloc(len);
     if (!stream_buf->buf) {
         printf("Failed to make buf\n");
         return NULL;;
@@ -30,29 +34,36 @@ Stream_Buf* new_stream_buf(int len) {
 
 char* get_available_buf(Stream_Buf *stream_buf) {
     if (!stream_buf) {
-        printf("There is nothing to point the Stream_Buf\n");
+        printf("There is nothing to point Stream_Buf\n");
         return NULL;
     }
-    stream_buf->buf = stream_buf->buf + stream_buf->used_size;
-    
+
     return stream_buf->buf;
 }
 
-int get_available_size(Stream_Buf *stream_buf) {
+void destroy_stream_buf(Stream_Buf *stream_buf) {
+    if (!stream_buf) {
+        printf("There is nothing to destroy stream_buf\n");
+        return;
+    }
+
+    free(stream_buf->buf);
+    free(stream_buf);
+}
+
+int get_used_size(Stream_Buf *stream_buf) {
     if (!stream_buf) {
         printf("There is nothing to point the Stream_Buf\n");
         return 0;
     }
-    return stream_buf->len;
+    return stream_buf->used_size;
 }
 
 void sum_used_n_byte(Stream_Buf *stream_buf, int n_byte) {
     if (!stream_buf) {
         printf("There is nothing to point the Stream_Buf\n");
-        return 0;
+        return;
     }
 
     stream_buf->used_size += n_byte;
-    return;
 }
- 

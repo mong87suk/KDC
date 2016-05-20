@@ -13,16 +13,20 @@ INC = -I../chapter3/DBLinkedList/
 DBLINKED_LIST_OBJECT = DBLinkedList.o
 
 SERVER_MAIN_OBJECT = \
-		     server_main.o\
-		     server.o\
-			 mesg_file.o\
-		     mesg_file_db.o\
-		     looper.o\
+			server_main.o\
+			server.o\
+			mesg_file.o\
+			mesg_file_db.o\
+			looper.o\
+			stream_buf.o\
+			packet.o\
 
 CLIENT_MAIN_OBJECT = \
-		     client_main.o\
-		     client.o\
-		     looper.o\
+			client_main.o\
+			client.o\
+			looper.o\
+			stream_buf.o\
+			packet.o\
 
 SHARED_LIBRARY = lib$(DBLINKED_LIST).so
 

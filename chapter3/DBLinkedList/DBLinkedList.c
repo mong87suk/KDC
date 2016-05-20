@@ -375,12 +375,12 @@ DList* d_list_next(DList *list) {
     return list;
 }
 
-void d_list_foreach(DList *list, void (*func)(void *user_data, void *data), void *user_data) {
+void d_list_foreach(DList *list, void (*func)(void *data, void *user_data), void *user_data) {
     DList *next;
 
     while (list) {
         next = list->next;
-        func(user_data, list->data);
+        func(list->data, user_data);
         list = next;
     }
 }
