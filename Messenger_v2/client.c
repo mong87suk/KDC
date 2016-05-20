@@ -20,21 +20,21 @@ struct _Client
     Looper *looper;
 };
 
-static void sum_used_buf_size(void *data, void *user_data) {
+static void sum_size(void *data, void *user_data) {
     int *size;
     Stream_Buf *stream_buf;
 
     stream_buf = (Stream_Buf*) data;
     size = (int*) user_data;
 
-    *size += get_used_size(stream_buf);
+    *size += get_position(stream_buf);
 }
 
 static int get_buffer_size(DList *stream_buf_list) {
     int size;
 
     size = 0;
-    d_list_foreach(stream_buf_list, sum_used_buf_size, &size);
+    d_list_foreach(stream_buf_list, sum_size, &size);
     return size;
 }
 
@@ -51,7 +51,7 @@ static void append_data(void *data, void *user_data) {
         return;
     }
 
-    src = get_available_buf(stream_buf);
+    src = get_buf(stream_buf);
 
     if (!src) {
         printf("There is nothing to point buf\n");
@@ -59,7 +59,7 @@ static void append_data(void *data, void *user_data) {
     }
 
     beginIndex = strlen(user_data);
-    n = get_used_size(stream_buf);
+    n = get_position(stream_buf);
 
     memcpy(dest + beginIndex, src, n);
 }
@@ -161,7 +161,6 @@ static char* create_req_packet(char *input_str) {
             return NULL;
         }
     }
-    
 }
 
 
@@ -169,33 +168,36 @@ static char* handle_stdin_event(Client* client, int fd) {
     char *buf, *input_str;
     int n_byte;
     int input_size;
-    int used_size;
+    int position;
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
 
     stream_buf_list = NULL;
     stream_buf = new_stream_buf(2);
+    buf = get_buf(stream_buf);
 
-    while ((n_byte = read(fd, get_available_buf(stream_buf), 2))) {
+    while ((n_byte = read(fd, buf, get_available_size(stream_buf)))) {
         if (n_byte < 0) {
             printf("Failed to read\n");
             return NULL;
         }
 
-        sum_used_n_byte(stream_buf, n_byte);
-        buf = get_available_buf(stream_buf);
-        stream_buf_list = d_list_append(stream_buf_list, stream_buf);
-        used_size = get_used_size(stream_buf);
+        set_position(stream_buf, n_byte);
+        set_available_size(stream_buf, n_byte);
 
-        if (buf[used_size - 1] == '\n') {
+        stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+        position = get_position(stream_buf);
+
+        if (buf[position - 1] == '\n') {
             break;
-        } else if (used_size >= 2) {
+        } else if (position >= get_len(stream_buf)) {
             stream_buf = new_stream_buf(2);
+            buf = get_buf(stream_buf);
         }
     }
 
     input_size = get_buffer_size(stream_buf_list);
-    input_str = (char*) malloc(input_size);
+    input_str = (char*) malloc(input_size + 1);
     printf("input_size:%d\n", input_size);
 
     if (!input_str) {
@@ -205,6 +207,7 @@ static char* handle_stdin_event(Client* client, int fd) {
 
     memset(input_str, 0, input_size + 1);
     append_data_to_buffer(stream_buf_list, input_str);
+    printf("%s\n", input_str);
     d_list_free(stream_buf_list, destroy_stream_buf_list);
     stream_buf_list = NULL;
 
