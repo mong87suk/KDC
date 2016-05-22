@@ -16,7 +16,7 @@ struct _Watcher
     int fd;
     void *user_data;
     void (*handle_events)(int fd, void *user_data, int revents);
-    int events;
+    short events;
 };
 
 /**
@@ -37,7 +37,7 @@ static void get_fds(DList *watcher_list, struct pollfd *fds) {
         watcher = (Watcher*) d_list_get_data(watcher_list);
 
         if (!watcher) {
-            printf("%s There is nothing to pointer the Watcher\n", __func__);
+            printf("%s %s There is nothing to pointer the Watcher\n", __FILE__, __func__);
             break;
         }
 
@@ -48,12 +48,12 @@ static void get_fds(DList *watcher_list, struct pollfd *fds) {
     }
 }
 
-static int match_watcher(void *data, void *user_data) {
-    Watcher *watcher = (Watcher*) data;
-    int fd = *((int*) user_data);
+static int match_watcher(void *data1, void *data2) {
+    Watcher *watcher = (Watcher*) data1;
+    int fd = *((int*) data2);
 
     if (!watcher) {
-        printf("%s There is nothing to pointer the Watcher\n", __func__);
+        printf("%s %s There is nothing to point the Watcher\n", __FILE__, __func__);
         return 0;
     }
 
@@ -67,7 +67,7 @@ static int match_watcher(void *data, void *user_data) {
 static Watcher* find_watcher(Looper *looper, int fd) {
     Watcher *watcher;
     if (!looper) {
-        printf("%s There is nothing to pointer the Looper\n", __func__);
+        printf("%s %s There is nothing to pointer the Looper\n", __FILE__, __func__);
         return NULL;
     }
 
@@ -79,7 +79,7 @@ static void destroy_watcher(void *data) {
     Watcher *watcher;
 
     if (!data) {
-        printf("%s There is nothing to pointer the Watcher\n", __func__);
+        printf("%s %s There is nothing to pointer the Watcher\n", __FILE__, __func__);
         return;
     }
     watcher = (Watcher*) data;
@@ -90,13 +90,13 @@ Looper* new_looper() {
     Looper *looper;
     looper = (Looper*) malloc(sizeof(Looper));
     looper->watcher_list = NULL;
-    looper->state = 1;
+    looper->state = 0;
     return looper;
 }
 
 void stop(Looper *looper) {
     if (!looper) {
-        printf("%s There is nothing to pointer the Looper\n", __func__);
+        printf("%s %s There is nothing to pointer the Looper\n", __FILE__, __func__);
         return;
     }
     looper->state = 0;
@@ -111,6 +111,7 @@ void stop(Looper *looper) {
   **/
 int run(Looper *looper) {
     short revents;
+    int looper_event;
     int fd, nfds;
     int i;
     int n_watcher;
@@ -120,36 +121,49 @@ int run(Looper *looper) {
     nfds = 0;
 
     if (!looper) {
-        printf("%s There is nothing to pointer th Looper\n", __func__);
+        printf("%s %s There is nothing to pointer the Looper\n", __FILE__, __func__);
         return 0;
     }
 
     list = looper->watcher_list;
-    while (looper->state) {
-        n_watcher = d_list_length(list);
-        if (!n_watcher) {
-            printf("There is no Watcher\n");
-            continue;
-        }
 
+   if (!(d_list_length(list))) {
+       printf("%s %s There is no Watcher\n", __FILE__, __func__);
+       return 0;
+   }
+
+   looper->state = 1;
+
+    while (looper->state) {
+        n_watcher = d_list_length(looper->watcher_list);
+        if (n_watcher <= 0) {
+            printf("%s %s There is no Watcher\n", __FILE__, __func__);
+            return 0;
+        }
         struct pollfd fds[n_watcher];
-        get_fds(list, fds);
+        get_fds(looper->watcher_list, fds);
 
         nfds = poll(fds, n_watcher, 10000);
 
         if (nfds > 0) {
             for (i = 0; i < n_watcher; i++) {
                 if (fds[i].revents != 0) {
-                    printf("%s pollfd index:%d revent:%d\n", __func__, i, fds[i].revents);
+                    printf("%s %s pollfd index:%d revent:%d\n", __FILE__, __func__, i, fds[i].revents);
                     fd = fds[i].fd;
                     revents = fds[i].revents;
 
+                    if (revents & POLLHUP) {
+                        looper_event = LOOPER_HUP_EVENT;
+                    } else if (revents & POLLIN) {
+                        looper_event = LOOPER_IN_EVENT;
+                    } else {
+                        looper_event = LOOPER_NO_EVENT;
+                    }
                     watcher = find_watcher(looper, fd);
                     if (!watcher) {
-                        printf("%s There is nothing to point the Watcher\n", __func__);
                         continue;
                     }
-                    watcher->handle_events(fd, watcher->user_data, revents);
+                    watcher->handle_events(fd, watcher->user_data, looper_event);
                 }
             }
         }
@@ -157,20 +171,29 @@ int run(Looper *looper) {
     return looper->state;
 }
 
-void add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, void *user_data, int revents), void *user_data, int events) {
+void add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, void *user_data, int looper_event), void *user_data, int looper_event) {
     DList *list;
     Watcher *watcher;
+    short events;
 
     watcher = (Watcher*) malloc(sizeof(Watcher));
 
     if (!watcher) {
-        printf("%s Failed to make Watcher\n", __func__);
+        printf("%s %s Failed to make Watcher\n", __FILE__, __func__);
         return;
     }
 
     watcher->fd = fd;
     watcher->handle_events = handle_events;
     watcher->user_data = user_data;
+
+    if (looper_event == LOOPER_IN_EVENT) {
+        events = POLLIN;
+    } else {
+        printf("%s %s Events was wrong\n", __FILE__, __func__);
+        return;
+    }
+
     watcher->events = events;
 
     list = looper->watcher_list;
@@ -179,15 +202,16 @@ void add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, void *use
 
 void remove_all_watchers(Looper *looper) {
     if (!looper && !(looper->watcher_list)) {
-        printf("%s There is nothing to pointer the Looper\n", __func__);
+        printf("%s %s There is nothing to pointer the Looper\n", __FILE__, __func__);
         return;
     }
     d_list_free(looper->watcher_list, destroy_watcher);
+    looper->watcher_list = NULL;
 }
 
 void remove_watcher(Looper *looper, int fd) {
     if (!looper && !looper->watcher_list) {
-        printf("%s Can't remove Wathcer\n", __func__);
+        printf("%s %s Can't remove Wathcer\n", __FILE__, __func__);
         return;
     }
 
@@ -196,9 +220,9 @@ void remove_watcher(Looper *looper, int fd) {
 
 void destroy_looper(Looper *looper) {
     if (!looper) {
-        printf("%s There is nothing to pointer the Looper\n", __func__);
+        printf("%s %s There is nothing to pointer the Looper\n", __FILE__, __func__);
         return;
     }
-
+    remove_all_watchers(looper);
     free(looper);
 }

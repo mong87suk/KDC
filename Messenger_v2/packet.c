@@ -34,7 +34,7 @@ Packet* new_packet(Header *header, Body *body, Tail *tail) {
     packet = (Packet*) malloc(sizeof(Packet));
 
     if (!packet) {
-        printf("Failed to make Packet\n");
+        printf("%s %s Failed to make Packet\n", __FILE__, __func__);
         return NULL;
     }
 
@@ -47,13 +47,21 @@ Packet* new_packet(Header *header, Body *body, Tail *tail) {
 
 void destroy_packet(Packet *packet) {
     if (!packet) {
-        printf("There is nothing to remove packet\n");
+        printf("%s %s There is nothing to remove packet\n", __FILE__, __func__);
         return;
     }
 
-    free(packet->header);
-    free(packet->body);
-    free(packet->tail);
+    if (packet->header) {
+        free(packet->header);
+    }
+
+    if (packet->body) {
+        free(packet->body);
+    }
+
+    if (packet->tail) {
+        free(packet->tail);
+    }
 }
 
 Header* new_header(char sop, short op_code, long int payload_len) {
@@ -61,7 +69,7 @@ Header* new_header(char sop, short op_code, long int payload_len) {
 
     header = (Header*) malloc(sizeof(Header));
     if (!header) {
-        printf("Failed to make Header\n");
+        printf("%s %s Failed to make Header\n", __FILE__, __func__);
         return NULL;
     }
 
@@ -74,7 +82,7 @@ Header* new_header(char sop, short op_code, long int payload_len) {
 
 void destroy_header(Header *header) {
     if (!header) {
-        printf("There is nothing to remove header\n");
+        printf("%s %s There is nothing to remove header\n", __FILE__, __func__);
         return;
     }
 
@@ -86,7 +94,7 @@ Body* new_body(char *payload) {
 
     body = (Body*) malloc(sizeof(Body));
     if (!body) {
-        printf("Failed to make Body\n");
+        printf("%s %s Failed to make Body\n", __FILE__, __func__);
         return NULL;
     }
 
@@ -96,11 +104,14 @@ Body* new_body(char *payload) {
 
 void destroy_body(Body *body) {
     if (!body) {
-        printf("There is nothing to remove Body\n");
+        printf("%s %s There is nothing to remove Body\n", __FILE__, __func__);
         return;
     }
 
-    free(body->payload);
+    if (body->payload) {
+        free(body->payload);
+    }
+
     free(body);
 }
 
@@ -109,7 +120,7 @@ Tail* new_tail(char eop, short check_sum) {
 
     tail = (Tail*) malloc(sizeof(Tail));
     if (!tail) {
-        printf("Failed to make Tail\n");
+        printf("%s %s Failed to make Tail\n", __FILE__, __func__);
         return NULL;
     }
 
@@ -121,18 +132,30 @@ Tail* new_tail(char eop, short check_sum) {
 
 void destroy_tail(Tail *tail) {
     if (!tail) {
-        printf("There is nothing to remove Tail\n");
+        printf("%s %s There is nothing to remove Tail\n", __FILE__, __func__);
         return;
     }
 
     free(tail);
 }
 
+
+void set_op_code(Packet *packet, short op_code) {
+    Header *header;
+    if (!packet && !packet->header) {
+        printf("%s %s Can't set op_code\n", __FILE__, __func__);
+        return;
+    }
+
+    header = packet->header;
+    header->op_code = op_code;
+}
+
 short get_op_code(Packet *packet) {
     Header *header;
 
     if (!packet && !packet->header) {
-        printf("Can't get op_code\n");
+        printf("%s %s Can't get op_code\n", __FILE__, __func__);
         return -1;
     }
 
@@ -140,11 +163,24 @@ short get_op_code(Packet *packet) {
     return header->op_code;
 }
 
+void set_payload_len(Packet *packet, long int payload_len) {
+    Header *header;
+
+    if (!packet && !packet->header) {
+        printf("%s %s Can't set payload_len\n", __FILE__, __func__);
+        return;
+    }
+
+    header = packet->header;
+    header->payload_len = payload_len;
+    return;
+}
+
 long int get_payload_len(Packet *packet) {
     Header *header;
 
     if (!packet && !packet->header) {
-        printf("Can't get payload_len\n");
+        printf("%s %s Can't get payload_len\n", __FILE__, __func__);
         return -1;
     }
 
@@ -152,11 +188,24 @@ long int get_payload_len(Packet *packet) {
     return header->payload_len;
 }
 
+void set_payload(Packet *packet, char *payload) {
+    Body *body;
+
+    if(!packet && !packet->body) {
+        printf("%s %s Can't set payload\n", __FILE__, __func__);
+        return;
+    }
+
+    body = packet->body;
+    body->payload = payload;
+    return;
+}
+
 char* get_payload(Packet *packet) {
     Body *body;
 
     if(!packet && !packet->body) {
-        printf("Can't get payload\n");
+        printf("%s %s Can't get payload\n", __FILE__, __func__);
         return NULL;
     }
 
@@ -172,7 +221,7 @@ short do_check_sum(Packet *packet) {
     short check_sum;
 
     if (!packet) {
-        printf("There is nothing to point the Packet\n");
+        printf("%s %s There is nothing to point the Packet\n", __FILE__, __func__);
         return -1;
     }
 
@@ -198,10 +247,20 @@ void set_check_sum(Packet *packet, short check_sum) {
     Tail *tail;
 
     if (!packet) {
-        printf("There is nothing to point packet\n");
+        printf("%s %s There is nothing to point packet\n", __FILE__, __func__);
         return;
     }
 
     tail = packet->tail;
     tail->check_sum = check_sum;
+}
+
+void set_body(Packet *packet, Body *body) {
+    if (!packet && !body) {
+        printf("%s %s Can't set the Body\n", __FILE__, __func__);
+        return;
+    }
+
+    packet->body = body;
+    return;
 }

@@ -3,7 +3,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <poll.h>
 #include <sys/un.h>
 #include <string.h>
 #include <sys/types.h>
@@ -34,20 +33,26 @@ static void destroy_client(void *client) {
     Client *remove_client;
 
     if (!client) {
-        printf("There is nothing to pointer the Client\n");
+        printf("%s %s There is nothing to point the Client\n", __FILE__, __func__);
         return;
     }
     remove_client = (Client*) client;
 
     if (close(remove_client->fd) < 0) {
-        printf("Falied to close client fd\n");
+        printf("%s %s Falied to close client fd\n", __FILE__, __func__);
     }
     free(remove_client);
 }
 
-static int match_client(void *client, void *fd) {
+static int match_client(void *data1, void *data2) {
+    Client *client = (Client*) data1;
+    int fd = *((int*) data2);
 
-    if (((Client*) client)->fd == *((int*) fd)) {
+    if (!client) {
+        printf("%s %s There is nothing to point the Client\n", __FILE__, __func__);
+    }
+
+    if (client->fd == fd) {
         return 1;
     } else {
         return 0;
@@ -59,7 +64,7 @@ static Client* find_client(Server *server, int fd) {
     client = (Client*) d_list_find_data(server->client_list, match_client, &fd);
 
     if (client == NULL) {
-        printf("Can't find Client\n");
+        printf("%s %s Can't find Client\n", __FILE__, __func__);
         return NULL;
     }
     return client;
@@ -73,7 +78,7 @@ static void add_client(Server *server, int fd) {
     client = (Client*) malloc(sizeof(Client));
 
     if (!client) {
-        printf("Failed to make Client\n");
+        printf("%s %s Failed to make Client\n", __FILE__, __func__);
         return;
     }
 
@@ -86,7 +91,7 @@ static void add_client(Server *server, int fd) {
 
 static void remove_client(Server *server, int fd) {
     if (!server && !server->client_list) {
-        printf("Can't remove Client\n");
+        printf("%s %s Can't remove Client\n", __FILE__, __func__);
         return;
     }
 
@@ -99,7 +104,7 @@ static void read_packet(int fd) {
 
     while ((n_byte = read(fd, buf, MAX_BUF_LEN))) {
        if (n_byte == 0) {
-           printf("Finished read packet\n");
+           printf("%s %s Finished read packet\n", __FILE__, __func__);
        }
     }
 }
@@ -109,7 +114,7 @@ static void handle_disconnect_event(Server *server, int fd) {
         remove_client(server, fd);
         remove_watcher(server->looper, fd);
     }
-    printf("disconnected:%d\n", fd);
+    printf("%s %s disconnected:%d\n", __FILE__, __func__, fd);
 }
 
 static void handle_req_event(Server *server, int fd) {
@@ -122,32 +127,32 @@ static int handle_accept_event(Server *server) {
 
     client_fd = accept(server->fd, NULL, NULL);
     if (client_fd < 0) {
-        printf("Failed to accept socket\n");
+        printf("%s %s Failed to accept socket\n", __FILE__, __func__);
         return -1;
     }
 
     add_client(server, client_fd);
-    printf("connected:%d\n", client_fd);
+    printf("%s %s connected:%d\n", __FILE__, __func__, client_fd);
     return client_fd;
 }
 
-static void handle_events(int fd, void *user_data, int revents) {
+static void handle_events(int fd, void *user_data, int looper_event) {
     int client_fd;
     Server *server;
     server = (Server*) user_data;
 
     if (!server && (fd < 0)) {
-        printf("Can't handle events\n");
+        printf("%s %s Can't handle events\n", __FILE__, __func__);
         return;
     }
 
-    if (revents & POLLHUP) {
+    if (looper_event == LOOPER_HUP_EVENT) {
          handle_disconnect_event(server, fd);
-    } else if (revents & POLLIN) {
+    } else if (looper_event == LOOPER_IN_EVENT) {
         if (fd == server->fd) {
             client_fd = handle_accept_event(server);
             if (client_fd != -1) {
-                add_watcher(server->looper, client_fd, handle_events, server, POLLIN);
+                add_watcher(server->looper, client_fd, handle_events, server, LOOPER_IN_EVENT);
             }
         } else {
             handle_req_event(server, fd);
@@ -163,24 +168,26 @@ Server* new_server(Looper *looper) {
     Mesg_File_DB *mesg_file_db;
 
     if (!looper) {
-        printf("Looper is empty\n");
+        printf("%s %s Looper is empty\n", __FILE__, __func__);
         return NULL;
     }
 
     server = (Server*) malloc(sizeof(Server));
 
     if (!server) {
-        printf("Failed to make Server\n");
+        printf("%s %s Failed to make Server\n", __FILE__, __func__);
         return NULL;
     }
 
-    if (unlink(SOCKET_PATH) < 0) {
-        printf("Failed to unlink\n");
-        return NULL;
+    if (access(SOCKET_PATH, F_OK) == 0) {
+        if (unlink(SOCKET_PATH) < 0) {
+            printf("%s %s Failed to unlink\n", __FILE__, __func__);
+            return NULL;
+        }
     }
 
     if ((server_fd = socket(AF_UNIX, SOCK_STREAM,0)) == -1) {
-        perror("socket error");
+        printf("%s %s socket error", __FILE__, __func__);
         return NULL;
     }
 
@@ -189,13 +196,13 @@ Server* new_server(Looper *looper) {
     strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path)-1);
 
     if (bind(server_fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-        perror("bind error");
+        printf("%s %s bind error", __FILE__, __func__);
         close(server_fd);
         return NULL;
     }
 
     if (listen(server_fd, 0) == -1) {
-        perror("listen error");
+        printf("%s %s listen error", __FILE__, __func__);
         close(server_fd);
         return NULL;
     }
@@ -204,7 +211,7 @@ Server* new_server(Looper *looper) {
     mesg_file_db = new_mesg_file_db();
 
     if (!mesg_file && !mesg_file_db) {
-        printf("There is no a pointer to Mesg_File or Mesg_File_DB\n");
+        printf("%s %s There is no a pointer to Mesg_File or Mesg_File_DB\n", __FILE__, __func__);
         return NULL;
     }
 
@@ -214,7 +221,7 @@ Server* new_server(Looper *looper) {
     server->mesg_file = mesg_file;
     server->mesg_file_db = mesg_file_db;
 
-    add_watcher(server->looper, server_fd, handle_events, server, POLLIN);
+    add_watcher(server->looper, server_fd, handle_events, server, LOOPER_IN_EVENT);
 
     return server;
 }
@@ -223,14 +230,14 @@ void destroy_server(Server *server) {
     DList *list;
 
     if (!server) {
-        printf("There is no pointer to Server\n");
+        printf("%s %s There is no pointer to Server\n", __FILE__, __func__);
         return;
     }
 
     stop(server->looper);
 
     if (close(server->fd) < 0) {
-        printf("Failed to close server\n");
+        printf("%s %s Failed to close server\n", __FILE__, __func__);
         return;
     }
 

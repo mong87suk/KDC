@@ -24,9 +24,13 @@ Body* new_body(char *payload);
 void destroy_body(Body *body);
 Tail* new_tail(char eop, short check_sum);
 void destroy_tail(Tail *tail);
+void set_op_code(Packet *packet, short op_code);
 short get_op_code(Packet *packet);
+void set_payload_len(Packet *packet, long int payload_len);
 long int get_payload_len(Packet *packet);
+void set_payload(Packet *packet, char *payload);
 char* get_payload(Packet *packet);
 short do_check_sum(Packet *packet);
 void set_check_sum(Packet *packet, short check_sum);
+void set_body(Packet *packet, Body *body);
 #endif

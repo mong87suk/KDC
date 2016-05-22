@@ -6,7 +6,6 @@
 
 struct _Stream_Buf {
     char *buf;
-    char *start_position;
     int len;
     int position;
     int available_size;
@@ -16,18 +15,17 @@ Stream_Buf* new_stream_buf(int len) {
     Stream_Buf *stream_buf;
 
     if (len < 0) {
-        printf("Can't make Stream_Buf\n");
+        printf("%s %s Can't make Stream_Buf\n", __FILE__, __func__);
         return NULL;
     }
 
     stream_buf = (Stream_Buf*) malloc(sizeof(Stream_Buf));
     stream_buf->buf = (char*) malloc(len);
     if (!stream_buf->buf) {
-        printf("Failed to make buf\n");
+        printf("%s %s Failed to make buf\n", __FILE__, __func__);
         return NULL;
     }
 
-    stream_buf->start_position = stream_buf->buf;
     memset(stream_buf->buf, 0, len);
     stream_buf->position = 0;
     stream_buf->len = len;
@@ -38,7 +36,7 @@ Stream_Buf* new_stream_buf(int len) {
 
 void destroy_stream_buf(Stream_Buf *stream_buf) {
     if (!stream_buf && !stream_buf->buf) {
-        printf("There is nothing to destroy Stream_buf\n");
+        printf("%s %s There is nothing to destroy Stream_buf\n", __FILE__, __func__);
         return;
     }
 
@@ -46,17 +44,17 @@ void destroy_stream_buf(Stream_Buf *stream_buf) {
     free(stream_buf);
 }
 
-char* get_buf(Stream_Buf *stream_buf) {
-    if (!stream_buf) {
-        printf("There is nothing to point Stream_Buf\n");
+char* get_available_buf(Stream_Buf *stream_buf) {
+    if (!stream_buf && !stream_buf->buf) {
+        printf("%s %s There is nothing to point Stream_Buf\n", __FILE__, __func__);
         return NULL;
     }
-    return stream_buf->buf;
+    return stream_buf->buf + stream_buf->position;
 }
 
 int get_available_size(Stream_Buf *stream_buf) {
     if (!stream_buf && !stream_buf->buf) {
-        printf("There is nothing to point Stream_Buf\n");
+        printf("%s %s There is nothing to point Stream_Buf\n", __FILE__, __func__);
         return 0;
     }
     return stream_buf->available_size;
@@ -64,7 +62,7 @@ int get_available_size(Stream_Buf *stream_buf) {
 
 void set_available_size(Stream_Buf *stream_buf, int n_byte) {
     if (!stream_buf && !stream_buf->buf) {
-        printf("There is nothing to point Stream_Buf\n");
+        printf("%s %s There is nothing to point Stream_Buf\n", __FILE__, __func__);
         return;
     }
     stream_buf->available_size -= n_byte;
@@ -72,7 +70,7 @@ void set_available_size(Stream_Buf *stream_buf, int n_byte) {
 
 int get_len(Stream_Buf *stream_buf) {
     if (!stream_buf) {
-        printf("There is nothing to point the Stream_Buf\n");
+        printf("%s %s There is nothing to point the Stream_Buf\n", __FILE__, __func__);
         return 0;
     }
     return stream_buf->len;
@@ -80,26 +78,24 @@ int get_len(Stream_Buf *stream_buf) {
 
 int get_position(Stream_Buf *stream_buf) {
     if (!stream_buf) {
-        printf("There is nothing to point the Stream_Buf\n");
+        printf("%s %s There is nothing to point the Stream_Buf\n", __FILE__, __func__);
         return 0;
     }
     return stream_buf->position;
 }
 
 void set_position(Stream_Buf *stream_buf, int n_byte) {
-    if (!stream_buf && !stream_buf->buf) {
-        printf("There is nothing to point the Stream_Buf\n");
+    if (!stream_buf) {
+        printf("%s %s There is nothing to point the Stream_Buf\n", __FILE__, __func__);
         return;
     }
     stream_buf->position += n_byte;
-    stream_buf->buf = stream_buf->buf + stream_buf->position;
 }
 
-void get_start_position(Stream_Buf *stream_buf) {
-    char *buf;
-    if (!stream_buf && !stream_buf->buf && get_position > 0) {
-        printf("Can't set start position\n");
-        return;
+char* get_buf(Stream_Buf *stream_buf) {
+    if (!stream_buf && !stream_buf->buf) {
+        printf("%s %s There is nothing to point the Stream_Buf\n", __FILE__, __func__);
+        return NULL;
     }
-    return buf[0];
+    return stream_buf->buf;
 }
