@@ -116,7 +116,6 @@ static CREATE_PACKET_RESULT create_req_packet(char *input_str, Packet *packet) {
     if (input_strlen >= REQ_STR_MIN_LEN && (strncasecmp(input_str, REQ_STR, strlen(REQ_STR))) == 0) {
         printf("%s %s input_str:%s", __FILE__, __func__, input_str);
         request_num = input_str[8] - '0';
-
         switch(request_num) {
         case REQ_ALL_MSG:
             if (input_strlen != REQ_STR_MIN_LEN) {
@@ -218,6 +217,40 @@ static CREATE_PACKET_RESULT create_req_packet(char *input_str, Packet *packet) {
     }
 }
 
+static int send_packet_to_server(Client *client, Packet *packet) {
+    int len;
+    char *buf;
+    CONVERT_RESULT result;
+
+    if (!client || !packet) {
+        printf("%s %s Can't send the Packet to server\n", __FILE__, __func__);
+        return -1;
+    }
+
+    len = get_packet_len(packet);
+    if (len == -1) {
+        printf("%s %s Failed to get the packet len\n", __FILE__, __func__);
+        return -1;
+    }
+
+    buf = (char*) malloc(len);
+    if(!buf) {
+        printf("%s %s Failed to make buf to copy the Packet\n", __FILE__, __func__);
+        return -1;
+    }
+
+    result = convert_packet_to_buf(packet, buf);
+    if (result == CONVERT_FAILURE) {
+        printf("%s %s Failed to convert the Packet to buf\n", __FILE__, __func__);
+        return -1;
+    }
+
+    if (write(client->fd, buf, len) < 0) {
+        printf("%s %s Failed to send the Packet to server\n", __FILE__, __func__);
+        return -1;
+    }
+}
+
 static void handle_stdin_event(Client* client, int fd) {
     char *buf, *input_str;
     int n_byte;
@@ -229,21 +262,17 @@ static void handle_stdin_event(Client* client, int fd) {
     Packet *packet;
     Header *header;
     Tail *tail;
-    long int len;
     short result;
 
     stream_buf_list = NULL;
     stream_buf = new_stream_buf(2);
-
+    stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+ 
     while ((n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf)))) {
         if (n_byte < 0) {
             printf("%s %s Failed to read\n", __FILE__, __func__);
             return;
         }
-
-        stream_buf_list = d_list_append(stream_buf_list, stream_buf);
-        position = get_position(stream_buf);
-        buf = get_buf(stream_buf);
 
         result = set_position(stream_buf, n_byte);
         if (result == STREAM_BUF_SET_VALUE_FAILURE) {
@@ -259,10 +288,14 @@ static void handle_stdin_event(Client* client, int fd) {
             return;
         }
 
+        position = get_position(stream_buf);
+        buf = get_buf(stream_buf);
+
         if (buf[position - 1] == '\n') {
             break;
         } else if (position >= get_len(stream_buf)) {
             stream_buf = new_stream_buf(2);
+            stream_buf_list = d_list_append(stream_buf_list, stream_buf);
         }
     }
 
@@ -301,25 +334,7 @@ static void handle_stdin_event(Client* client, int fd) {
         printf("%s %s Failed to make the Packet\n", __FILE__, __func__);
         return;
     }
-
-    len = get_packet_len(packet);
-    if (len == -1) {
-        printf("%s %s Failed to get the packet len\n", __FILE__, __func__);
-        return;
-    }
-
-    buf = (char*) malloc(len);
-    if(!buf) {
-        printf("%s %s Failed to make buf to copy the Packet\n", __FILE__, __func__);
-    }
-    result = convert_packet_to_buf(packet, buf);
-
-    if (result == CONVERT_SUCUESS) {
-
-    } else {
-        printf("%s %s Failed to convert the Packet to buf\n", __FILE__, __func__);
-        return;
-    }
+    result = send_packet_to_server(client, packet);
     return;
 }
 

@@ -104,6 +104,7 @@ static void read_packet(int fd) {
     int n_byte;
 
     while ((n_byte = read(fd, buf, MAX_BUF_LEN))) {
+        printf("n_byte:%d\n", n_byte);
        if (n_byte == 0) {
            printf("%s %s Finished read packet\n", __FILE__, __func__);
        }
@@ -119,6 +120,7 @@ static void handle_disconnect_event(Server *server, int fd) {
 }
 
 static void handle_req_event(Server *server, int fd) {
+    printf("handle_req_event\n");
     read_packet(fd);
 }
 

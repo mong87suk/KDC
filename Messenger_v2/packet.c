@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "packet.h"
 
@@ -73,6 +74,7 @@ Header* new_header(char sop, short op_code, long int payload_len) {
         return NULL;
     }
 
+    memset(header, 0, sizeof(Header));
     header->sop = sop;
     header->op_code = op_code;
     header->payload_len = payload_len;
@@ -97,7 +99,7 @@ Body* new_body(char *payload) {
         printf("%s %s Failed to make Body\n", __FILE__, __func__);
         return NULL;
     }
-
+    memset(body, 0, sizeof(Body));
     body->payload = payload;
     return body;
 }
@@ -123,7 +125,7 @@ Tail* new_tail(char eop, short check_sum) {
         printf("%s %s Failed to make Tail\n", __FILE__, __func__);
         return NULL;
     }
-
+    memset(tail, 0, sizeof(Tail));
     tail->eop = eop;
     tail->check_sum = check_sum;
 
@@ -153,16 +155,52 @@ PACKET_SET_VALURE_RESULT set_op_code(Packet *packet, short op_code) {
     return PACKET_SET_VALUE_SUCCESS;
 }
 
-short get_op_code(Packet *packet) {
-    Header *header;
+char get_sop(Packet *packet, Header *header) {
+    if (packet) {
+        header = packet->header;
+    }
 
-    if (!packet || !packet->header) {
-        printf("%s %s Can't get op_code\n", __FILE__, __func__);
+    if (!header) {
+        printf("%s %s Can't get sop\n", __FILE__, __func__); 
         return -1;
     }
 
-    header = packet->header;
+    return header->sop;
+}
+
+char get_eop(Packet *packet, Tail *tail) {
+    if (packet) {
+        tail = packet->tail;
+    }
+
+    if (!tail) {
+        printf("%s %s Can't get eop\n", __FILE__, __func__);
+        return -1;
+    }
+    return tail->eop;
+}
+
+short get_op_code(Packet *packet, Header *header) {
+    if (packet) {
+        header = packet->header;
+    }
+    if (!header) {
+        printf("%s %s Can't get op_code\n", __FILE__, __func__); 
+        return -1;
+    }
     return header->op_code;
+}
+
+short get_check_sum(Packet *packet, Tail *tail) {
+    if (packet) {
+        tail = packet->tail;
+    }
+
+    if (!tail) {
+        printf("%s %s Can't get check_sum\n", __FILE__, __func__);
+        return -1;
+    }
+    return tail->check_sum;
 }
 
 PACKET_SET_VALURE_RESULT set_payload_len(Packet *packet, long int payload_len) {
@@ -179,15 +217,16 @@ PACKET_SET_VALURE_RESULT set_payload_len(Packet *packet, long int payload_len) {
     return PACKET_SET_VALUE_SUCCESS;
 }
 
-long int get_payload_len(Packet *packet) {
-    Header *header;
+long int get_payload_len(Packet *packet, Header *header) {
+    if (packet) {
+        header = packet->header;
+    }
 
-    if (!packet || !packet->header) {
-        printf("%s %s Can't get payload_len\n", __FILE__, __func__);
+    if (!header) {
+        printf("%s %s Can't get payload_len\n", __FILE__, __func__); 
         return -1;
     }
 
-    header = packet->header;
     return header->payload_len;
 }
 
@@ -204,15 +243,15 @@ PACKET_SET_VALURE_RESULT set_payload(Packet *packet, char *payload) {
     return PACKET_SET_VALUE_SUCCESS;
 }
 
-char* get_payload(Packet *packet) {
-    Body *body;
+char* get_payload(Packet *packet, Body *body) {
+    if (packet) {
+        body = packet->body;
+    } 
 
-    if(!packet || !(packet->body)) {
+    if (!body) {
         printf("%s %s Can't get payload\n", __FILE__, __func__);
         return NULL;
     }
-
-    body = packet->body;
     return body->payload;
 }
 
@@ -230,9 +269,9 @@ short do_check_sum(Packet *packet) {
 
     check_sum = 0;
 
-    op_code = get_op_code(packet);
-    payload_len = get_payload_len(packet);
-    payload = get_payload(packet);
+    op_code = get_op_code(packet, NULL);
+    payload_len = get_payload_len(packet, NULL);
+    payload = get_payload(packet, NULL);
 
     check_sum += SOP;
     check_sum += op_code;
@@ -293,7 +332,7 @@ int get_packet_len(Packet *packet) {
         return -1;
     }
 
-    len = get_payload_len(packet);
+    len = get_payload_len(packet, NULL);
     if (len == -1) {
         printf("%s %s Failed to get packet_len\n", __FILE__, __func__);
         return -1;
