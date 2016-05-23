@@ -12,6 +12,7 @@
 #include "DBLinkedList.h"
 #include "stream_buf.h"
 #include "packet.h"
+#include "converter.h"
 
 struct _Client
 {
@@ -75,12 +76,13 @@ static void destroy_stream_buf_list(void *data) {
     destroy_stream_buf(stream_buf);
 }
 
-static void append_data_to_buffer(DList *stream_buf_list, char *buf) {
+static APPEND_DATA_RESULT append_data_to_buf(DList *stream_buf_list, char *buf) {
     if (!stream_buf_list) {
         printf("%s %s There is no a pointer to Stream_Buf\n", __FILE__, __func__);
-        return;
+        return APPEND_DATA_FAILURE;
     }
     d_list_foreach(stream_buf_list, append_data, buf);
+    return APPEND_DATA_SUCCESS;
 }
 
 static void read_packet(int fd) {
@@ -95,27 +97,20 @@ static void handle_disconnect(Client *client, int fd) {
 
 }
 
-static char* create_req_packet(char *input_str) {
+static CREATE_PACKET_RESULT create_req_packet(char *input_str, Packet *packet) {
     int input_strlen;
     short request_num;
     int len;
     char *payload;
 
-    Packet *packet;
-    Header *header;
     Body *body;
-    Tail *tail;
     short check_sum;
-
-    header = new_header(SOP, 0, 0);
-    tail = new_tail(EOP, 0);
-    packet = new_packet(header, NULL, tail);
+    PACKET_SET_VALURE_RESULT result;
 
     if (!input_str) {
         printf("%s %s There is nothing to point input_str\n", __FILE__, __func__);
-        return NULL;
+        return CREATE_PACKET_FAILURE;
     }
-
     input_strlen = strlen(input_str);
 
     if (input_strlen >= REQ_STR_MIN_LEN && (strncasecmp(input_str, REQ_STR, strlen(REQ_STR))) == 0) {
@@ -126,50 +121,104 @@ static char* create_req_packet(char *input_str) {
         case REQ_ALL_MSG:
             if (input_strlen != REQ_STR_MIN_LEN) {
                 printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
-                return NULL;
+                return CREATE_PACKET_FAILURE;
             }
             break;
         case SND_MSG:
             if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
-                len = strlen(input_str + REQ_STR_MIN_LEN);
-                printf("%d %s", len, input_str + REQ_STR_MIN_LEN);
+                len = strlen(input_str + REQ_STR_MIN_LEN) - 1;
                 payload = (char*) malloc(len);
                 memset(payload, 0, len);
                 memcpy(payload, input_str + REQ_STR_MIN_LEN, len);
+
                 body = new_body(payload);
-                set_payload_len(packet, len);
-                set_body(packet, body);
+                if (!body) {
+                    printf("%s %s Failed to make the Packet\n", __FILE__, __func__);
+                    return CREATE_PACKET_FAILURE;
+                }
+                result = set_payload_len(packet, len);
+                if (result == PACKET_SET_VALUE_FAILURE) {
+                    printf("%s %s Failed to set payload\n", __FILE__, __func__);
+                    return CREATE_PACKET_FAILURE;
+                }
+
+                result = set_body(packet, body);
+                if (result == PACKET_SET_VALUE_FAILURE) {
+                    printf("%s %s Failed to set body\n", __FILE__, __func__);
+                    return CREATE_PACKET_FAILURE;
+                }
+
+            } else {
+                printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
+                return CREATE_PACKET_FAILURE;
             }
             break;
         case REQ_FIRST_OR_LAST_MSG:
             if (input_strlen == REQ_FIRST_OR_LAST_MESG_PACKET_SIZE && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
-                len = strlen(input_str + REQ_STR_MIN_LEN);
-                printf("%d %s", len, input_str + REQ_STR_MIN_LEN);
+                len = strlen(input_str + REQ_STR_MIN_LEN) - 1;
                 payload = (char*) malloc(len);
                 memset(payload, 0, len);
                 memcpy(payload, input_str + REQ_STR_MIN_LEN, len);
-                body = new_body(payload);
-                set_payload_len(packet, len);
-                set_body(packet, body);
+
+                if (*payload == '0' || *payload == '1') {
+                    body = new_body(payload);
+                    if (!body) {
+                        printf("%s %s Failed to make the Packet\n", __FILE__, __func__);
+                        return CREATE_PACKET_FAILURE;
+                    }
+
+                    result = set_payload_len(packet, len);
+                    if (result == PACKET_SET_VALUE_FAILURE) {
+                        printf("%s %s Failed to set payload\n", __FILE__, __func__);
+                        return CREATE_PACKET_FAILURE;
+                    }
+
+                    result = set_body(packet, body);
+                    if (result == PACKET_SET_VALUE_FAILURE) {
+                        printf("%s %s Failed to set body\n", __FILE__, __func__);
+                        return CREATE_PACKET_FAILURE;
+                    }
+
+                } else {
+                    printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
+                    return CREATE_PACKET_FAILURE;
+                }
+            } else {
+                 printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
+                 return CREATE_PACKET_FAILURE;
             }
             break;
         default:
             printf("%s %s Request number is %c Please recommand\n", __FILE__, __func__, request_num);
-            return NULL;
+            return CREATE_PACKET_FAILURE;
         }
 
-        printf("check\n");
-        set_op_code(packet, request_num);
-        printf("request_num\n");
+        result = set_op_code(packet, request_num);
+        if (result == PACKET_SET_VALUE_FAILURE) {
+            printf("%s %s Failed to set the op_code\n", __FILE__, __func__);
+            return CREATE_PACKET_FAILURE;
+        }
+
         check_sum = do_check_sum(packet);
-        printf("check_sum\n");
-        set_check_sum(packet, check_sum);
-        printf("set_checK_sum\n");
+        if (check_sum == -1) {
+            printf("%s %s Failed to do check_sum\n", __FILE__, __func__);
+            return CREATE_PACKET_FAILURE;
+        }
+
+        result = set_check_sum(packet, check_sum);
+        if (result == PACKET_SET_VALUE_FAILURE) {
+            printf("%s %s Failed to set the check_sum\n", __FILE__, __func__);
+            return CREATE_PACKET_FAILURE;
+        }
+
+        return CREATE_PACKET_SUCCESS;
+    } else {
+        printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
+        return CREATE_PACKET_FAILURE;
     }
 }
 
-
-static char* handle_stdin_event(Client* client, int fd) {
+static void handle_stdin_event(Client* client, int fd) {
     char *buf, *input_str;
     int n_byte;
     int input_size;
@@ -177,21 +226,38 @@ static char* handle_stdin_event(Client* client, int fd) {
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
 
+    Packet *packet;
+    Header *header;
+    Tail *tail;
+    long int len;
+    short result;
+
     stream_buf_list = NULL;
     stream_buf = new_stream_buf(2);
 
     while ((n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf)))) {
         if (n_byte < 0) {
             printf("%s %s Failed to read\n", __FILE__, __func__);
-            return NULL;
+            return;
         }
-
-        set_position(stream_buf, n_byte);
-        set_available_size(stream_buf, n_byte);
 
         stream_buf_list = d_list_append(stream_buf_list, stream_buf);
         position = get_position(stream_buf);
         buf = get_buf(stream_buf);
+
+        result = set_position(stream_buf, n_byte);
+        if (result == STREAM_BUF_SET_VALUE_FAILURE) {
+            printf("Failed to set the position\n");
+            d_list_free(stream_buf_list, destroy_stream_buf_list);
+            return;
+        }
+
+        result = set_available_size(stream_buf, n_byte);
+        if (result == STREAM_BUF_SET_VALUE_FAILURE) {
+            printf("Failed to set the available size\n");
+            d_list_free(stream_buf_list, destroy_stream_buf_list);
+            return;
+        }
 
         if (buf[position - 1] == '\n') {
             break;
@@ -206,17 +272,55 @@ static char* handle_stdin_event(Client* client, int fd) {
 
     if (!input_str) {
         printf("%s %s Failed to make input str\n", __FILE__, __func__);
-        return NULL;
+        return;
     }
 
     memset(input_str, 0, input_size + 1);
-    append_data_to_buffer(stream_buf_list, input_str);
+    result = append_data_to_buf(stream_buf_list, input_str);
+
+    if (result == APPEND_DATA_FAILURE) {
+        printf("%s %s Failed to append input data to buf\n", __FILE__, __func__);
+        return;
+    }
+
     d_list_free(stream_buf_list, destroy_stream_buf_list);
     stream_buf_list = NULL;
 
-    create_req_packet(input_str);
+    header = new_header(SOP, 0, 0);
+    tail = new_tail(EOP, 0);
+    packet = new_packet(header, NULL, tail);
 
-    return input_str;
+    if (!header || !tail || !packet) {
+        printf("Can't make the Packet\n");
+        return;
+    }
+
+    result = create_req_packet(input_str, packet);
+
+    if (result == CREATE_PACKET_FAILURE) {
+        printf("%s %s Failed to make the Packet\n", __FILE__, __func__);
+        return;
+    }
+
+    len = get_packet_len(packet);
+    if (len == -1) {
+        printf("%s %s Failed to get the packet len\n", __FILE__, __func__);
+        return;
+    }
+
+    buf = (char*) malloc(len);
+    if(!buf) {
+        printf("%s %s Failed to make buf to copy the Packet\n", __FILE__, __func__);
+    }
+    result = convert_packet_to_buf(packet, buf);
+
+    if (result == CONVERT_SUCUESS) {
+
+    } else {
+        printf("%s %s Failed to convert the Packet to buf\n", __FILE__, __func__);
+        return;
+    }
+    return;
 }
 
 static void handle_events(int fd, void *user_data, int looper_event) {

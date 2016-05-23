@@ -11,6 +11,14 @@
 #define SOP                    0xAA
 #define EOP                    0xFF
 
+#define HEADER_SIZE            11
+#define TAIL_SIZE              3
+
+typedef enum {
+    PACKET_SET_VALUE_SUCCESS = 1,
+    PACKET_SET_VALUE_FAILURE = -1
+} PACKET_SET_VALURE_RESULT;
+
 typedef struct _Header Header;
 typedef struct _Body Body;
 typedef struct _Tail Tail;
@@ -24,13 +32,18 @@ Body* new_body(char *payload);
 void destroy_body(Body *body);
 Tail* new_tail(char eop, short check_sum);
 void destroy_tail(Tail *tail);
-void set_op_code(Packet *packet, short op_code);
 short get_op_code(Packet *packet);
-void set_payload_len(Packet *packet, long int payload_len);
 long int get_payload_len(Packet *packet);
-void set_payload(Packet *packet, char *payload);
 char* get_payload(Packet *packet);
 short do_check_sum(Packet *packet);
-void set_check_sum(Packet *packet, short check_sum);
-void set_body(Packet *packet, Body *body);
+Header* get_header(Packet *packet);
+Tail* get_tail(Packet *packet);
+int get_packet_len(Packet *packet);
+
+PACKET_SET_VALURE_RESULT set_op_code(Packet *packet, short op_code);
+PACKET_SET_VALURE_RESULT set_payload_len(Packet *packet, long int payload_len);
+PACKET_SET_VALURE_RESULT set_check_sum(Packet *packet, short check_sum);
+PACKET_SET_VALURE_RESULT set_body(Packet *packet, Body *body);
+PACKET_SET_VALURE_RESULT set_payload(Packet *packet, char *payload);
+
 #endif

@@ -70,7 +70,7 @@ static Client* find_client(Server *server, int fd) {
     return client;
 }
 
-static void add_client(Server *server, int fd) {
+static ADD_CLIENT_RESULT add_client(Server *server, int fd) {
     Client *client;
     DList *list;
 
@@ -79,7 +79,7 @@ static void add_client(Server *server, int fd) {
 
     if (!client) {
         printf("%s %s Failed to make Client\n", __FILE__, __func__);
-        return;
+        return ADD_CLIENT_FAILURE;
     }
 
     client->fd = fd;
@@ -87,6 +87,7 @@ static void add_client(Server *server, int fd) {
     client->read_state = 0;
 
     server->client_list = d_list_append(list, client);
+    return ADD_CLIENT_SUCCESS;
 }
 
 static void remove_client(Server *server, int fd) {
@@ -123,7 +124,7 @@ static void handle_req_event(Server *server, int fd) {
 
 static int handle_accept_event(Server *server) {
     int client_fd;
-    int state;
+    ADD_CLIENT_RESULT result;
 
     client_fd = accept(server->fd, NULL, NULL);
     if (client_fd < 0) {
@@ -131,7 +132,12 @@ static int handle_accept_event(Server *server) {
         return -1;
     }
 
-    add_client(server, client_fd);
+    result = add_client(server, client_fd);
+    if (result == ADD_CLIENT_FAILURE) {
+        printf("%s %s Failed to add the Client\n", __FILE__, __func__);
+        return -1;
+    }
+
     printf("%s %s connected:%d\n", __FILE__, __func__, client_fd);
     return client_fd;
 }

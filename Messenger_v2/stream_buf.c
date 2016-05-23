@@ -60,12 +60,14 @@ int get_available_size(Stream_Buf *stream_buf) {
     return stream_buf->available_size;
 }
 
-void set_available_size(Stream_Buf *stream_buf, int n_byte) {
+STREAM_BUF_SET_VAULE_RESULT set_available_size(Stream_Buf *stream_buf, int n_byte) {
     if (!stream_buf && !stream_buf->buf) {
         printf("%s %s There is nothing to point Stream_Buf\n", __FILE__, __func__);
-        return;
+        return STREAM_BUF_SET_VALUE_FAILURE;
     }
     stream_buf->available_size -= n_byte;
+
+    return STREAM_BUF_SET_VAULE_SUCCESS;
 }
 
 int get_len(Stream_Buf *stream_buf) {
@@ -84,12 +86,13 @@ int get_position(Stream_Buf *stream_buf) {
     return stream_buf->position;
 }
 
-void set_position(Stream_Buf *stream_buf, int n_byte) {
+STREAM_BUF_SET_VAULE_RESULT set_position(Stream_Buf *stream_buf, int n_byte) {
     if (!stream_buf) {
         printf("%s %s There is nothing to point the Stream_Buf\n", __FILE__, __func__);
-        return;
+        return STREAM_BUF_SET_VALUE_FAILURE;
     }
     stream_buf->position += n_byte;
+    return STREAM_BUF_SET_VAULE_SUCCESS;
 }
 
 char* get_buf(Stream_Buf *stream_buf) {
