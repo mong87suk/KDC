@@ -13,12 +13,12 @@ INC = -I../chapter3/DBLinkedList/
 DBLINKED_LIST_OBJECT = DBLinkedList.o
 
 SERVER_MAIN_OBJECT = \
+			stream_buf.o\
 			server_main.o\
 			server.o\
 			mesg_file.o\
 			mesg_file_db.o\
 			looper.o\
-			stream_buf.o\
 			packet.o\
 			converter.o\
 

@@ -13,6 +13,8 @@
 #include "mesg_file_db.h"
 #include "mesg_file.h"
 #include "socket.h"
+#include "packet.h"
+#include "stream_buf.h"
 
 struct _Server {
     int fd;
@@ -25,8 +27,9 @@ struct _Server {
 struct _Client {
     int fd;
     int file_offset;
-    int read_state;
+    CLIENT_READ_REQ_STATE read_state;
     DList *stream_buf_list;
+    Packet *packet;
 };
 
 static void destroy_client(void *client) {
@@ -84,7 +87,9 @@ static ADD_CLIENT_RESULT add_client(Server *server, int fd) {
 
     client->fd = fd;
     client->file_offset = 0;
-    client->read_state = 0;
+    client->read_state = CLIENT_READ_REQ_READY;
+    client->packet = new_packet(NULL, NULL, NULL);
+    client->stream_buf_list = NULL;
 
     server->client_list = d_list_append(list, client);
     return ADD_CLIENT_SUCCESS;
@@ -99,16 +104,69 @@ static void remove_client(Server *server, int fd) {
     server->client_list = d_list_remove_with_user_data(server->client_list, &fd, match_client, destroy_client);
 }
 
-static void read_packet(int fd) {
-    char buf[MAX_BUF_LEN];
-    int n_byte;
+static void sum_size(void *data, void *user_data) {
+    int *size;
+    Stream_Buf *stream_buf;
 
-    while ((n_byte = read(fd, buf, MAX_BUF_LEN))) {
-        printf("n_byte:%d\n", n_byte);
-       if (n_byte == 0) {
-           printf("%s %s Finished read packet\n", __FILE__, __func__);
-       }
+    stream_buf = (Stream_Buf*) data;
+    size = (int*) user_data;
+
+    *size += get_position(stream_buf);
+}
+
+static int get_buffer_size(DList *stream_buf_list) {
+    int size;
+
+    size = 0;
+    d_list_foreach(stream_buf_list, sum_size, &size);
+    return size;
+}
+
+static void destroy_stream_buf_list(void *data) {
+    Stream_Buf *stream_buf;
+
+    stream_buf = (Stream_Buf*) data;
+
+    if (!stream_buf) {
+        printf("%s %s There is nothing to remove the Stream_Buf\n", __FILE__, __func__);
+        return;
     }
+    destroy_stream_buf(stream_buf);
+}
+
+static void append_data(void *data, void *user_data) {
+    char *dest, *src;
+    int beginIndex, n;
+    Stream_Buf *stream_buf;
+
+    stream_buf = (Stream_Buf*) data;
+    dest = (char*) user_data;
+
+    if (!stream_buf) {
+        printf("%s %s There is nothing to point Stream_Buf\n", __FILE__, __func__);
+        return;
+    }
+
+    src = get_buf(stream_buf);
+
+    if (!src) {
+        printf("%s %s There is nothing to point buf\n", __FILE__, __func__);
+        return;
+    }
+
+    beginIndex = strlen(user_data);
+    n = get_position(stream_buf);
+
+    memcpy(dest + beginIndex, src, n);
+}
+
+static APPEND_DATA_RESULT append_data_to_buf(DList *stream_buf_list, char *buf) {
+    if (!stream_buf_list) {
+        printf("%s %s There is no a pointer to Stream_Buf\n", __FILE__, __func__);
+        return APPEND_DATA_FAILURE;
+    }
+    d_list_foreach(stream_buf_list, append_data, buf);
+    return APPEND_DATA_SUCCESS;
 }
 
 static void handle_disconnect_event(Server *server, int fd) {
@@ -120,8 +178,121 @@ static void handle_disconnect_event(Server *server, int fd) {
 }
 
 static void handle_req_event(Server *server, int fd) {
-    printf("handle_req_event\n");
-    read_packet(fd);
+    char *buf;
+    Client *client;
+    short result;
+    Stream_Buf *stream_buf;
+    Header *header;
+    int n_byte, buf_len, read_byte, position;
+
+    if (!server) {
+        printf("%s %s There is nothing to point the Server\n", __FILE__, __func__);
+        return;
+    }
+
+    client = find_client(server, fd);
+    if (!client) {
+        printf("%s %s There is nothing to point the Client\n", __FILE__, __func__);
+        return;
+    }
+
+    if (client->read_state == CLIENT_READ_REQ_READY) {
+        client->read_state = CLIENT_READ_REQ_START;
+        header = new_header(0, 0, 0);
+        stream_buf = new_stream_buf(HEADER_SIZE);
+        client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
+        while ((n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf)))) {
+            if (n_byte < 0) {
+                printf("%s %s Failed to read\n", __FILE__, __func__);
+                return;
+            }
+            result = set_position(stream_buf, n_byte);
+            if (result == STREAM_BUF_SET_VALUE_FAILURE) {
+                printf("%s %s Failed to set the position\n", __FILE__, __func__);
+                d_list_free(client->stream_buf_list, destroy_stream_buf_list);
+                return;
+            }
+            result = set_available_size(stream_buf, n_byte);
+            if (result == STREAM_BUF_SET_VALUE_FAILURE) {
+                printf("%s %s Failed to set the available size\n", __FILE__, __func__);
+                d_list_free(client->stream_buf_list, destroy_stream_buf_list);
+                return;
+            }
+            position = get_position(stream_buf);
+            if (position == HEADER_SIZE) {
+                printf("%s %s Finished to read HEADER\n", __FILE__, __func__);
+                break;
+            }
+        }
+
+        buf = get_buf(stream_buf);
+        memcpy(header, buf, HEADER_SIZE);
+        result = set_header(client->packet, header);
+
+        if (result == PACKET_SET_VALUE_FAILURE) {
+            printf("%s %s Failed to set packet value\n", __FILE__, __func__);
+            client->read_state = CLIENT_READ_REQ_FAILURE;
+            return;
+        }
+
+    }
+
+    if (client->read_state == CLIENT_READ_REQ_START) {
+        read_byte = HEADER_SIZE + get_payload_len(client->packet, NULL) + TAIL_SIZE;
+        buf_len = get_buffer_size(client->stream_buf_list);
+        stream_buf = new_stream_buf(MAX_BUF_LEN);
+
+        while ((n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf)))) {
+            if (n_byte < 0) {
+                printf("%s %s Failed to read\n", __FILE__, __func__);
+                return;
+            }
+            buf_len += n_byte;
+            result = set_position(stream_buf, n_byte);
+            if (result == STREAM_BUF_SET_VALUE_FAILURE) {
+                printf("%s %s Failed to set the position\n", __FILE__, __func__);
+                d_list_free(client->stream_buf_list, destroy_stream_buf_list);
+                return;
+            }
+
+            result = set_available_size(stream_buf, n_byte);
+            if (result == STREAM_BUF_SET_VALUE_FAILURE) {
+                printf("%s %s Failed to set the available size\n", __FILE__, __func__);
+                d_list_free(client->stream_buf_list, destroy_stream_buf_list);
+                return;
+            }
+
+            position = get_position(stream_buf);
+            if (!(buf_len - read_byte)) {
+                client->read_state = CLIENT_READ_REQ_FINISH;
+                printf("%s %s Finished to read REQ binary\n", __FILE__, __func__);
+                break;
+            } else if (position >= get_len(stream_buf)) {
+                stream_buf = new_stream_buf(MAX_BUF_LEN);
+                client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
+            }
+        }
+
+        buf_len = get_buffer_size(client->stream_buf_list);
+        printf("%s %s buf_len:%d\n", __FILE__, __func__, buf_len);
+        buf = (char*) malloc(buf_len);
+
+        if (!buf) {
+            printf("%s %s Failed to make buf\n", __FILE__, __func__);
+            return;
+        }
+        memset(buf, 0, buf_len);
+        result = append_data_to_buf(stream_buf_list, input_str);
+
+        if (result == APPEND_DATA_FAILURE) {
+            printf("%s %s Failed to append input data to buf\n", __FILE__, __func__);
+            return;
+        }
+
+        d_list_free(client->stream_buf_list, destroy_stream_buf_list);
+        client->stream_buf_list = NULL;
+
+    }
 }
 
 static int handle_accept_event(Server *server) {

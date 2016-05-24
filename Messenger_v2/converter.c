@@ -47,6 +47,58 @@ static void check_buf(char *buf) {
     printf("check_sum: %02X\n", check_sum);
 }
 
+CONVERT_RESULT convert_buf_to_packet(char *buf, Packet *packet) {
+    Header *header;
+    Body *body;
+    Tail *tail;
+    char sop, eop;
+    short op_code, check_sum;
+    long int payload_len;
+    char *payload;
+
+    if (!buf || !packet) {
+        printf("%s %s Can't convert the buf to the packet\n", __FILE__, __func__);
+        return CONVERT_FAILURE;
+    }
+
+    header = get_header(packet);
+    if (!header) {
+        header = new_header(0, 0, 0);
+        set_header(packet, header);
+    }
+
+    tail = get_tail(packet);
+    if (!tail) {
+        tail = new_tail(0, 0);
+        set_tail(packet, tail);
+    }
+
+    memcpy(header, buf, HEADER_SIZE);
+    sop = get_sop(NULL, header);
+    printf("%s %s Header: ", __FILE__, __func__);
+    printf("sop: %02X, ", sop);
+    op_code = get_op_code(NULL, header);
+    printf("op_code: %d, ", op_code);
+    payload_len = get_payload_len(NULL, header);
+    printf("payload_len: %ld\n", payload_len);
+    buf = buf + HEADER_SIZE;
+
+    if (payload_len > 0) {
+        payload = (char*) malloc(payload_len);
+        if (!payload) {
+            printf("%s %s Failed to make the payload buf\n", __FILE__, __func__);
+            return CONVERT_FAILURE;
+        }
+        memcpy(payload, buf, payload_len);
+        body = get_body(packet);
+        if (!body) {
+            body = new_body(payload);
+        } else {
+            set_payload(packet, payload);
+        }
+    }
+}
+
 CONVERT_RESULT convert_packet_to_buf(Packet *packet, char *buf) {
     long int payload_len;
     Header *header;
@@ -69,7 +121,7 @@ CONVERT_RESULT convert_packet_to_buf(Packet *packet, char *buf) {
     }
 
     memcpy(buf, header, HEADER_SIZE);
-    
+
     if (payload_len) {
         payload = get_payload(packet, NULL);
         memcpy(buf + HEADER_SIZE, payload, payload_len);

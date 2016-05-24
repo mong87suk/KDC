@@ -309,6 +309,16 @@ PACKET_SET_VALURE_RESULT set_body(Packet *packet, Body *body) {
     return PACKET_SET_VALUE_SUCCESS;
 }
 
+PACKET_SET_VALURE_RESULT set_header(Packet *packet, Header *header) {
+    if (!packet || !header) {
+        printf("%s %s Can't set the Body\n", __FILE__, __func__);
+        return PACKET_SET_VALUE_FAILURE;
+    }
+
+    packet->header = header;
+    return PACKET_SET_VALUE_SUCCESS;
+}
+
 Header* get_header(Packet *packet) {
     if (!packet) {
         printf("%s %s Can't get the Header\n", __FILE__, __func__);
@@ -323,6 +333,14 @@ Tail* get_tail(Packet *packet) {
         return NULL;
     }
     return packet->tail;
+}
+
+Body* get_body(Packet *packet) {
+    if (!packet) {
+        printf("%s %s Can't get the Body\n", __FILE__, __func__);
+        return NULL;
+    }
+    return packet->body;
 }
 
 int get_packet_len(Packet *packet) {

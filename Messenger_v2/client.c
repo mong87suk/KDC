@@ -300,7 +300,7 @@ static void handle_stdin_event(Client* client, int fd) {
     }
 
     input_size = get_buffer_size(stream_buf_list);
-    input_str = (char*) malloc(input_size + 1);
+    input_str = (char*) malloc(input_size);
     printf("%s %s input_size:%d\n", __FILE__, __func__, input_size);
 
     if (!input_str) {
@@ -308,7 +308,7 @@ static void handle_stdin_event(Client* client, int fd) {
         return;
     }
 
-    memset(input_str, 0, input_size + 1);
+    memset(input_str, 0, input_size);
     result = append_data_to_buf(stream_buf_list, input_str);
 
     if (result == APPEND_DATA_FAILURE) {

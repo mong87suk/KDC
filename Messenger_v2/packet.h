@@ -35,6 +35,7 @@ void destroy_tail(Tail *tail);
 short do_check_sum(Packet *packet);
 Header* get_header(Packet *packet);
 Tail* get_tail(Packet *packet);
+Body* get_body(Packet *packet);
 int get_packet_len(Packet *packet);
 char get_sop(Packet *packet, Header *header);
 char get_eop(Packet *packet, Tail *tail);
@@ -48,5 +49,6 @@ PACKET_SET_VALURE_RESULT set_payload_len(Packet *packet, long int payload_len);
 PACKET_SET_VALURE_RESULT set_check_sum(Packet *packet, short check_sum);
 PACKET_SET_VALURE_RESULT set_body(Packet *packet, Body *body);
 PACKET_SET_VALURE_RESULT set_payload(Packet *packet, char *payload);
+PACKET_SET_VALURE_RESULT set_header(Packet *packet, Header *header);
 
 #endif

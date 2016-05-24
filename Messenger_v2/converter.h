@@ -9,5 +9,6 @@ typedef enum {
 } CONVERT_RESULT;
 
 CONVERT_RESULT convert_packet_to_buf(Packet *packet, char *buf);
+CONVERT_RESULT convert_buf_to_packet(char *buf, Packet *packet);
 
 #endif
