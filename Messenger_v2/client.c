@@ -97,30 +97,41 @@ static void handle_disconnect(Client *client, int fd) {
 
 }
 
-static CREATE_PACKET_RESULT create_req_packet(char *input_str, Packet *packet) {
+static Packet* create_req_packet(char *input_str) {
     int input_strlen;
-    short request_num;
+    short op_code;
     int len;
     char *payload;
 
+    Packet *packet;
+    Header *header;
     Body *body;
+    Tail *tail;
+
     short check_sum;
     PACKET_SET_VALURE_RESULT result;
 
+    header = new_header(SOP, 0, 0);
+    tail = new_tail(EOP, 0);
+    packet = new_packet(header, NULL, tail);
+
+    if (!header || !tail || !packet) {
+        printf("Can't make the Packet\n");
+        return NULL;
+    }
+
     if (!input_str) {
         printf("%s %s There is nothing to point input_str\n", __FILE__, __func__);
-        return CREATE_PACKET_FAILURE;
+        return NULL;
     }
-    input_strlen = strlen(input_str);
 
-    if (input_strlen >= REQ_STR_MIN_LEN && (strncasecmp(input_str, REQ_STR, strlen(REQ_STR))) == 0) {
-        printf("%s %s input_str:%s", __FILE__, __func__, input_str);
-        request_num = input_str[8] - '0';
-        switch(request_num) {
+    input_strlen = strlen(input_str);
+       
+    switch(op_code) {
         case REQ_ALL_MSG:
             if (input_strlen != REQ_STR_MIN_LEN) {
                 printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
-                return CREATE_PACKET_FAILURE;
+                return NULL;
             }
             break;
         case SND_MSG:
@@ -133,88 +144,84 @@ static CREATE_PACKET_RESULT create_req_packet(char *input_str, Packet *packet) {
                 body = new_body(payload);
                 if (!body) {
                     printf("%s %s Failed to make the Packet\n", __FILE__, __func__);
-                    return CREATE_PACKET_FAILURE;
+                    return NULL;
                 }
                 result = set_payload_len(packet, len);
                 if (result == PACKET_SET_VALUE_FAILURE) {
                     printf("%s %s Failed to set payload\n", __FILE__, __func__);
-                    return CREATE_PACKET_FAILURE;
+                    return NULL;
                 }
 
                 result = set_body(packet, body);
                 if (result == PACKET_SET_VALUE_FAILURE) {
                     printf("%s %s Failed to set body\n", __FILE__, __func__);
-                    return CREATE_PACKET_FAILURE;
+                    return NULL;
                 }
 
             } else {
                 printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
-                return CREATE_PACKET_FAILURE;
+                return NULL;
             }
             break;
         case REQ_FIRST_OR_LAST_MSG:
             if (input_strlen == REQ_FIRST_OR_LAST_MESG_PACKET_SIZE && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
-                len = strlen(input_str + REQ_STR_MIN_LEN) - 1;
-                payload = (char*) malloc(len);
-                memset(payload, 0, len);
-                memcpy(payload, input_str + REQ_STR_MIN_LEN, len);
-
-                if (*payload == '0' || *payload == '1') {
+                
+                if (*(input_str + REQ_STR_MIN_LEN) == '0' || *(input_str + REQ_STR_MIN_LEN) == '1') {
+                    len = strlen(input_str + REQ_STR_MIN_LEN) - 1;
+                    payload = (char*) malloc(len);
+                    memset(payload, 0, len);
+                    memcpy(payload, input_str + REQ_STR_MIN_LEN, len);
                     body = new_body(payload);
                     if (!body) {
                         printf("%s %s Failed to make the Packet\n", __FILE__, __func__);
-                        return CREATE_PACKET_FAILURE;
+                        return NULL;
                     }
 
                     result = set_payload_len(packet, len);
                     if (result == PACKET_SET_VALUE_FAILURE) {
                         printf("%s %s Failed to set payload\n", __FILE__, __func__);
-                        return CREATE_PACKET_FAILURE;
+                        return NULL;
                     }
 
                     result = set_body(packet, body);
                     if (result == PACKET_SET_VALUE_FAILURE) {
                         printf("%s %s Failed to set body\n", __FILE__, __func__);
-                        return CREATE_PACKET_FAILURE;
+                        return NULL;
                     }
 
                 } else {
                     printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
-                    return CREATE_PACKET_FAILURE;
+                    return NULL;
                 }
             } else {
-                 printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
-                 return CREATE_PACKET_FAILURE;
+                printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
+                return NULL;
             }
             break;
         default:
             printf("%s %s Request number is %c Please recommand\n", __FILE__, __func__, request_num);
-            return CREATE_PACKET_FAILURE;
-        }
-
-        result = set_op_code(packet, request_num);
-        if (result == PACKET_SET_VALUE_FAILURE) {
-            printf("%s %s Failed to set the op_code\n", __FILE__, __func__);
-            return CREATE_PACKET_FAILURE;
-        }
-
-        check_sum = do_check_sum(packet);
-        if (check_sum == -1) {
-            printf("%s %s Failed to do check_sum\n", __FILE__, __func__);
-            return CREATE_PACKET_FAILURE;
-        }
-
-        result = set_check_sum(packet, check_sum);
-        if (result == PACKET_SET_VALUE_FAILURE) {
-            printf("%s %s Failed to set the check_sum\n", __FILE__, __func__);
-            return CREATE_PACKET_FAILURE;
-        }
-
-        return CREATE_PACKET_SUCCESS;
-    } else {
-        printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
-        return CREATE_PACKET_FAILURE;
+            return NULL;
     }
+
+    result = set_op_code(packet, op_code);
+    if (result == PACKET_SET_VALUE_FAILURE) {
+        printf("%s %s Failed to set the op_code\n", __FILE__, __func__);
+        return NULL;
+    }
+
+    check_sum = do_check_sum(packet);
+    if (check_sum == -1) {
+        printf("%s %s Failed to do check_sum\n", __FILE__, __func__);
+        return NULL;
+    }
+
+    result = set_check_sum(packet, check_sum);
+    if (result == PACKET_SET_VALUE_FAILURE) {
+        printf("%s %s Failed to set the check_sum\n", __FILE__, __func__);
+        return NULL;
+    }
+
+    return packet;
 }
 
 static int send_packet_to_server(Client *client, Packet *packet) {
@@ -253,16 +260,12 @@ static int send_packet_to_server(Client *client, Packet *packet) {
 
 static void handle_stdin_event(Client* client, int fd) {
     char *buf, *input_str;
-    int n_byte;
-    int input_size;
-    int position;
+    int n_byte, input_size, position;
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
 
     Packet *packet;
-    Header *header;
-    Tail *tail;
-    short result;
+    short result, op_code;
 
     stream_buf_list = NULL;
     stream_buf = new_stream_buf(2);
@@ -319,16 +322,17 @@ static void handle_stdin_event(Client* client, int fd) {
     d_list_free(stream_buf_list, destroy_stream_buf_list);
     stream_buf_list = NULL;
 
-    header = new_header(SOP, 0, 0);
-    tail = new_tail(EOP, 0);
-    packet = new_packet(header, NULL, tail);
+    input_strlen = strlen(input_str);
 
-    if (!header || !tail || !packet) {
-        printf("Can't make the Packet\n");
+    if (input_strlen >= REQ_STR_MIN_LEN && (strncasecmp(input_str, REQ_STR, strlen(REQ_STR))) == 0) {
+        printf("%s %s input_str:%s", __FILE__, __func__, input_str);
+        op_code = input_str[8] - '0';
+    } else {
+        printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
         return;
     }
 
-    result = create_req_packet(input_str, packet);
+    packet = create_req_packet(input_str, op_code);
 
     if (result == CREATE_PACKET_FAILURE) {
         printf("%s %s Failed to make the Packet\n", __FILE__, __func__);
