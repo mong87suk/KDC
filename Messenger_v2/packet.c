@@ -246,7 +246,7 @@ PACKET_SET_VALURE_RESULT set_payload(Packet *packet, char *payload) {
 char* get_payload(Packet *packet, Body *body) {
     if (packet) {
         body = packet->body;
-    } 
+    }
 
     if (!body) {
         printf("%s %s Can't get payload\n", __FILE__, __func__);
@@ -316,6 +316,16 @@ PACKET_SET_VALURE_RESULT set_header(Packet *packet, Header *header) {
     }
 
     packet->header = header;
+    return PACKET_SET_VALUE_SUCCESS;
+}
+
+PACKET_SET_VALURE_RESULT set_tail(Packet *packet, Tail *tail) {
+    if (!packet || !tail) {
+        printf("%s %s Can't set the Tail\n", __FILE__, __func__);
+        return PACKET_SET_VALUE_FAILURE;
+    }
+
+    packet->tail = tail;
     return PACKET_SET_VALUE_SUCCESS;
 }
 

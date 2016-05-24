@@ -346,9 +346,9 @@ static void handle_events(int fd, void *user_data, int looper_event) {
         return;
     }
 
-    if (looper_event == LOOPER_HUP_EVENT) {
+    if (looper_event & LOOPER_HUP_EVENT) {
         handle_disconnect(client, fd);
-    } else if (looper_event == LOOPER_IN_EVENT) {
+    } else if (looper_event & LOOPER_IN_EVENT) {
         if (fd == client->fd) {
             handle_res_events(client, fd);
         } else if (fd == STDIN_FILENO) {
@@ -399,8 +399,8 @@ Client* new_client(Looper *looper) {
 
     client->fd = client_fd;
 
-    add_watcher(looper, STDIN_FILENO, handle_events, client, LOOPER_IN_EVENT);
-    add_watcher(looper, client_fd, handle_events, client, LOOPER_IN_EVENT);
+    add_watcher(looper, STDIN_FILENO, handle_events, client, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
+    add_watcher(looper, client_fd, handle_events, client, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
 
     return client;
 }

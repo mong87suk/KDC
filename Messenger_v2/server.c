@@ -241,6 +241,7 @@ static void handle_req_event(Server *server, int fd) {
         read_byte = HEADER_SIZE + get_payload_len(client->packet, NULL) + TAIL_SIZE;
         buf_len = get_buffer_size(client->stream_buf_list);
         stream_buf = new_stream_buf(MAX_BUF_LEN);
+        client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
 
         while ((n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf)))) {
             if (n_byte < 0) {
@@ -282,7 +283,7 @@ static void handle_req_event(Server *server, int fd) {
             return;
         }
         memset(buf, 0, buf_len);
-        result = append_data_to_buf(stream_buf_list, input_str);
+        result = append_data_to_buf(client->stream_buf_list, buf);
 
         if (result == APPEND_DATA_FAILURE) {
             printf("%s %s Failed to append input data to buf\n", __FILE__, __func__);
@@ -291,7 +292,6 @@ static void handle_req_event(Server *server, int fd) {
 
         d_list_free(client->stream_buf_list, destroy_stream_buf_list);
         client->stream_buf_list = NULL;
-
     }
 }
 
@@ -325,9 +325,9 @@ static void handle_events(int fd, void *user_data, int looper_event) {
         return;
     }
 
-    if (looper_event == LOOPER_HUP_EVENT) {
+    if (looper_event & LOOPER_HUP_EVENT) {
          handle_disconnect_event(server, fd);
-    } else if (looper_event == LOOPER_IN_EVENT) {
+    } else if (looper_event & LOOPER_IN_EVENT) {
         if (fd == server->fd) {
             client_fd = handle_accept_event(server);
             if (client_fd != -1) {

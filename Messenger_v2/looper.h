@@ -1,9 +1,9 @@
 #ifndef __LOOPER_H__
 #define __LOOPER_H__
 
-#define LOOPER_NO_EVENT    0
-#define LOOPER_IN_EVENT    1
-#define LOOPER_HUP_EVENT   2
+#define LOOPER_IN_EVENT    0x001
+#define LOOPER_OUT_EVENT   0x004
+#define LOOPER_HUP_EVENT   0x010
 
 typedef struct _Looper Looper;
 typedef struct _Watcher Watcher;

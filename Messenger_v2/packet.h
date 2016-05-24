@@ -50,5 +50,6 @@ PACKET_SET_VALURE_RESULT set_check_sum(Packet *packet, short check_sum);
 PACKET_SET_VALURE_RESULT set_body(Packet *packet, Body *body);
 PACKET_SET_VALURE_RESULT set_payload(Packet *packet, char *payload);
 PACKET_SET_VALURE_RESULT set_header(Packet *packet, Header *header);
+PACKET_SET_VALURE_RESULT set_tail(Packet *packet, Tail* tail);
 
 #endif

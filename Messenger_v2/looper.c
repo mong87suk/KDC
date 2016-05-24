@@ -151,14 +151,20 @@ int run(Looper *looper) {
                     printf("%s %s pollfd index:%d revent:%d\n", __FILE__, __func__, i, fds[i].revents);
                     fd = fds[i].fd;
                     revents = fds[i].revents;
+                    looper_event = 0;
+
+                    if (revents & POLLIN) {
+                        looper_event |= LOOPER_IN_EVENT;
+                    }
+
+                    if (revents & POLLOUT) {
+                        looper_event |= LOOPER_HUP_EVENT;
+                    }
 
                     if (revents & POLLHUP) {
-                        looper_event = LOOPER_HUP_EVENT;
-                    } else if (revents & POLLIN) {
-                        looper_event = LOOPER_IN_EVENT;
-                    } else {
-                        looper_event = LOOPER_NO_EVENT;
+                        looper_event |= LOOPER_HUP_EVENT;
                     }
+
                     watcher = find_watcher(looper, fd);
                     if (!watcher) {
                         continue;
@@ -177,7 +183,7 @@ void add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, void *use
     short events;
 
     watcher = (Watcher*) malloc(sizeof(Watcher));
-
+    events = 0;
     if (!watcher) {
         printf("%s %s Failed to make Watcher\n", __FILE__, __func__);
         return;
@@ -187,11 +193,16 @@ void add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, void *use
     watcher->handle_events = handle_events;
     watcher->user_data = user_data;
 
-    if (looper_event == LOOPER_IN_EVENT) {
-        events = POLLIN;
-    } else {
-        printf("%s %s Events was wrong\n", __FILE__, __func__);
-        return;
+    if (looper_event & LOOPER_IN_EVENT) {
+        events |= POLLIN;
+    }
+
+    if (looper_event & LOOPER_OUT_EVENT) {
+        events |= POLLOUT;
+    }
+
+    if (looper_event & LOOPER_HUP_EVENT) {
+        events |= POLLHUP;
     }
 
     watcher->events = events;
