@@ -14,11 +14,6 @@
 #define HEADER_SIZE            11
 #define TAIL_SIZE              3
 
-typedef enum {
-    PACKET_SET_VALUE_SUCCESS = 1,
-    PACKET_SET_VALUE_FAILURE = -1
-} PACKET_SET_VALURE_RESULT;
-
 typedef struct _Header Header;
 typedef struct _Body Body;
 typedef struct _Tail Tail;
@@ -44,12 +39,12 @@ short get_op_code(Packet *packet, Header *header);
 long int get_payload_len(Packet *packet, Header *header);
 char* get_payload(Packet *packet, Body *body);
 
-PACKET_SET_VALURE_RESULT set_op_code(Packet *packet, short op_code);
-PACKET_SET_VALURE_RESULT set_payload_len(Packet *packet, long int payload_len);
-PACKET_SET_VALURE_RESULT set_check_sum(Packet *packet, short check_sum);
-PACKET_SET_VALURE_RESULT set_body(Packet *packet, Body *body);
-PACKET_SET_VALURE_RESULT set_payload(Packet *packet, char *payload);
-PACKET_SET_VALURE_RESULT set_header(Packet *packet, Header *header);
-PACKET_SET_VALURE_RESULT set_tail(Packet *packet, Tail* tail);
+short set_op_code(Packet *packet, short op_code);
+short set_payload_len(Packet *packet, long int payload_len);
+short set_check_sum(Packet *packet, short check_sum);
+short set_body(Packet *packet, Body *body);
+short set_payload(Packet *packet, char *payload);
+short set_header(Packet *packet, Header *header);
+short set_tail(Packet *packet, Tail* tail);
 
 #endif

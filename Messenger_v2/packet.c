@@ -3,6 +3,8 @@
 #include <string.h>
 
 #include "packet.h"
+#include "m_log.h"
+#include "m_boolean.h"
 
 struct _Header
 {
@@ -35,7 +37,7 @@ Packet* new_packet(Header *header, Body *body, Tail *tail) {
     packet = (Packet*) malloc(sizeof(Packet));
 
     if (!packet) {
-        printf("%s %s Failed to make Packet\n", __FILE__, __func__);
+        M_LOG("Failed to make Packet");
         return NULL;
     }
 
@@ -48,7 +50,7 @@ Packet* new_packet(Header *header, Body *body, Tail *tail) {
 
 void destroy_packet(Packet *packet) {
     if (!packet) {
-        printf("%s %s There is nothing to remove packet\n", __FILE__, __func__);
+        M_LOG("There is nothing to remove packet");
         return;
     }
 
@@ -70,7 +72,7 @@ Header* new_header(char sop, short op_code, long int payload_len) {
 
     header = (Header*) malloc(sizeof(Header));
     if (!header) {
-        printf("%s %s Failed to make Header\n", __FILE__, __func__);
+        M_LOG("Failed to make Header");
         return NULL;
     }
 
@@ -84,7 +86,7 @@ Header* new_header(char sop, short op_code, long int payload_len) {
 
 void destroy_header(Header *header) {
     if (!header) {
-        printf("%s %s There is nothing to remove header\n", __FILE__, __func__);
+        M_LOG("There is nothing to remove header");
         return;
     }
 
@@ -96,7 +98,7 @@ Body* new_body(char *payload) {
 
     body = (Body*) malloc(sizeof(Body));
     if (!body) {
-        printf("%s %s Failed to make Body\n", __FILE__, __func__);
+        M_LOG("Failed to make Body");
         return NULL;
     }
     memset(body, 0, sizeof(Body));
@@ -106,7 +108,7 @@ Body* new_body(char *payload) {
 
 void destroy_body(Body *body) {
     if (!body) {
-        printf("%s %s There is nothing to remove Body\n", __FILE__, __func__);
+        M_LOG("There is nothing to remove Body");
         return;
     }
 
@@ -122,7 +124,7 @@ Tail* new_tail(char eop, short check_sum) {
 
     tail = (Tail*) malloc(sizeof(Tail));
     if (!tail) {
-        printf("%s %s Failed to make Tail\n", __FILE__, __func__);
+        M_LOG("Failed to make Tail");
         return NULL;
     }
     memset(tail, 0, sizeof(Tail));
@@ -134,7 +136,7 @@ Tail* new_tail(char eop, short check_sum) {
 
 void destroy_tail(Tail *tail) {
     if (!tail) {
-        printf("%s %s There is nothing to remove Tail\n", __FILE__, __func__);
+        M_LOG("There is nothing to remove Tail");
         return;
     }
 
@@ -142,17 +144,17 @@ void destroy_tail(Tail *tail) {
 }
 
 
-PACKET_SET_VALURE_RESULT set_op_code(Packet *packet, short op_code) {
+short set_op_code(Packet *packet, short op_code) {
     Header *header;
     if (!packet || !packet->header) {
-        printf("%s %s Can't set op_code\n", __FILE__, __func__);
-        return PACKET_SET_VALUE_FAILURE;
+        M_LOG("Can't set op_code");
+        return FALSE;
     }
 
     header = packet->header;
     header->op_code = op_code;
 
-    return PACKET_SET_VALUE_SUCCESS;
+    return TRUE;
 }
 
 char get_sop(Packet *packet, Header *header) {
@@ -161,7 +163,7 @@ char get_sop(Packet *packet, Header *header) {
     }
 
     if (!header) {
-        printf("%s %s Can't get sop\n", __FILE__, __func__); 
+        M_LOG("Can't get sop");
         return -1;
     }
 
@@ -174,7 +176,7 @@ char get_eop(Packet *packet, Tail *tail) {
     }
 
     if (!tail) {
-        printf("%s %s Can't get eop\n", __FILE__, __func__);
+        M_LOG("Can't get eop");
         return -1;
     }
     return tail->eop;
@@ -185,7 +187,7 @@ short get_op_code(Packet *packet, Header *header) {
         header = packet->header;
     }
     if (!header) {
-        printf("%s %s Can't get op_code\n", __FILE__, __func__); 
+        M_LOG("Can't get op_code");
         return -1;
     }
     return header->op_code;
@@ -197,24 +199,24 @@ short get_check_sum(Packet *packet, Tail *tail) {
     }
 
     if (!tail) {
-        printf("%s %s Can't get check_sum\n", __FILE__, __func__);
+        M_LOG("Can't get check_sum");
         return -1;
     }
     return tail->check_sum;
 }
 
-PACKET_SET_VALURE_RESULT set_payload_len(Packet *packet, long int payload_len) {
+short set_payload_len(Packet *packet, long int payload_len) {
     Header *header;
 
     if (!packet || !packet->header) {
-        printf("%s %s Can't set payload_len\n", __FILE__, __func__);
-        return PACKET_SET_VALUE_FAILURE;
+        M_LOG("Can't set payload_len");
+        return FALSE;
     }
 
     header = packet->header;
     header->payload_len = payload_len;
 
-    return PACKET_SET_VALUE_SUCCESS;
+    return TRUE;
 }
 
 long int get_payload_len(Packet *packet, Header *header) {
@@ -223,24 +225,24 @@ long int get_payload_len(Packet *packet, Header *header) {
     }
 
     if (!header) {
-        printf("%s %s Can't get payload_len\n", __FILE__, __func__); 
+        M_LOG("Can't get payload_len");
         return -1;
     }
 
     return header->payload_len;
 }
 
-PACKET_SET_VALURE_RESULT set_payload(Packet *packet, char *payload) {
+short set_payload(Packet *packet, char *payload) {
     Body *body;
 
     if(!packet || !packet->body) {
-        printf("%s %s Can't set payload\n", __FILE__, __func__);
-        return PACKET_SET_VALUE_FAILURE;
+        M_LOG("Can't set payload");
+        return FALSE;
     }
 
     body = packet->body;
     body->payload = payload;
-    return PACKET_SET_VALUE_SUCCESS;
+    return TRUE;
 }
 
 char* get_payload(Packet *packet, Body *body) {
@@ -249,7 +251,7 @@ char* get_payload(Packet *packet, Body *body) {
     }
 
     if (!body) {
-        printf("%s %s Can't get payload\n", __FILE__, __func__);
+        M_LOG("Can't get payload");
         return NULL;
     }
     return body->payload;
@@ -263,7 +265,7 @@ short do_check_sum(Packet *packet) {
     short check_sum;
 
     if (!packet) {
-        printf("%s %s There is nothing to point the Packet\n", __FILE__, __func__);
+        M_LOG("There is nothing to point the Packet");
         return -1;
     }
 
@@ -285,53 +287,53 @@ short do_check_sum(Packet *packet) {
     return check_sum;
 }
 
-PACKET_SET_VALURE_RESULT set_check_sum(Packet *packet, short check_sum) {
+short set_check_sum(Packet *packet, short check_sum) {
     Tail *tail;
 
     if (!packet) {
-        printf("%s %s There is nothing to point packet\n", __FILE__, __func__);
-        return PACKET_SET_VALUE_FAILURE;
+        M_LOG("There is nothing to point packet");
+        return FALSE;
     }
 
     tail = packet->tail;
     tail->check_sum = check_sum;
 
-    return PACKET_SET_VALUE_SUCCESS;
+    return TRUE;
 }
 
-PACKET_SET_VALURE_RESULT set_body(Packet *packet, Body *body) {
+short set_body(Packet *packet, Body *body) {
     if (!packet || !body) {
-        printf("%s %s Can't set the Body\n", __FILE__, __func__);
-        return PACKET_SET_VALUE_FAILURE;
+        M_LOG("Can't set the Body");
+        return FALSE;
     }
 
     packet->body = body;
-    return PACKET_SET_VALUE_SUCCESS;
+    return TRUE;
 }
 
-PACKET_SET_VALURE_RESULT set_header(Packet *packet, Header *header) {
+short set_header(Packet *packet, Header *header) {
     if (!packet || !header) {
-        printf("%s %s Can't set the Body\n", __FILE__, __func__);
-        return PACKET_SET_VALUE_FAILURE;
+        M_LOG("Can't set the Body");
+        return FALSE;
     }
 
     packet->header = header;
-    return PACKET_SET_VALUE_SUCCESS;
+    return TRUE;
 }
 
-PACKET_SET_VALURE_RESULT set_tail(Packet *packet, Tail *tail) {
+short set_tail(Packet *packet, Tail *tail) {
     if (!packet || !tail) {
-        printf("%s %s Can't set the Tail\n", __FILE__, __func__);
-        return PACKET_SET_VALUE_FAILURE;
+        M_LOG("Can't set the Tail");
+        return FALSE;
     }
 
     packet->tail = tail;
-    return PACKET_SET_VALUE_SUCCESS;
+    return TRUE;
 }
 
 Header* get_header(Packet *packet) {
     if (!packet) {
-        printf("%s %s Can't get the Header\n", __FILE__, __func__);
+        M_LOG("Can't get the Header");
         return NULL;
     }
     return packet->header;
@@ -339,7 +341,7 @@ Header* get_header(Packet *packet) {
 
 Tail* get_tail(Packet *packet) {
     if (!packet) {
-        printf("%s %s Can't get the Tail\n", __FILE__, __func__);
+        M_LOG("Can't get the Tail");
         return NULL;
     }
     return packet->tail;
@@ -347,7 +349,7 @@ Tail* get_tail(Packet *packet) {
 
 Body* get_body(Packet *packet) {
     if (!packet) {
-        printf("%s %s Can't get the Body\n", __FILE__, __func__);
+        M_LOG("Can't get the Body");
         return NULL;
     }
     return packet->body;
@@ -356,13 +358,13 @@ Body* get_body(Packet *packet) {
 int get_packet_len(Packet *packet) {
     int len;
     if (!packet) {
-        printf("%s %s There is nothing to point the Packet\n", __FILE__, __func__);
+        M_LOG("There is nothing to point the Packet");
         return -1;
     }
 
     len = get_payload_len(packet, NULL);
     if (len == -1) {
-        printf("%s %s Failed to get packet_len\n", __FILE__, __func__);
+        M_LOG("Failed to get packet_len");
         return -1;
     }
 

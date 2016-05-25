@@ -15,6 +15,7 @@
 #include "socket.h"
 #include "packet.h"
 #include "stream_buf.h"
+#include "m_boolean.h"
 
 struct _Server {
     int fd;
@@ -228,13 +229,10 @@ static void handle_req_event(Server *server, int fd) {
         buf = get_buf(stream_buf);
         memcpy(header, buf, HEADER_SIZE);
         result = set_header(client->packet, header);
-
-        if (result == PACKET_SET_VALUE_FAILURE) {
-            printf("%s %s Failed to set packet value\n", __FILE__, __func__);
-            client->read_state = CLIENT_READ_REQ_FAILURE;
+        if (result == FALSE) {
+            printf("Failed to set the header\n");
             return;
         }
-
     }
 
     if (client->read_state == CLIENT_READ_REQ_START) {

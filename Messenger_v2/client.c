@@ -13,6 +13,8 @@
 #include "stream_buf.h"
 #include "packet.h"
 #include "converter.h"
+#include "m_boolean.h"
+#include "utils.h"
 
 struct _Client
 {
@@ -47,14 +49,14 @@ static void append_data(void *data, void *user_data) {
     dest = (char*) user_data;
 
     if (!stream_buf) {
-        printf("%s %s There is nothing to point Stream_Buf\n", __FILE__, __func__);
+        LOGD("There is nothing to point Stream_Buf\n");
         return;
     }
 
     src = get_buf(stream_buf);
 
     if (!src) {
-        printf("%s %s There is nothing to point buf\n", __FILE__, __func__);
+        LOGD("There is nothing to point buf\n");
         return;
     }
 
@@ -70,7 +72,7 @@ static void destroy_stream_buf_list(void *data) {
     stream_buf = (Stream_Buf*) data;
 
     if (!stream_buf) {
-        printf("%s %s There is nothing to remove the Stream_Buf\n", __FILE__, __func__);
+        LOGD("There is nothing to remove the Stream_Buf");
         return;
     }
     destroy_stream_buf(stream_buf);
@@ -78,7 +80,7 @@ static void destroy_stream_buf_list(void *data) {
 
 static APPEND_DATA_RESULT append_data_to_buf(DList *stream_buf_list, char *buf) {
     if (!stream_buf_list) {
-        printf("%s %s There is no a pointer to Stream_Buf\n", __FILE__, __func__);
+        LOGD("There is no a pointer to Stream_Buf\n");
         return APPEND_DATA_FAILURE;
     }
     d_list_foreach(stream_buf_list, append_data, buf);
@@ -97,127 +99,125 @@ static void handle_disconnect(Client *client, int fd) {
 
 }
 
-static Packet* create_req_packet(char *input_str) {
-    int input_strlen;
-    short op_code;
+static Body* create_body(char *input_str) {
     int len;
     char *payload;
+    Body *body;
+
+    len = strlen(input_str + REQ_STR_MIN_LEN) - 1;
+    payload = (char*) malloc(len);
+
+    if (!payload) {
+        LOGD("Failed to make payload buf\n");
+        return NULL;
+    }
+
+    memset(payload, 0, len);
+    memcpy(payload, input_str + REQ_STR_MIN_LEN, len);
+
+    body = new_body(payload);
+    if (!body) {
+        LOGD("Failed to make the Packet\n");
+        return NULL;
+    }
+    return body;
+}
+
+static Packet* create_req_packet(char *input_str, short op_code) {
+    int input_strlen;
 
     Packet *packet;
     Header *header;
     Body *body;
     Tail *tail;
 
-    short check_sum;
-    PACKET_SET_VALURE_RESULT result;
+    short check_sum, result;
 
     header = new_header(SOP, 0, 0);
     tail = new_tail(EOP, 0);
     packet = new_packet(header, NULL, tail);
 
     if (!header || !tail || !packet) {
-        printf("Can't make the Packet\n");
+        LOGD("Can't make the Packet\n");
         return NULL;
     }
 
     if (!input_str) {
-        printf("%s %s There is nothing to point input_str\n", __FILE__, __func__);
+        LOGD("%s %s There is nothing to point input_str\n");
         return NULL;
     }
 
     input_strlen = strlen(input_str);
-       
+
     switch(op_code) {
         case REQ_ALL_MSG:
             if (input_strlen != REQ_STR_MIN_LEN) {
-                printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
+                LOGD("Request was wrong. Please recommand\n");
                 return NULL;
             }
             break;
         case SND_MSG:
             if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
-                len = strlen(input_str + REQ_STR_MIN_LEN) - 1;
-                payload = (char*) malloc(len);
-                memset(payload, 0, len);
-                memcpy(payload, input_str + REQ_STR_MIN_LEN, len);
-
-                body = new_body(payload);
+                body = create_body(input_str);
                 if (!body) {
-                    printf("%s %s Failed to make the Packet\n", __FILE__, __func__);
-                    return NULL;
-                }
-                result = set_payload_len(packet, len);
-                if (result == PACKET_SET_VALUE_FAILURE) {
-                    printf("%s %s Failed to set payload\n", __FILE__, __func__);
+                    LOGD("Failed to make the Body\n");
                     return NULL;
                 }
 
                 result = set_body(packet, body);
-                if (result == PACKET_SET_VALUE_FAILURE) {
-                    printf("%s %s Failed to set body\n", __FILE__, __func__);
+                if (result == FALSE) {
+                    LOGD("Failed to set the Body\n");
                     return NULL;
                 }
 
             } else {
-                printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
+                LOGD("Request was wrong. Please recommand\n");
                 return NULL;
             }
             break;
         case REQ_FIRST_OR_LAST_MSG:
             if (input_strlen == REQ_FIRST_OR_LAST_MESG_PACKET_SIZE && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
-                
                 if (*(input_str + REQ_STR_MIN_LEN) == '0' || *(input_str + REQ_STR_MIN_LEN) == '1') {
-                    len = strlen(input_str + REQ_STR_MIN_LEN) - 1;
-                    payload = (char*) malloc(len);
-                    memset(payload, 0, len);
-                    memcpy(payload, input_str + REQ_STR_MIN_LEN, len);
-                    body = new_body(payload);
+                    body = create_body(input_str);
                     if (!body) {
-                        printf("%s %s Failed to make the Packet\n", __FILE__, __func__);
+                        LOGD("Failed to make the Body\n");
                         return NULL;
                     }
 
-                    result = set_payload_len(packet, len);
-                    if (result == PACKET_SET_VALUE_FAILURE) {
-                        printf("%s %s Failed to set payload\n", __FILE__, __func__);
+                    result = set_body(packet,body);
+                    if (result == FALSE) {
+                        LOGD("Failed to set the Body\n");
                         return NULL;
                     }
-
-                    result = set_body(packet, body);
-                    if (result == PACKET_SET_VALUE_FAILURE) {
-                        printf("%s %s Failed to set body\n", __FILE__, __func__);
-                        return NULL;
-                    }
-
                 } else {
-                    printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
+                    LOGD("Request was wrong. Please recommand\n");
                     return NULL;
                 }
             } else {
-                printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
+                LOGD("Request was wrong. Please recommand\n");
                 return NULL;
             }
             break;
         default:
-            printf("%s %s Request number is %c Please recommand\n", __FILE__, __func__, request_num);
+            LOGD("Request number is %c Please recommand\n");
             return NULL;
     }
 
     result = set_op_code(packet, op_code);
-    if (result == PACKET_SET_VALUE_FAILURE) {
-        printf("%s %s Failed to set the op_code\n", __FILE__, __func__);
+    if (result == FALSE) {
+        LOGD("Failed to set the op_code\n");
         return NULL;
     }
 
     check_sum = do_check_sum(packet);
     if (check_sum == -1) {
-        printf("%s %s Failed to do check_sum\n", __FILE__, __func__);
+        LOGD("Failed to do check_sum\n");
         return NULL;
     }
 
     result = set_check_sum(packet, check_sum);
-    if (result == PACKET_SET_VALUE_FAILURE) {
-        printf("%s %s Failed to set the check_sum\n", __FILE__, __func__);
+    if (result == FALSE) {
+        LOGD("Failed to set the check_sum\n");
         return NULL;
     }
 
@@ -227,40 +227,40 @@ static Packet* create_req_packet(char *input_str) {
 static int send_packet_to_server(Client *client, Packet *packet) {
     int len;
     char *buf;
-    CONVERT_RESULT result;
+    short result;
 
     if (!client || !packet) {
-        printf("%s %s Can't send the Packet to server\n", __FILE__, __func__);
+        LOGD("Can't send the Packet to server\n");
         return -1;
     }
 
     len = get_packet_len(packet);
     if (len == -1) {
-        printf("%s %s Failed to get the packet len\n", __FILE__, __func__);
+        LOGD("Failed to get the packet len\n");
         return -1;
     }
 
     buf = (char*) malloc(len);
     if(!buf) {
-        printf("%s %s Failed to make buf to copy the Packet\n", __FILE__, __func__);
+        LOGD("Failed to make buf to copy the Packet\n");
         return -1;
     }
 
     result = convert_packet_to_buf(packet, buf);
-    if (result == CONVERT_FAILURE) {
-        printf("%s %s Failed to convert the Packet to buf\n", __FILE__, __func__);
+    if (result == FALSE) {
+        LOGD("Failed to convert the Packet to buf\n");
         return -1;
     }
 
     if (write(client->fd, buf, len) < 0) {
-        printf("%s %s Failed to send the Packet to server\n", __FILE__, __func__);
+        LOGD("Failed to send the Packet to server\n");
         return -1;
     }
 }
 
 static void handle_stdin_event(Client* client, int fd) {
     char *buf, *input_str;
-    int n_byte, input_size, position;
+    int n_byte, input_size, position, input_strlen;
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
 
@@ -270,23 +270,23 @@ static void handle_stdin_event(Client* client, int fd) {
     stream_buf_list = NULL;
     stream_buf = new_stream_buf(2);
     stream_buf_list = d_list_append(stream_buf_list, stream_buf);
- 
+
     while ((n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf)))) {
         if (n_byte < 0) {
-            printf("%s %s Failed to read\n", __FILE__, __func__);
+            LOGD("Failed to read\n");
             return;
         }
 
         result = set_position(stream_buf, n_byte);
         if (result == STREAM_BUF_SET_VALUE_FAILURE) {
-            printf("Failed to set the position\n");
+            LOGD("Failed to set the position\n");
             d_list_free(stream_buf_list, destroy_stream_buf_list);
             return;
         }
 
         result = set_available_size(stream_buf, n_byte);
         if (result == STREAM_BUF_SET_VALUE_FAILURE) {
-            printf("Failed to set the available size\n");
+            LOGD("Failed to set the available size\n");
             d_list_free(stream_buf_list, destroy_stream_buf_list);
             return;
         }
@@ -304,10 +304,10 @@ static void handle_stdin_event(Client* client, int fd) {
 
     input_size = get_buffer_size(stream_buf_list);
     input_str = (char*) malloc(input_size);
-    printf("%s %s input_size:%d\n", __FILE__, __func__, input_size);
+    LOGD("input_size:%d\n", input_size);
 
     if (!input_str) {
-        printf("%s %s Failed to make input str\n", __FILE__, __func__);
+        LOGD("Failed to make input str\n");
         return;
     }
 
@@ -315,7 +315,7 @@ static void handle_stdin_event(Client* client, int fd) {
     result = append_data_to_buf(stream_buf_list, input_str);
 
     if (result == APPEND_DATA_FAILURE) {
-        printf("%s %s Failed to append input data to buf\n", __FILE__, __func__);
+        LOGD("Failed to append input data to buf\n");
         return;
     }
 
@@ -325,17 +325,17 @@ static void handle_stdin_event(Client* client, int fd) {
     input_strlen = strlen(input_str);
 
     if (input_strlen >= REQ_STR_MIN_LEN && (strncasecmp(input_str, REQ_STR, strlen(REQ_STR))) == 0) {
-        printf("%s %s input_str:%s", __FILE__, __func__, input_str);
+        LOGD("input_str:%s", input_str);
         op_code = input_str[8] - '0';
     } else {
-        printf("%s %s Request was wrong. Please recommand\n", __FILE__, __func__);
+        LOGD("Request was wrong. Please recommand\n");
         return;
     }
 
     packet = create_req_packet(input_str, op_code);
 
     if (result == CREATE_PACKET_FAILURE) {
-        printf("%s %s Failed to make the Packet\n", __FILE__, __func__);
+        LOGD("Failed to make the Packet\n");
         return;
     }
     result = send_packet_to_server(client, packet);
@@ -346,7 +346,7 @@ static void handle_events(int fd, void *user_data, int looper_event) {
     Client *client = (Client*) user_data;
 
     if (!client) {
-        printf("%s %s There is no a pointer to Client\n", __FILE__, __func__);
+        LOGD("There is no a pointer to Client\n");
         return;
     }
 
@@ -358,11 +358,11 @@ static void handle_events(int fd, void *user_data, int looper_event) {
         } else if (fd == STDIN_FILENO) {
             handle_stdin_event(client, fd);
         } else {
-            printf("%s %s There is no fd to handle event\n", __FILE__, __func__);
+            LOGD("There is no fd to handle event\n");
             return;
         }
     } else {
-        printf("%s %s There is no event to handle\n", __FILE__, __func__);
+        LOGD("There is no event to handle\n");
     }
 }
 
@@ -373,21 +373,21 @@ Client* new_client(Looper *looper) {
     int client_fd;
 
     if (!looper) {
-        printf("%s %s There is no a pointer to Looper\n", __FILE__, __func__);
+        LOGD("There is no a pointer to Looper\n");
         return NULL;
     }
 
     client = (Client*) malloc(sizeof(Client));
 
     if (!client) {
-        printf("%s %sFailed to make client\n", __FILE__, __func__);
+        LOGD("Failed to make client\n");
         return NULL;
     }
 
     client->looper = looper;
 
     if ((client_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        printf("%s %s socket error\n", __FILE__, __func__);
+        LOGD("socket error\n");
         return NULL;
     }
 
@@ -396,7 +396,7 @@ Client* new_client(Looper *looper) {
     strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path) - 1);
 
     if (connect(client_fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-        printf("%s %s connect error", __FILE__, __func__);
+        LOGD("connect error\n");
         close(client_fd);
         return NULL;
     }
@@ -411,12 +411,12 @@ Client* new_client(Looper *looper) {
 
 void destroy_client(Client *client) {
     if (!client) {
-        printf("%s %s There is nothing to point the Client\n", __FILE__, __func__);
+        LOGD("There is nothing to point the Client\n");
         return;
     }
 
     if (close(client->fd) < 0) {
-        printf("%s %s Failed to close\n", __FILE__, __func__);
+        LOGD("Failed to close\n");
         return;
     }
     remove_all_watchers(client->looper);

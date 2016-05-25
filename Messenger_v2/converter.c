@@ -4,6 +4,7 @@
 
 #include "converter.h"
 #include "packet.h"
+#include "m_boolean.h"
 
 static void check_buf(char *buf) {
     Header *header;
@@ -47,7 +48,7 @@ static void check_buf(char *buf) {
     printf("check_sum: %02X\n", check_sum);
 }
 
-CONVERT_RESULT convert_buf_to_packet(char *buf, Packet *packet) {
+short convert_buf_to_packet(char *buf, Packet *packet) {
     Header *header;
     Body *body;
     Tail *tail;
@@ -55,22 +56,31 @@ CONVERT_RESULT convert_buf_to_packet(char *buf, Packet *packet) {
     short op_code, check_sum;
     long int payload_len;
     char *payload;
+    short result;
 
     if (!buf || !packet) {
         printf("%s %s Can't convert the buf to the packet\n", __FILE__, __func__);
-        return CONVERT_FAILURE;
+        return FALSE;
     }
 
     header = get_header(packet);
     if (!header) {
         header = new_header(0, 0, 0);
-        set_header(packet, header);
+        result = set_header(packet, header);
+        if (result == FALSE) {
+            printf("Failed to set the header\n");
+            return FALSE;
+        }
     }
 
     tail = get_tail(packet);
     if (!tail) {
         tail = new_tail(0, 0);
-        set_tail(packet, tail);
+        result = set_tail(packet, tail);
+        if (result == FALSE) {
+            printf("Failed to set the tail\n");
+            return FALSE;
+        }
     }
 
     memcpy(header, buf, HEADER_SIZE);
@@ -87,19 +97,24 @@ CONVERT_RESULT convert_buf_to_packet(char *buf, Packet *packet) {
         payload = (char*) malloc(payload_len);
         if (!payload) {
             printf("%s %s Failed to make the payload buf\n", __FILE__, __func__);
-            return CONVERT_FAILURE;
+            return FALSE;
         }
         memcpy(payload, buf, payload_len);
         body = get_body(packet);
         if (!body) {
             body = new_body(payload);
         } else {
-            set_payload(packet, payload);
+            result = set_payload(packet, payload);
+            if (result == FALSE) {
+                printf("Failed to set the payload\n");
+                return FALSE;
+            }
         }
     }
+    return TRUE;
 }
 
-CONVERT_RESULT convert_packet_to_buf(Packet *packet, char *buf) {
+short convert_packet_to_buf(Packet *packet, char *buf) {
     long int payload_len;
     Header *header;
     Tail *tail;
@@ -109,7 +124,7 @@ CONVERT_RESULT convert_packet_to_buf(Packet *packet, char *buf) {
 
     if (!packet || !buf) {
         printf("%s %s Can't convert packet to buf\n", __FILE__, __func__);
-        return CONVERT_FAILURE;
+        return FALSE;
     }
 
     header = get_header(packet);
@@ -117,7 +132,7 @@ CONVERT_RESULT convert_packet_to_buf(Packet *packet, char *buf) {
     payload_len = get_payload_len(packet, NULL);
     if (!header || !tail) {
         printf("%s %s Can't convert packet to binary\n", __FILE__, __func__);
-        return CONVERT_FAILURE;
+        return FALSE;
     }
 
     memcpy(buf, header, HEADER_SIZE);
@@ -129,5 +144,5 @@ CONVERT_RESULT convert_packet_to_buf(Packet *packet, char *buf) {
 
     memcpy(buf + HEADER_SIZE + payload_len, tail, TAIL_SIZE);
     check_buf(buf);
-    return CONVERT_SUCUESS;
+    return TRUE;
 }

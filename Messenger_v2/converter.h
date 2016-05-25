@@ -3,12 +3,7 @@
 
 #include "packet.h"
 
-typedef enum {
-    CONVERT_SUCUESS = 1,
-    CONVERT_FAILURE = -1
-} CONVERT_RESULT;
-
-CONVERT_RESULT convert_packet_to_buf(Packet *packet, char *buf);
-CONVERT_RESULT convert_buf_to_packet(char *buf, Packet *packet);
+short convert_packet_to_buf(Packet *packet, char *buf);
+short convert_buf_to_packet(char *buf, Packet *packet);
 
 #endif
