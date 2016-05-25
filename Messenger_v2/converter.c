@@ -119,6 +119,8 @@ short convert_packet_to_buf(Packet *packet, char *buf) {
     Header *header;
     Tail *tail;
     char *payload;
+    char sop, eop;
+    short op_code, check_sum;
 
     payload_len = 0;
 
@@ -134,7 +136,10 @@ short convert_packet_to_buf(Packet *packet, char *buf) {
         printf("%s %s Can't convert packet to binary\n", __FILE__, __func__);
         return FALSE;
     }
-
+/*
+    sop = get_sop(packet, NULL);
+    op_code = get_op_code(packet, NULL);
+    payload_len = get_payload_len*/
     memcpy(buf, header, HEADER_SIZE);
 
     if (payload_len) {

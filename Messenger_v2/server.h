@@ -3,8 +3,6 @@
 
 #include "looper.h"
 
-#define MAX_BUF_LEN 100
-
 typedef enum {
     ADD_CLIENT_SUCCESS = 1,
     ADD_CLIENT_FAILURE = -1

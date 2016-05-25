@@ -78,13 +78,13 @@ static void destroy_stream_buf_list(void *data) {
     destroy_stream_buf(stream_buf);
 }
 
-static APPEND_DATA_RESULT append_data_to_buf(DList *stream_buf_list, char *buf) {
+static short  append_data_to_buf(DList *stream_buf_list, char *buf) {
     if (!stream_buf_list) {
         LOGD("There is no a pointer to Stream_Buf\n");
-        return APPEND_DATA_FAILURE;
+        return FALSE;
     }
     d_list_foreach(stream_buf_list, append_data, buf);
-    return APPEND_DATA_SUCCESS;
+    return TRUE;
 }
 
 static void read_packet(int fd) {
@@ -99,12 +99,18 @@ static void handle_disconnect(Client *client, int fd) {
 
 }
 
-static Body* create_body(char *input_str) {
+static Body* create_body(char *input_str, long int *payload_len) {
     int len;
     char *payload;
     Body *body;
 
+    if (!input_str) {
+        LOGD("There is nothing to point the input_str\n");
+        return NULL;
+    }
+
     len = strlen(input_str + REQ_STR_MIN_LEN) - 1;
+    *payload_len = len;
     payload = (char*) malloc(len);
 
     if (!payload) {
@@ -130,12 +136,15 @@ static Packet* create_req_packet(char *input_str, short op_code) {
     Header *header;
     Body *body;
     Tail *tail;
+    int long payload_len;
 
     short check_sum, result;
+
 
     header = new_header(SOP, 0, 0);
     tail = new_tail(EOP, 0);
     packet = new_packet(header, NULL, tail);
+    payload_len = 0;
 
     if (!header || !tail || !packet) {
         LOGD("Can't make the Packet\n");
@@ -143,7 +152,7 @@ static Packet* create_req_packet(char *input_str, short op_code) {
     }
 
     if (!input_str) {
-        LOGD("%s %s There is nothing to point input_str\n");
+        LOGD("There is nothing to point input_str\n");
         return NULL;
     }
 
@@ -158,15 +167,20 @@ static Packet* create_req_packet(char *input_str, short op_code) {
             break;
         case SND_MSG:
             if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
-                body = create_body(input_str);
+                body = create_body(input_str, &payload_len);
                 if (!body) {
                     LOGD("Failed to make the Body\n");
                     return NULL;
                 }
-
                 result = set_body(packet, body);
                 if (result == FALSE) {
                     LOGD("Failed to set the Body\n");
+                    return NULL;
+                }
+
+                result = set_payload_len(packet, payload_len);
+                if (result == FALSE) {
+                    LOGD("Failed to set the payload_len\n");
                     return NULL;
                 }
 
@@ -178,7 +192,7 @@ static Packet* create_req_packet(char *input_str, short op_code) {
         case REQ_FIRST_OR_LAST_MSG:
             if (input_strlen == REQ_FIRST_OR_LAST_MESG_PACKET_SIZE && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
                 if (*(input_str + REQ_STR_MIN_LEN) == '0' || *(input_str + REQ_STR_MIN_LEN) == '1') {
-                    body = create_body(input_str);
+                    body = create_body(input_str, &payload_len);
                     if (!body) {
                         LOGD("Failed to make the Body\n");
                         return NULL;
@@ -189,6 +203,13 @@ static Packet* create_req_packet(char *input_str, short op_code) {
                         LOGD("Failed to set the Body\n");
                         return NULL;
                     }
+
+                    result = set_payload_len(packet, payload_len);
+                    if (result == FALSE) {
+                        LOGD("Failed to set the payload_len\n");
+                        return NULL;
+                    }
+
                 } else {
                     LOGD("Request was wrong. Please recommand\n");
                     return NULL;
@@ -199,7 +220,7 @@ static Packet* create_req_packet(char *input_str, short op_code) {
             }
             break;
         default:
-            LOGD("Request number is %c Please recommand\n");
+            LOGD("Request number is %c Please recommand\n", op_code);
             return NULL;
     }
 
@@ -209,7 +230,7 @@ static Packet* create_req_packet(char *input_str, short op_code) {
         return NULL;
     }
 
-    check_sum = do_check_sum(packet);
+    check_sum = create_check_sum(packet);
     if (check_sum == -1) {
         LOGD("Failed to do check_sum\n");
         return NULL;
@@ -224,38 +245,43 @@ static Packet* create_req_packet(char *input_str, short op_code) {
     return packet;
 }
 
-static int send_packet_to_server(Client *client, Packet *packet) {
+static short  send_packet_to_server(Client *client, Packet *packet) {
     int len;
     char *buf;
     short result;
 
     if (!client || !packet) {
         LOGD("Can't send the Packet to server\n");
-        return -1;
+        return FALSE;
     }
 
     len = get_packet_len(packet);
     if (len == -1) {
         LOGD("Failed to get the packet len\n");
-        return -1;
+        return FALSE;
     }
 
     buf = (char*) malloc(len);
     if(!buf) {
         LOGD("Failed to make buf to copy the Packet\n");
-        return -1;
+        return FALSE;
     }
 
     result = convert_packet_to_buf(packet, buf);
     if (result == FALSE) {
         LOGD("Failed to convert the Packet to buf\n");
-        return -1;
+        return FALSE;
+    }
+    int i;
+    for (i = 0; i < len; i++) {
+        LOGD("converted buf: %2x\n", buf[i]);
     }
 
     if (write(client->fd, buf, len) < 0) {
         LOGD("Failed to send the Packet to server\n");
-        return -1;
+        return FALSE;
     }
+    return FALSE;
 }
 
 static void handle_stdin_event(Client* client, int fd) {
@@ -268,25 +294,19 @@ static void handle_stdin_event(Client* client, int fd) {
     short result, op_code;
 
     stream_buf_list = NULL;
-    stream_buf = new_stream_buf(2);
+    stream_buf = new_stream_buf(MAX_BUF_LEN);
     stream_buf_list = d_list_append(stream_buf_list, stream_buf);
 
-    while ((n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf)))) {
+    do {
+        n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
         if (n_byte < 0) {
             LOGD("Failed to read\n");
             return;
         }
 
         result = set_position(stream_buf, n_byte);
-        if (result == STREAM_BUF_SET_VALUE_FAILURE) {
+        if (result == FALSE) {
             LOGD("Failed to set the position\n");
-            d_list_free(stream_buf_list, destroy_stream_buf_list);
-            return;
-        }
-
-        result = set_available_size(stream_buf, n_byte);
-        if (result == STREAM_BUF_SET_VALUE_FAILURE) {
-            LOGD("Failed to set the available size\n");
             d_list_free(stream_buf_list, destroy_stream_buf_list);
             return;
         }
@@ -294,13 +314,11 @@ static void handle_stdin_event(Client* client, int fd) {
         position = get_position(stream_buf);
         buf = get_buf(stream_buf);
 
-        if (buf[position - 1] == '\n') {
-            break;
-        } else if (position >= get_len(stream_buf)) {
-            stream_buf = new_stream_buf(2);
+        if (position >= MAX_BUF_LEN) {
+            stream_buf = new_stream_buf(MAX_BUF_LEN);
             stream_buf_list = d_list_append(stream_buf_list, stream_buf);
         }
-    }
+    } while (buf[position - 1] != '\n');
 
     input_size = get_buffer_size(stream_buf_list);
     input_str = (char*) malloc(input_size);
@@ -314,7 +332,7 @@ static void handle_stdin_event(Client* client, int fd) {
     memset(input_str, 0, input_size);
     result = append_data_to_buf(stream_buf_list, input_str);
 
-    if (result == APPEND_DATA_FAILURE) {
+    if (result == FALSE) {
         LOGD("Failed to append input data to buf\n");
         return;
     }
@@ -323,7 +341,6 @@ static void handle_stdin_event(Client* client, int fd) {
     stream_buf_list = NULL;
 
     input_strlen = strlen(input_str);
-
     if (input_strlen >= REQ_STR_MIN_LEN && (strncasecmp(input_str, REQ_STR, strlen(REQ_STR))) == 0) {
         LOGD("input_str:%s", input_str);
         op_code = input_str[8] - '0';
@@ -333,12 +350,16 @@ static void handle_stdin_event(Client* client, int fd) {
     }
 
     packet = create_req_packet(input_str, op_code);
-
-    if (result == CREATE_PACKET_FAILURE) {
-        LOGD("Failed to make the Packet\n");
+    if (!packet) {
+        LOGD("Failed to make the packet\n");
         return;
     }
+
     result = send_packet_to_server(client, packet);
+    if (result == FALSE) {
+        LOGD("Failed to send the packet to server");
+    }
+
     return;
 }
 

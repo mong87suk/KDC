@@ -27,7 +27,7 @@ Body* new_body(char *payload);
 void destroy_body(Body *body);
 Tail* new_tail(char eop, short check_sum);
 void destroy_tail(Tail *tail);
-short do_check_sum(Packet *packet);
+short create_check_sum(Packet *packet);
 Header* get_header(Packet *packet);
 Tail* get_tail(Packet *packet);
 Body* get_body(Packet *packet);
