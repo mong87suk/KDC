@@ -150,39 +150,44 @@ static void append_data(void *data, void *user_data) {
     char *dest, *src;
     int beginIndex, n;
     Stream_Buf *stream_buf;
+    int i;
 
     stream_buf = (Stream_Buf*) data;
     dest = (char*) user_data;
 
     if (!stream_buf) {
-        printf("%s %s There is nothing to point Stream_Buf\n", __FILE__, __func__);
+        LOGD("There is nothing to point Stream_Buf\n");
         return;
     }
 
     src = get_buf(stream_buf);
 
     if (!src) {
-        printf("%s %s There is nothing to point buf\n", __FILE__, __func__);
+        LOGD("There is nothing to point buf\n");
         return;
     }
 
     beginIndex = strlen(user_data);
+    LOGD("beginIndex:%d\n", beginIndex); 
     n = get_position(stream_buf);
+    for (i = 0; i < n; i++) { 
+        printf(" %2X ", (unsigned char) src[i]);
+    }
+    printf("\n");
 
     memcpy(dest + beginIndex, src, n);
 }
 
-static APPEND_DATA_RESULT append_data_to_buf(DList *stream_buf_list, char *buf) {
+static char append_data_to_buf(DList *stream_buf_list, char *buf) {
     if (!stream_buf_list) {
         LOGD("There is no a pointer to Stream_Buf\n");
-        return APPEND_DATA_FAILURE;
+        return FALSE;
     }
     d_list_foreach(stream_buf_list, append_data, buf);
-    return APPEND_DATA_SUCCESS;
+    return TRUE;
 }
 
 static short copy_payload_len(char *buf, long int *payload_len) {
-    int i = 0;
     if (!buf) {
         LOGD("There is nothing to point the buf\n");
         return FALSE;
@@ -250,21 +255,26 @@ static void handle_req_event(Server *server, int fd) {
         buf = get_buf(stream_buf);           
         if (buf[0] != SOP) {
             LOGD("Failed to get binary\n");
-            d_list_free(client->stream_buf_list, destroy_stream_buf_list);
-            client->stream_buf_list = NULL; 
-            client->read_state = CLIENT_READ_REQ_READY;
+            destroy_client_stream_buf_list(client);
             return;
         }
         result = copy_payload_len(buf, &payload_len);
         if (result == FALSE) {
             LOGD("Failed to copy payload\n");
-            d_list_free(client->stream_buf_list, destroy_stream_buf_list);
-            client->stream_buf_list = NULL;
-            client->read_state = CLIENT_READ_REQ_READY;
+            destroy_client_stream_buf_list(client);
             return;
         }
         client->packet_len = HEADER_SIZE + payload_len + TAIL_SIZE;
     }
+
+    int i;
+
+    for (i = 0; i < HEADER_SIZE; i++) {
+        printf(" %2X ", (unsigned char) buf[i]);
+    }
+    printf("\n");
+
+
 
     if (client->read_state == CLIENT_READ_REQ_START) {
 
@@ -283,18 +293,14 @@ static void handle_req_event(Server *server, int fd) {
             n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
             if (n_byte < 0) {
                 LOGD("Failed to read\n");
-                d_list_free(client->stream_buf_list, destroy_stream_buf_list);
-                client->read_state = CLIENT_READ_REQ_READY;
-                client->stream_buf_list = NULL;
+                destroy_client_stream_buf_list(client);
                 return;
             }
             read_len += n_byte;
             result = set_position(stream_buf, n_byte);
             if (result == FALSE) {
                 LOGD("Failed to set the position\n");
-                d_list_free(client->stream_buf_list, destroy_stream_buf_list);
-                client->read_state = CLIENT_READ_REQ_READY;
-                client->stream_buf_list = NULL;
+                destroy_client_stream_buf_list(client);
                 return;
             }
         } while ((read_len - packet_len));
@@ -311,8 +317,19 @@ static void handle_req_event(Server *server, int fd) {
     memset(buf, 0, read_len);
     result = append_data_to_buf(client->stream_buf_list, buf);
 
-    if (result == APPEND_DATA_FAILURE) {
+    if (result == FALSE) {
         LOGD("Failed to append input data to buf\n");
+        return;
+    }
+
+    for (i = 0; i < read_len; i++) {
+        printf(" %2X ", (unsigned char) buf[i]);
+    }
+    printf("\n");
+
+    if (buf[read_len -3] != EOP) {
+        LOGD("Packet is wrong\n");
+        destroy_client_stream_buf_list(client);
         return;
     }
 

@@ -44,6 +44,7 @@ static void append_data(void *data, void *user_data) {
     char *dest, *src;
     int beginIndex, n;
     Stream_Buf *stream_buf;
+    int i;
 
     stream_buf = (Stream_Buf*) data;
     dest = (char*) user_data;
@@ -61,7 +62,12 @@ static void append_data(void *data, void *user_data) {
     }
 
     beginIndex = strlen(user_data);
+    LOGD("beginIndex:%d\n", beginIndex);
     n = get_position(stream_buf);
+    for (i = 0; i < n; i++) {
+        printf(" %2X ", (unsigned char) src[i]);
+    }
+    printf("\n");
 
     memcpy(dest + beginIndex, src, n);
 }
