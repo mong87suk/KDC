@@ -5,47 +5,34 @@
 #include "converter.h"
 #include "packet.h"
 #include "m_boolean.h"
+#include "utils.h"
 
-static void check_buf(char *buf) {
-    Header *header;
-    Tail *tail;
-    char sop, eop;
-    short op_code, check_sum;
-    long int payload_len;
+static void print_buf(char *buf, int len) {
     int i;
 
     if (!buf) {
-        printf("%s %s Can't check the buf\n", __FILE__, __func__);
+        LOGD("Can't check the buf\n");
         return;
     }
-
-    header = new_header(0, 0, 0);
-    memcpy(header, buf, HEADER_SIZE);
-    sop = get_sop(NULL, header);
-    printf("%s %s Header: ", __FILE__, __func__);
-    printf("sop: %02X, ", sop);
-    op_code = get_op_code(NULL, header);
-    printf("op_code: %d, ", op_code);
-    payload_len = get_payload_len(NULL, header);
-    printf("payload_len: %ld\n", payload_len);
-    printf("%s %s Body: ", __FILE__, __func__);
-    buf = buf + HEADER_SIZE;
-
-    if (payload_len > 0) {
-        for (i = 0; i< payload_len; i++) {
-            printf("%c", buf[i]);
-        }
-        buf = buf + payload_len;
-    }
-
     printf("\n");
-    printf("%s %s Tail: ", __FILE__, __func__);
-    tail = new_tail(0, 0);
-    memcpy(tail, buf, TAIL_SIZE);
-    eop = get_eop(NULL, tail);
-    printf("eop: %02X, ", eop);
-    check_sum = get_check_sum(NULL, tail);
-    printf("check_sum: %02X\n", check_sum);
+    for (i = 0; i < len; i++) {
+        printf("0x%02X ", (unsigned char) buf[i]);
+    }
+    printf("\n\n");
+}
+
+static void print_str(char *buf, int len) {
+    int i;
+
+    if (!buf) {
+        LOGD("Can't check the buf\n");
+        return;
+    }
+    printf("\n");
+    for (i = 0; i < len; i++) {
+        printf(" %2C", buf[i]);
+    }
+    printf("\n\n");
 }
 
 short convert_buf_to_packet(char *buf, Packet *packet) {
@@ -118,7 +105,7 @@ short convert_packet_to_buf(Packet *packet, char *buf) {
     long int payload_len;
     Header *header;
     Tail *tail;
-    char *payload;
+    char *payload, *tmp_dest;
     char sop, eop;
     short op_code, check_sum;
 
@@ -128,7 +115,7 @@ short convert_packet_to_buf(Packet *packet, char *buf) {
         printf("%s %s Can't convert packet to buf\n", __FILE__, __func__);
         return FALSE;
     }
-
+    tmp_dest = buf;
     header = get_header(packet);
     tail = get_tail(packet);
     payload_len = get_payload_len(packet, NULL);
@@ -136,18 +123,41 @@ short convert_packet_to_buf(Packet *packet, char *buf) {
         printf("%s %s Can't convert packet to binary\n", __FILE__, __func__);
         return FALSE;
     }
-/*
-    sop = get_sop(packet, NULL);
-    op_code = get_op_code(packet, NULL);
-    payload_len = get_payload_len*/
-    memcpy(buf, header, HEADER_SIZE);
 
+    LOGD("Start to copy Header\n");
+    sop = get_sop(packet, NULL);
+    memcpy(tmp_dest, &sop, sizeof(sop));
+
+    op_code = get_op_code(packet, NULL);
+    tmp_dest += sizeof(sop);
+    memcpy(tmp_dest, &op_code, sizeof(op_code));
+
+    payload_len = get_payload_len(packet, NULL);
+    tmp_dest += sizeof(op_code);
+    memcpy(tmp_dest, &payload_len, sizeof(payload_len));
+    print_buf(buf, HEADER_SIZE);
+    LOGD("Finished to copy Header\n");
+
+    tmp_dest += sizeof(payload_len);
     if (payload_len) {
+        LOGD("Strart to copy Body\n");
         payload = get_payload(packet, NULL);
-        memcpy(buf + HEADER_SIZE, payload, payload_len);
+        memcpy(tmp_dest, payload, payload_len);
+
+        print_str(buf + HEADER_SIZE, payload_len);
+        tmp_dest += payload_len;
+        LOGD("Finished to copy Body\n");
     }
 
-    memcpy(buf + HEADER_SIZE + payload_len, tail, TAIL_SIZE);
-    check_buf(buf);
+    LOGD("Start to copy Tail\n");
+    eop = get_eop(packet, NULL);
+    memcpy(tmp_dest, &eop, sizeof(eop));
+
+    tmp_dest += sizeof(eop);
+    check_sum = get_check_sum(packet, NULL);
+    memcpy(tmp_dest, &check_sum, sizeof(check_sum));
+    print_buf(buf + HEADER_SIZE + payload_len, TAIL_SIZE);
+    
+    LOGD("Finished to copy Tail\n");
     return TRUE;
 }

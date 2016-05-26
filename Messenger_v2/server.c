@@ -130,10 +130,20 @@ static void destroy_stream_buf_list(void *data) {
     stream_buf = (Stream_Buf*) data;
 
     if (!stream_buf) {
-        printf("%s %s There is nothing to remove the Stream_Buf\n", __FILE__, __func__);
+        LOGD("There is nothing to remove the Stream_Buf\n");
         return;
     }
     destroy_stream_buf(stream_buf);
+}
+
+static void destroy_client_stream_buf_list(Client* client) {
+    if (!client) {
+        LOGD("There is nothing to point the Client\n");
+        return;
+    }
+    d_list_free(client->stream_buf_list, destroy_stream_buf_list);
+    client->stream_buf_list = NULL;
+    client->read_state = CLIENT_READ_REQ_READY;
 }
 
 static void append_data(void *data, void *user_data) {
@@ -179,9 +189,6 @@ static short copy_payload_len(char *buf, long int *payload_len) {
     }
     buf = buf + sizeof(char) + sizeof(short);
 
-    for (i = 0; i < 8; i++) {
-        LOGD("payload_len:%2x \n", buf[i]);
-    }
     memcpy(payload_len, buf, sizeof(long int));
     LOGD("payload_len: %ld\n", *payload_len);
     return TRUE;
@@ -200,7 +207,7 @@ static void handle_req_event(Server *server, int fd) {
     Client *client;
     short result;
     Stream_Buf *stream_buf;
-    int n_byte, buf_len, read_byte, position;
+    int n_byte, read_len, packet_len, position;
     long int payload_len;
 
     payload_len = 0;
@@ -216,89 +223,101 @@ static void handle_req_event(Server *server, int fd) {
         return;
     }
 
-    client->read_state = CLIENT_READ_REQ_READY;
-
     if (client->read_state == CLIENT_READ_REQ_READY) {
         client->read_state = CLIENT_READ_REQ_START;
-        stream_buf = new_stream_buf(HEADER_SIZE);
-        client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
-        while ((n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf)))) {
+        do {
+            if (client->stream_buf_list == NULL) {
+                stream_buf = new_stream_buf(HEADER_SIZE);
+                printf("%d\n", HEADER_SIZE);
+                client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
+            }
+            n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
             if (n_byte < 0) {
                 LOGD("Failed to read\n");
+                destroy_client_stream_buf_list(client);
                 return;
             }
+
             result = set_position(stream_buf, n_byte);
             if (result == FALSE) {
                 LOGD("Failed to set the position\n");
-                d_list_free(client->stream_buf_list, destroy_stream_buf_list);
+                destroy_client_stream_buf_list(client);
                 return;
             }
-
             position = get_position(stream_buf);
-            if (position == HEADER_SIZE) {
-                LOGD("Finished to read HEADER\n");
-                break;
-            }
+        } while (position != HEADER_SIZE);
+        
+        buf = get_buf(stream_buf);           
+        if (buf[0] != SOP) {
+            LOGD("Failed to get binary\n");
+            d_list_free(client->stream_buf_list, destroy_stream_buf_list);
+            client->stream_buf_list = NULL; 
+            client->read_state = CLIENT_READ_REQ_READY;
+            return;
         }
-
-        buf = get_buf(stream_buf);
         result = copy_payload_len(buf, &payload_len);
         if (result == FALSE) {
-            printf("Failed to set the header\n");
+            LOGD("Failed to copy payload\n");
+            d_list_free(client->stream_buf_list, destroy_stream_buf_list);
+            client->stream_buf_list = NULL;
+            client->read_state = CLIENT_READ_REQ_READY;
             return;
         }
         client->packet_len = HEADER_SIZE + payload_len + TAIL_SIZE;
     }
 
     if (client->read_state == CLIENT_READ_REQ_START) {
-        read_byte = client->packet_len;
-        buf_len = get_buffer_size(client->stream_buf_list);
+
         stream_buf = new_stream_buf(MAX_BUF_LEN);
         client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
+        packet_len = client->packet_len;  
+        read_len = get_buffer_size(client->stream_buf_list);
 
-        while ((n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf)))) {
+        do {
+            position = get_position(stream_buf);
+            if (position >= MAX_BUF_LEN) {
+                stream_buf = new_stream_buf(MAX_BUF_LEN);
+                client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
+            }
+
+            n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
             if (n_byte < 0) {
                 LOGD("Failed to read\n");
+                d_list_free(client->stream_buf_list, destroy_stream_buf_list);
+                client->read_state = CLIENT_READ_REQ_READY;
+                client->stream_buf_list = NULL;
                 return;
             }
-            buf_len += n_byte;
+            read_len += n_byte;
             result = set_position(stream_buf, n_byte);
             if (result == FALSE) {
                 LOGD("Failed to set the position\n");
                 d_list_free(client->stream_buf_list, destroy_stream_buf_list);
+                client->read_state = CLIENT_READ_REQ_READY;
+                client->stream_buf_list = NULL;
                 return;
             }
-
-            position = get_position(stream_buf);
-            if (!(buf_len - read_byte)) {
-                client->read_state = CLIENT_READ_REQ_FINISH;
-                LOGD("Finished to read REQ binary\n");
-                break;
-            } else if (position >= MAX_BUF_LEN) {
-                stream_buf = new_stream_buf(MAX_BUF_LEN);
-                client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
-            }
-        }
-
-        buf_len = get_buffer_size(client->stream_buf_list);
-        LOGD("buf_len:%d\n", buf_len);
-        buf = (char*) malloc(buf_len);
-
-        if (!buf) {
-            LOGD("Failed to make buf\n");
-            return;
-        }
-        memset(buf, 0, buf_len);
-        result = append_data_to_buf(client->stream_buf_list, buf);
-
-        if (result == APPEND_DATA_FAILURE) {
-            LOGD("Failed to append input data to buf\n");
-            return;
-        }
-
-        d_list_free(client->stream_buf_list, destroy_stream_buf_list);
-        client->stream_buf_list = NULL;
+        } while ((read_len - packet_len));
     }
+
+    read_len = get_buffer_size(client->stream_buf_list);
+    LOGD("buf_len:%d\n", read_len);
+    buf = (char*) malloc(read_len);
+
+    if (!buf) {
+        LOGD("Failed to make buf\n");
+        return;
+    }
+    memset(buf, 0, read_len);
+    result = append_data_to_buf(client->stream_buf_list, buf);
+
+    if (result == APPEND_DATA_FAILURE) {
+        LOGD("Failed to append input data to buf\n");
+        return;
+    }
+
+    d_list_free(client->stream_buf_list, destroy_stream_buf_list);
+    client->stream_buf_list = NULL;
 }
 
 static int handle_accept_event(Server *server) {

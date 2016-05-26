@@ -131,15 +131,12 @@ static Body* create_body(char *input_str, long int *payload_len) {
 
 static Packet* create_req_packet(char *input_str, short op_code) {
     int input_strlen;
-
     Packet *packet;
     Header *header;
     Body *body;
     Tail *tail;
     int long payload_len;
-
     short check_sum, result;
-
 
     header = new_header(SOP, 0, 0);
     tail = new_tail(EOP, 0);
@@ -272,10 +269,6 @@ static short  send_packet_to_server(Client *client, Packet *packet) {
         LOGD("Failed to convert the Packet to buf\n");
         return FALSE;
     }
-    int i;
-    for (i = 0; i < len; i++) {
-        LOGD("converted buf: %2x\n", buf[i]);
-    }
 
     if (write(client->fd, buf, len) < 0) {
         LOGD("Failed to send the Packet to server\n");
@@ -294,10 +287,13 @@ static void handle_stdin_event(Client* client, int fd) {
     short result, op_code;
 
     stream_buf_list = NULL;
-    stream_buf = new_stream_buf(MAX_BUF_LEN);
-    stream_buf_list = d_list_append(stream_buf_list, stream_buf);
 
     do {
+        if (position >= MAX_BUF_LEN || stream_buf_list == NULL) {
+            stream_buf = new_stream_buf(MAX_BUF_LEN);
+            stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+        }
+
         n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
         if (n_byte < 0) {
             LOGD("Failed to read\n");
@@ -313,11 +309,6 @@ static void handle_stdin_event(Client* client, int fd) {
 
         position = get_position(stream_buf);
         buf = get_buf(stream_buf);
-
-        if (position >= MAX_BUF_LEN) {
-            stream_buf = new_stream_buf(MAX_BUF_LEN);
-            stream_buf_list = d_list_append(stream_buf_list, stream_buf);
-        }
     } while (buf[position - 1] != '\n');
 
     input_size = get_buffer_size(stream_buf_list);
