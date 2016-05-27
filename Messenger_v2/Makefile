@@ -21,6 +21,7 @@ SERVER_MAIN_OBJECT = \
 			looper.o\
 			packet.o\
 			converter.o\
+			message.o\
 
 CLIENT_MAIN_OBJECT = \
 			client_main.o\
@@ -29,6 +30,7 @@ CLIENT_MAIN_OBJECT = \
 			stream_buf.o\
 			packet.o\
 			converter.o\
+			message.o\
 
 SHARED_LIBRARY = lib$(DBLINKED_LIST).so
 

@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/un.h>
 #include <string.h>
+#include <time.h>
 
 #include "client.h"
 #include "looper.h"
@@ -101,27 +102,44 @@ static void handle_disconnect(Client *client, int fd) {
 
 }
 
-static Body* create_body(char *input_str, long int *payload_len) {
-    int len;
-    char *payload;
+static Body* create_body(char *input_str, int input_strlen, long int *payload_len) {
+    int str_len;
+    int body_len;
+    char *payload, *tmp_dest;
+    time_t current_time;
     Body *body;
+
+    current_time = time(NULL);
+
+    if (current_time == ((time_t) - 1)) {
+        printf("Failed to obtain the current time.\n");
+        return 0;
+    }   
 
     if (!input_str) {
         LOGD("There is nothing to point the input_str\n");
         return NULL;
     }
 
-    len = strlen(input_str + REQ_STR_MIN_LEN) - 1;
-    *payload_len = len;
-    payload = (char*) malloc(len);
+    str_len = input_strlen - REQ_STR_MIN_LEN - 1;
+    body_len = sizeof(long int) + sizeof(int) + str_len;
+    *payload_len = body_len;
+    payload = (char*) malloc(body_len);
 
     if (!payload) {
         LOGD("Failed to make payload buf\n");
         return NULL;
     }
+    tmp_dest = payload;
+    memset(payload, 0, body_len);
 
-    memset(payload, 0, len);
-    memcpy(payload, input_str + REQ_STR_MIN_LEN, len);
+    memcpy(tmp_dest, &current_time, sizeof(current_time));
+    tmp_dest += sizeof(current_time);
+
+    memcpy(tmp_dest, &str_len, sizeof(str_len));
+    tmp_dest += sizeof(str_len);
+
+    memcpy(tmp_dest, input_str + REQ_STR_MIN_LEN, str_len);
 
     body = new_body(payload);
     if (!body) {
@@ -131,8 +149,7 @@ static Body* create_body(char *input_str, long int *payload_len) {
     return body;
 }
 
-static Packet* create_req_packet(char *input_str, short op_code) {
-    int input_strlen;
+static Packet* create_req_packet(char *input_str, short op_code, int input_strlen) {
     Packet *packet;
     Header *header;
     Body *body;
@@ -155,8 +172,6 @@ static Packet* create_req_packet(char *input_str, short op_code) {
         return NULL;
     }
 
-    input_strlen = strlen(input_str);
-
     switch(op_code) {
         case REQ_ALL_MSG:
             if (input_strlen != REQ_STR_MIN_LEN) {
@@ -166,7 +181,7 @@ static Packet* create_req_packet(char *input_str, short op_code) {
             break;
         case SND_MSG:
             if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
-                body = create_body(input_str, &payload_len);
+                body = create_body(input_str, input_strlen, &payload_len);
                 if (!body) {
                     LOGD("Failed to make the Body\n");
                     return NULL;
@@ -191,7 +206,7 @@ static Packet* create_req_packet(char *input_str, short op_code) {
         case REQ_FIRST_OR_LAST_MSG:
             if (input_strlen == REQ_FIRST_OR_LAST_MESG_PACKET_SIZE && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
                 if (*(input_str + REQ_STR_MIN_LEN) == '0' || *(input_str + REQ_STR_MIN_LEN) == '1') {
-                    body = create_body(input_str, &payload_len);
+                    body = create_body(input_str, input_strlen, &payload_len);
                     if (!body) {
                         LOGD("Failed to make the Body\n");
                         return NULL;
@@ -229,7 +244,7 @@ static Packet* create_req_packet(char *input_str, short op_code) {
         return NULL;
     }
 
-    check_sum = create_check_sum(packet);
+    check_sum = create_check_sum(packet, NULL);
     if (check_sum == -1) {
         LOGD("Failed to do check_sum\n");
         return NULL;
@@ -244,7 +259,7 @@ static Packet* create_req_packet(char *input_str, short op_code) {
     return packet;
 }
 
-static short  send_packet_to_server(Client *client, Packet *packet) {
+static short send_packet_to_server(Client *client, Packet *packet) {
     int len;
     char *buf;
     short result;
@@ -261,7 +276,7 @@ static short  send_packet_to_server(Client *client, Packet *packet) {
     }
 
     buf = (char*) malloc(len);
-    if(!buf) {
+    if (!buf) {
         LOGD("Failed to make buf to copy the Packet\n");
         return FALSE;
     }
@@ -276,7 +291,7 @@ static short  send_packet_to_server(Client *client, Packet *packet) {
         LOGD("Failed to send the Packet to server\n");
         return FALSE;
     }
-    return FALSE;
+    return TRUE;
 }
 
 static void handle_stdin_event(Client* client, int fd) {
@@ -343,7 +358,7 @@ static void handle_stdin_event(Client* client, int fd) {
         return;
     }
 
-    packet = create_req_packet(input_str, op_code);
+    packet = create_req_packet(input_str, op_code, input_strlen);
     if (!packet) {
         LOGD("Failed to make the packet\n");
         return;

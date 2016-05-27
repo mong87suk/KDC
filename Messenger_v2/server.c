@@ -17,10 +17,13 @@
 #include "stream_buf.h"
 #include "m_boolean.h"
 #include "utils.h"
+#include "converter.h"
+#include "message.h"
 
 struct _Server {
     int fd;
     DList *client_list;
+    DList *mesg_list;
     Looper *looper;
     Mesg_File *mesg_file;
     Mesg_File_DB *mesg_file_db;
@@ -183,6 +186,117 @@ static char append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf) {
     return TRUE;
 }
 
+static Packet* create_res_packet(Server *server, Packet *req_packet) {
+    short op_code, check_sum;
+    char *payload;
+    Packet *res_packet;
+    Header *header;
+    Body *body;
+    Tail *tail;
+    int result, payload_len;
+    Message *mesg;
+
+    if (!req_packet) {
+        LOGD("There is nothing to point the Packet\n");
+        return NULL;
+    }
+
+    header = new_header(SOP, 0, 0);
+    if (!header) {
+        LOGD("Failed to make the Header\n");
+        return NULL;
+    }
+
+    body = new_body(NULL);
+    if (!body) {
+        LOGD("Failed to make the Body\n");
+        return NULL;
+    }
+
+    tail = new_tail(EOP, 0);
+    if (!tail) {
+        LOGD("Failed to make the Tail\n");
+        return NULL;
+    }
+
+    res_packet = new_packet(header, body, tail);
+
+    if (!res_packet) {
+        LOGD("There is nothing to point the Packet\n");
+        return NULL;
+    }
+
+    op_code = get_op_code(req_packet, NULL);
+
+    switch(op_code) {
+    case REQ_ALL_MSG:
+        break;
+    case SND_MSG:
+        payload = get_payload(req_packet, NULL);
+        if (!payload) {
+            LOGD("Failed to get the payload\n");
+            return NULL;
+        }
+
+        result = set_payload(res_packet, payload);
+        if (result == FALSE) {
+            LOGD("Failed to set the payload\n");
+            return NULL;
+        }
+
+        payload_len = get_payload_len(req_packet, NULL);
+        if (payload_len == -1) {
+            LOGD("Failed to get the payload_len\n");
+            return NULL;
+        }
+
+        result = set_payload_len(res_packet, payload_len);
+        if (result == FALSE) {
+            LOGD("Failed to set payload_len\n");
+            return NULL;
+        }
+
+        mesg = new_mesg(0, 0, 0);
+        if (!mesg) {
+            LOGD("Failed to make the Message\n");
+            return NULL;
+        }
+
+        op_code = RCV_MSG;
+
+        result = convert_payload_to_mesg(payload, mesg);
+        if (result == FALSE) {
+            LOGD("Failed to convert payload to the Message\n");
+            return NULL;
+        }
+        break;
+    case REQ_FIRST_OR_LAST_MSG:
+        break;
+    default:
+        return NULL;
+    }
+
+    result = set_op_code(res_packet, op_code);
+    if (result == FALSE) {
+        LOGD("Failed to set the op_code\n");
+        return NULL;
+    }
+
+    check_sum = create_check_sum(res_packet, NULL);
+    if (check_sum == -1) {
+        LOGD("Failed to do check_sum\n");
+        return NULL;
+    }
+
+    result = set_check_sum(res_packet, check_sum);
+    if (result == FALSE) {
+        LOGD("Failed to set the check_sum\n");
+        return NULL;
+    }
+
+    return res_packet;
+}
+
 static short copy_payload_len(char *buf, long int *payload_len) {
     if (!buf) {
         LOGD("There is nothing to point the buf\n");
@@ -191,10 +305,64 @@ static short copy_payload_len(char *buf, long int *payload_len) {
     buf = buf + sizeof(char) + sizeof(short);
 
     memcpy(payload_len, buf, sizeof(long int));
-    LOGD("payload_len: %ld\n", *payload_len);
     return TRUE;
 }
 
+static int is_enabled_check_sum(short check_sum, Stream_Buf *stream_buf) {
+    int position;
+    char *buf;
+    int i;
+    short comp_check_sum;
+
+    if (!stream_buf) {
+        LOGD("Failed to check enable check_sum\n");
+        return FALSE;
+    }
+
+    position = get_position(stream_buf);
+    buf = get_buf(stream_buf);
+
+    for (i = position -1 ; i < position; i++) {
+        comp_check_sum += buf[i];
+    }
+
+    if (comp_check_sum == check_sum) {
+        LOGD("Not enabled check sum\n");
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static int send_packet_to_client(int fd, Packet *packet) {
+    int len;
+    char *buf;
+    short result;
+
+    if (!packet) {
+        LOGD("There is nothing to point the packet\n");
+        return FALSE;
+    }
+
+    len = get_packet_len(packet);
+    if (len == -1) {
+        LOGD("Failed to get the packet len\n");
+        return FALSE;
+    }
+
+    buf = (char*) malloc(len);
+    if (!buf) {
+        LOGD("Failed to make the buf to copy the Packet\n");
+        return FALSE;
+    }
+
+    result = convert_packet_to_buf(packet, buf);
+    if (result == FALSE) {
+        LOGD("Failed to convert the Packet to buf\n");
+        return FALSE;
+    }
+    return TRUE;
+}
 static void handle_disconnect_event(Server *server, int fd) {
     if (fd != server->fd) {
         remove_client(server, fd);
@@ -206,10 +374,11 @@ static void handle_disconnect_event(Server *server, int fd) {
 static void handle_req_event(Server *server, int fd) {
     char *buf;
     Client *client;
-    short result;
+    short result, check_sum;
     Stream_Buf *stream_buf;
     int n_byte, read_len, packet_len, position;
     long int payload_len;
+    Packet *packet, *res_packet;
 
     payload_len = 0;
 
@@ -247,8 +416,8 @@ static void handle_req_event(Server *server, int fd) {
             }
             position = get_position(stream_buf);
         } while (position != HEADER_SIZE);
-        
-        buf = get_buf(stream_buf);           
+
+        buf = get_buf(stream_buf);
         if (buf[0] != SOP) {
             LOGD("Failed to get binary\n");
             destroy_client_stream_buf_list(client);
@@ -263,20 +432,10 @@ static void handle_req_event(Server *server, int fd) {
         client->packet_len = HEADER_SIZE + payload_len + TAIL_SIZE;
     }
 
-    int i;
-
-    for (i = 0; i < HEADER_SIZE; i++) {
-        printf(" %2X ", (unsigned char) buf[i]);
-    }
-    printf("\n");
-
-
-
     if (client->read_state == CLIENT_READ_REQ_START) {
-
         stream_buf = new_stream_buf(MAX_BUF_LEN);
         client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
-        packet_len = client->packet_len;  
+        packet_len = client->packet_len;
         read_len = get_buffer_size(client->stream_buf_list);
 
         do {
@@ -303,7 +462,6 @@ static void handle_req_event(Server *server, int fd) {
     }
 
     read_len = get_buffer_size(client->stream_buf_list);
-    LOGD("buf_len:%d\n", read_len);
 
     if (!buf) {
         LOGD("Failed to make buf\n");
@@ -315,35 +473,61 @@ static void handle_req_event(Server *server, int fd) {
         LOGD("Failed to make the Stream buf");
         return;
     }
-    
-    LOGD("before append_data\n");
-    result = append_data_to_buf(client->stream_buf_list, stream_buf);
-    LOGD("after append data\n");
 
+    result = append_data_to_buf(client->stream_buf_list, stream_buf);
+    destroy_client_stream_buf_list(client);
     if (result == FALSE) {
         LOGD("Failed to append input data to buf\n");
+        destroy_stream_buf(stream_buf);
         return;
     }
 
     buf = get_buf(stream_buf);
     if (!buf) {
         LOGD("There is nothing to point the buf in the Stream Buf\n");
+        destroy_stream_buf(stream_buf);
         return;
     }
-
-    for (i = 0; i < read_len; i++) {
-        printf(" %2X ", (unsigned char) buf[i]);
-    }
-    printf("\n");
 
     if (buf[read_len -3] != EOP) {
         LOGD("Packet is wrong\n");
-        destroy_client_stream_buf_list(client);
+        destroy_stream_buf(stream_buf);
         return;
     }
 
-    d_list_free(client->stream_buf_list, destroy_stream_buf_list);
-    client->stream_buf_list = NULL;
+    check_sum = create_check_sum(NULL, stream_buf);
+    result = is_enabled_check_sum(check_sum, stream_buf);
+
+    if (result == FALSE) {
+        LOGD("check_sum is wrong\n");
+        destroy_stream_buf(stream_buf);
+        return;
+    }
+
+    packet = new_packet(NULL, NULL, NULL);
+    if (!packet) {
+        LOGD("Failed to make the Packet\n");
+        return;
+    }
+
+    result = convert_buf_to_packet(buf, packet);
+    destroy_stream_buf(stream_buf);
+    if (result == FALSE) {
+        LOGD("Faield to convert buf to packet\n");
+        return;
+    }
+
+    res_packet = create_res_packet(server, packet);
+    if (!res_packet) {
+        LOGD("Failed to create the res packet\n");
+        return;
+    }
+
+    result = send_packet_to_client(fd, res_packet);
+    if (result == FALSE) {
+        LOGD("Failed to send packet to client\n");
+        return;
+    }
 }
 
 static int handle_accept_event(Server *server) {
@@ -448,6 +632,7 @@ Server* new_server(Looper *looper) {
     server->looper = looper;
     server->fd = server_fd;
     server->client_list = NULL;
+    server->mesg_list = NULL;
     server->mesg_file = mesg_file;
     server->mesg_file_db = mesg_file_db;
 

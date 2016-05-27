@@ -5,6 +5,7 @@
 #include "packet.h"
 #include "utils.h"
 #include "m_boolean.h"
+#include "stream_buf.h"
 
 struct _Header
 {
@@ -137,6 +138,31 @@ void destroy_tail(Tail *tail) {
     free(tail);
 }
 
+short set_sop(Packet *packet, char sop) {
+    Header *header;
+    if (!packet || !packet->header) {
+        LOGD("Can't set op_code");
+        return FALSE;
+    }
+
+    header = packet->header;
+    header->sop = sop;
+
+    return TRUE;
+}
+
+short set_eop(Packet *packet, char eop) {
+    Tail *tail;
+    if (!packet || !packet->tail) {
+        LOGD("Can't set op_code");
+        return FALSE;
+    }
+
+    tail = packet->tail;
+    tail->eop = eop;
+
+    return TRUE;
+}
 
 short set_op_code(Packet *packet, short op_code) {
     Header *header;
@@ -251,33 +277,43 @@ char* get_payload(Packet *packet, Body *body) {
     return body->payload;
 }
 
-short create_check_sum(Packet *packet) {
+short create_check_sum(Packet *packet, Stream_Buf *stream_buf) {
     short op_code;
     long int payload_len;
-    char *payload;
-    int i;
+    char *payload, *buf;
+    int i, position;
     short check_sum;
 
-    if (!packet) {
-        LOGD("There is nothing to point the Packet");
+    if (!packet && !stream_buf) {
+        LOGD("Can't craet the check_sum\n");
         return -1;
     }
 
-    check_sum = 0;
+    if (packet) {
+        check_sum = 0;
 
-    op_code = get_op_code(packet, NULL);
-    payload_len = get_payload_len(packet, NULL);
-    payload = get_payload(packet, NULL);
+        op_code = get_op_code(packet, NULL);
+        payload_len = get_payload_len(packet, NULL);
+        payload = get_payload(packet, NULL);
 
-    check_sum += SOP;
-    check_sum += op_code;
-    check_sum += payload_len;
+        check_sum += get_sop(packet, NULL);
+        check_sum += op_code;
+        check_sum += payload_len;
 
-    for(i = 0; i < payload_len; i++) {
-        check_sum += payload[i];
+        for(i = 0; i < payload_len; i++) {
+            check_sum += payload[i];
+        }
+
+        check_sum += get_eop(packet, NULL);
     }
 
-    check_sum += EOP;
+    if (stream_buf) {
+        buf = get_buf(stream_buf);
+        position = get_position(stream_buf);
+        for(i = 0; i < position -2; i++) {
+            check_sum += buf[i];
+        }
+    }
     return check_sum;
 }
 

@@ -14,6 +14,8 @@
 #define HEADER_SIZE            11
 #define TAIL_SIZE              3
 
+#include "stream_buf.h"
+
 typedef struct _Header Header;
 typedef struct _Body Body;
 typedef struct _Tail Tail;
@@ -27,7 +29,7 @@ Body* new_body(char *payload);
 void destroy_body(Body *body);
 Tail* new_tail(char eop, short check_sum);
 void destroy_tail(Tail *tail);
-short create_check_sum(Packet *packet);
+short create_check_sum(Packet *packet, Stream_Buf *stream_buf);
 Header* get_header(Packet *packet);
 Tail* get_tail(Packet *packet);
 Body* get_body(Packet *packet);
@@ -39,6 +41,8 @@ short get_op_code(Packet *packet, Header *header);
 long int get_payload_len(Packet *packet, Header *header);
 char* get_payload(Packet *packet, Body *body);
 
+short set_sop(Packet *packet, char sop);
+short set_eop(Packet *packet, char eop);
 short set_op_code(Packet *packet, short op_code);
 short set_payload_len(Packet *packet, long int payload_len);
 short set_check_sum(Packet *packet, short check_sum);
