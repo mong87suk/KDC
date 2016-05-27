@@ -42,34 +42,30 @@ static int get_buffer_size(DList *stream_buf_list) {
 
 static void append_data(void *data, void *user_data) {
     char *dest, *src;
-    int beginIndex, n;
-    Stream_Buf *stream_buf;
-    int i;
+    int copy_n;
+    Stream_Buf *data_stream_buf;
+    Stream_Buf *user_data_stream_buf;
 
-    stream_buf = (Stream_Buf*) data;
-    dest = (char*) user_data;
+    data_stream_buf = (Stream_Buf*) data;
+    user_data_stream_buf = (Stream_Buf*) user_data;
 
-    if (!stream_buf) {
+    if (!data_stream_buf || !user_data_stream_buf) {
         LOGD("There is nothing to point Stream_Buf\n");
         return;
     }
+    
+    dest = get_available_buf(user_data_stream_buf);
+    src = get_buf(data_stream_buf);
 
-    src = get_buf(stream_buf);
-
-    if (!src) {
+    if (!src || !dest) {
         LOGD("There is nothing to point buf\n");
         return;
     }
 
-    beginIndex = strlen(user_data);
-    LOGD("beginIndex:%d\n", beginIndex);
-    n = get_position(stream_buf);
-    for (i = 0; i < n; i++) {
-        printf(" %2X ", (unsigned char) src[i]);
-    }
-    printf("\n");
+    copy_n = get_position(data_stream_buf);
 
-    memcpy(dest + beginIndex, src, n);
+    memcpy(dest, src, copy_n);
+    increase_position(user_data_stream_buf, copy_n);
 }
 
 static void destroy_stream_buf_list(void *data) {
@@ -84,12 +80,12 @@ static void destroy_stream_buf_list(void *data) {
     destroy_stream_buf(stream_buf);
 }
 
-static short  append_data_to_buf(DList *stream_buf_list, char *buf) {
-    if (!stream_buf_list) {
+static short  append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf) {
+    if (!stream_buf_list || !stream_buf) {
         LOGD("There is no a pointer to Stream_Buf\n");
         return FALSE;
     }
-    d_list_foreach(stream_buf_list, append_data, buf);
+    d_list_foreach(stream_buf_list, append_data, stream_buf);
     return TRUE;
 }
 
@@ -306,7 +302,7 @@ static void handle_stdin_event(Client* client, int fd) {
             return;
         }
 
-        result = set_position(stream_buf, n_byte);
+        result = increase_position(stream_buf, n_byte);
         if (result == FALSE) {
             LOGD("Failed to set the position\n");
             d_list_free(stream_buf_list, destroy_stream_buf_list);
@@ -318,26 +314,27 @@ static void handle_stdin_event(Client* client, int fd) {
     } while (buf[position - 1] != '\n');
 
     input_size = get_buffer_size(stream_buf_list);
-    input_str = (char*) malloc(input_size);
+    stream_buf = new_stream_buf(input_size);
     LOGD("input_size:%d\n", input_size);
 
-    if (!input_str) {
-        LOGD("Failed to make input str\n");
+    if (!stream_buf) {
+        LOGD("Failed to make the Steam Buf\n");
         return;
     }
 
-    memset(input_str, 0, input_size);
-    result = append_data_to_buf(stream_buf_list, input_str);
+    result = append_data_to_buf(stream_buf_list, stream_buf);
 
     if (result == FALSE) {
         LOGD("Failed to append input data to buf\n");
         return;
     }
 
+    input_str = get_buf(stream_buf);
+
     d_list_free(stream_buf_list, destroy_stream_buf_list);
     stream_buf_list = NULL;
 
-    input_strlen = strlen(input_str);
+    input_strlen = input_size;
     if (input_strlen >= REQ_STR_MIN_LEN && (strncasecmp(input_str, REQ_STR, strlen(REQ_STR))) == 0) {
         LOGD("input_str:%s", input_str);
         op_code = input_str[8] - '0';

@@ -148,42 +148,38 @@ static void destroy_client_stream_buf_list(Client* client) {
 
 static void append_data(void *data, void *user_data) {
     char *dest, *src;
-    int beginIndex, n;
-    Stream_Buf *stream_buf;
-    int i;
+    int copy_n;
+    Stream_Buf *data_stream_buf;
+    Stream_Buf *user_data_stream_buf;
 
-    stream_buf = (Stream_Buf*) data;
-    dest = (char*) user_data;
+    data_stream_buf = (Stream_Buf*) data;
+    user_data_stream_buf = (Stream_Buf*) user_data;
 
-    if (!stream_buf) {
+    if (!data_stream_buf || !user_data_stream_buf) {
         LOGD("There is nothing to point Stream_Buf\n");
         return;
     }
 
-    src = get_buf(stream_buf);
+    dest = get_available_buf(user_data_stream_buf);
+    src = get_buf(data_stream_buf);
 
-    if (!src) {
+    if (!src || !dest) {
         LOGD("There is nothing to point buf\n");
         return;
     }
 
-    beginIndex = strlen(user_data);
-    LOGD("beginIndex:%d\n", beginIndex); 
-    n = get_position(stream_buf);
-    for (i = 0; i < n; i++) { 
-        printf(" %2X ", (unsigned char) src[i]);
-    }
-    printf("\n");
+    copy_n = get_position(data_stream_buf);
 
-    memcpy(dest + beginIndex, src, n);
+    memcpy(dest, src, copy_n);
+    increase_position(user_data_stream_buf, copy_n);
 }
 
-static char append_data_to_buf(DList *stream_buf_list, char *buf) {
-    if (!stream_buf_list) {
-        LOGD("There is no a pointer to Stream_Buf\n");
+static char append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf) {
+    if (!stream_buf_list || !stream_buf) {
+        LOGD("Can't append data to Stream_Buf\n");
         return FALSE;
     }
-    d_list_foreach(stream_buf_list, append_data, buf);
+    d_list_foreach(stream_buf_list, append_data, stream_buf);
     return TRUE;
 }
 
@@ -243,7 +239,7 @@ static void handle_req_event(Server *server, int fd) {
                 return;
             }
 
-            result = set_position(stream_buf, n_byte);
+            result = increase_position(stream_buf, n_byte);
             if (result == FALSE) {
                 LOGD("Failed to set the position\n");
                 destroy_client_stream_buf_list(client);
@@ -297,7 +293,7 @@ static void handle_req_event(Server *server, int fd) {
                 return;
             }
             read_len += n_byte;
-            result = set_position(stream_buf, n_byte);
+            result = increase_position(stream_buf, n_byte);
             if (result == FALSE) {
                 LOGD("Failed to set the position\n");
                 destroy_client_stream_buf_list(client);
@@ -308,17 +304,30 @@ static void handle_req_event(Server *server, int fd) {
 
     read_len = get_buffer_size(client->stream_buf_list);
     LOGD("buf_len:%d\n", read_len);
-    buf = (char*) malloc(read_len);
 
     if (!buf) {
         LOGD("Failed to make buf\n");
         return;
     }
-    memset(buf, 0, read_len);
-    result = append_data_to_buf(client->stream_buf_list, buf);
+
+    stream_buf = new_stream_buf(read_len);
+    if (!stream_buf) {
+        LOGD("Failed to make the Stream buf");
+        return;
+    }
+    
+    LOGD("before append_data\n");
+    result = append_data_to_buf(client->stream_buf_list, stream_buf);
+    LOGD("after append data\n");
 
     if (result == FALSE) {
         LOGD("Failed to append input data to buf\n");
+        return;
+    }
+
+    buf = get_buf(stream_buf);
+    if (!buf) {
+        LOGD("There is nothing to point the buf in the Stream Buf\n");
         return;
     }
 
