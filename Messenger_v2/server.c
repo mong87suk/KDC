@@ -125,7 +125,7 @@ static void sum_size(void *data, void *user_data) {
     *size += get_position(stream_buf);
 }
 
-static int get_buffer_size(DList *stream_buf_list) {
+static int get_read_size(DList *stream_buf_list) {
     int size;
 
     if (!stream_buf_list) {
@@ -660,29 +660,38 @@ static void handle_req_event(Server *server, int fd) {
     LOGD("Start handle_req_event()\n");
 
     if (client->read_state == READY_TO_READ_REQ) {
+
+        stream_buf = d_list_get_data(d_list_last(client->stream_buf_list));
+        if (stream_buf == NULL || get_available_size(stream_buf) == 0) {
+            stream_buf = new_stream_buf(1);
+            client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
+        }
+
+        n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
+        LOGD("stream_buf = %p, n_byte = %d\n", stream_buf, n_byte);
+        if (n_byte < 0) {
+            LOGD("Failed to read\n");
+            destroy_client_stream_buf_list(client);
+            return;
+        }
+
+        result = increase_position(stream_buf, n_byte);
+        if (result == FALSE) {
+            LOGD("Failed to set the position\n");
+            destroy_client_stream_buf_list(client);
+            return;
+        }
+
+        if (get_read_size(client->stream_buf_list) < HEADER_SIZE) {
+            LOGD("not enough\n");
+            return;
+        }
+
         client->read_state = START_TO_READ_REQ;
-        do {
-            if (client->stream_buf_list == NULL) {
-                stream_buf = new_stream_buf(HEADER_SIZE);
-                client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
-            }
-            n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
-            if (n_byte < 0) {
-                LOGD("Failed to read\n");
-                destroy_client_stream_buf_list(client);
-                return;
-            }
+        Stream_Buf *r_stream_buf = new_stream_buf(HEADER_SIZE);
+        append_data_to_buf(client->stream_buf_list, r_stream_buf);
 
-            result = increase_position(stream_buf, n_byte);
-            if (result == FALSE) {
-                LOGD("Failed to set the position\n");
-                destroy_client_stream_buf_list(client);
-                return;
-            }
-            position = get_position(stream_buf);
-        } while (position != HEADER_SIZE);
-
-        buf = get_buf(stream_buf);
+        buf = get_buf(r_stream_buf);
         if (buf[0] != SOP) {
             LOGD("Failed to get binary\n");
             destroy_client_stream_buf_list(client);
@@ -701,7 +710,7 @@ static void handle_req_event(Server *server, int fd) {
         stream_buf = new_stream_buf(MAX_BUF_LEN);
         client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
         packet_len = client->packet_len;
-        read_len = get_buffer_size(client->stream_buf_list);
+        read_len = get_read_size(client->stream_buf_list);
 
         do {
             position = get_position(stream_buf);
@@ -726,7 +735,7 @@ static void handle_req_event(Server *server, int fd) {
         } while ((read_len - packet_len));
     }
 
-    read_len = get_buffer_size(client->stream_buf_list);
+    read_len = get_read_size(client->stream_buf_list);
 
     if (!buf) {
         LOGD("Failed to make buf\n");

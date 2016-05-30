@@ -274,6 +274,18 @@ static void handle_res_events(Client *client, int fd) {
     }
 
     result = convert_buf_to_packet(buf, packet);
+    char *test, *test2;
+    int i;
+    Message *mesg;
+    mesg = new_mesg(0, 0, 0);
+    test = get_payload(packet, NULL);
+    i = get_payload_len(packet, NULL);
+    convert_payload_to_mesg(test, mesg);
+
+    test2 = get_str(mesg);
+    LOGD("test2: %s\n", test2);
+
+
     destroy_stream_buf(stream_buf);
     if (result == FALSE) {
         LOGD("Faield to convert buf to packet\n");
