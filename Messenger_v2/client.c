@@ -21,6 +21,9 @@ struct _Client
 {
     int fd;
     Looper *looper;
+    READ_RES_STATE read_state;
+    DList *stream_buf_list;
+    int packet_len;
 };
 
 static void sum_size(void *data, void *user_data) {
@@ -90,12 +93,194 @@ static short  append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf)
     return TRUE;
 }
 
-static void read_packet(int fd) {
+static void destroy_client_stream_buf_list(Client* client) {
+    if (!client) {
+        LOGD("There is nothing to point the Client\n");
+        return;
+    }
+    d_list_free(client->stream_buf_list, destroy_stream_buf_list);
+    client->stream_buf_list = NULL;
+    client->read_state = READY_TO_READ_RES;
+}
 
+static short copy_payload_len(char *buf, long int *payload_len) {
+    if (!buf) {
+        LOGD("There is nothing to point the buf\n");
+        return FALSE;
+    }
+    buf = buf + sizeof(char) + sizeof(short);
+
+    memcpy(payload_len, buf, sizeof(long int));
+    return TRUE;
+}
+
+static int is_check_sum_true(short check_sum, Stream_Buf *stream_buf) {
+    int position;
+    char *buf;
+    int i;
+    short comp_check_sum;
+
+    if (!stream_buf) {
+        LOGD("Failed to check enable check_sum\n");
+        return FALSE;
+    }
+
+    position = get_position(stream_buf);
+    buf = get_buf(stream_buf);
+
+    for (i = position -1 ; i < position; i++) {
+        comp_check_sum += buf[i];
+    }
+
+    if (comp_check_sum == check_sum) {
+        LOGD("Not enabled check sum\n");
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 static void handle_res_events(Client *client, int fd) {
-    read_packet(fd);
+    char *buf;
+    Stream_Buf *stream_buf;
+    int result, position, read_len, n_byte, packet_len;
+    long int payload_len;
+    Packet *packet, *res_packet;
+    short check_sum;
+
+    LOGD("Start handle_res_events()\n");
+
+    if (!client) {
+        LOGD("There is nothing to point he Client\n");
+        return;
+    }
+
+    if (client->read_state == READY_TO_READ_RES) {
+        client->read_state = START_TO_READ_RES;
+        do {
+            if (client->stream_buf_list == NULL) {
+                stream_buf = new_stream_buf(HEADER_SIZE);
+                client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
+            }
+            n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
+            if (n_byte < 0) {
+                LOGD("Failed to read\n");
+                destroy_client_stream_buf_list(client);
+                return;
+            }
+
+            result = increase_position(stream_buf, n_byte);
+            if (result == FALSE) {
+                LOGD("Failed to set the position\n");
+                destroy_client_stream_buf_list(client);
+                return;
+            }
+            position = get_position(stream_buf);
+        } while (position != HEADER_SIZE);
+
+        buf = get_buf(stream_buf);
+        if (buf[0] != SOP) {
+            LOGD("Failed to get binary\n");
+            destroy_client_stream_buf_list(client);
+            return;
+        }
+        result = copy_payload_len(buf, &payload_len);
+        if (result == FALSE) {
+            LOGD("Failed to copy payload\n");
+            destroy_client_stream_buf_list(client);
+            return;
+        }
+        LOGD("payload_len:%ld\n", payload_len);
+        client->packet_len = HEADER_SIZE + payload_len + TAIL_SIZE;
+    }
+
+
+    if (client->read_state == START_TO_READ_RES) {
+        stream_buf = new_stream_buf(MAX_BUF_LEN);
+        client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
+        packet_len = client->packet_len;
+        read_len = get_buffer_size(client->stream_buf_list);
+
+        do {
+            position = get_position(stream_buf);
+            if (position >= MAX_BUF_LEN) {
+                stream_buf = new_stream_buf(MAX_BUF_LEN);
+                client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
+            }
+
+            n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
+            if (n_byte < 0) {
+                LOGD("Failed to read\n");
+                destroy_client_stream_buf_list(client);
+                return;
+            }
+            read_len += n_byte;
+            result = increase_position(stream_buf, n_byte);
+            if (result == FALSE) {
+                LOGD("Failed to set the position\n");
+                destroy_client_stream_buf_list(client);
+                return;
+            }
+        } while ((read_len - packet_len));
+    }
+
+    read_len = get_buffer_size(client->stream_buf_list);
+
+    if (!buf) {
+        LOGD("Failed to make buf\n");
+        return;
+    }
+
+    stream_buf = new_stream_buf(read_len);
+    if (!stream_buf) {
+        LOGD("Failed to make the Stream buf");
+        return;
+    }
+
+    result = append_data_to_buf(client->stream_buf_list, stream_buf);
+    destroy_client_stream_buf_list(client);
+    if (result == FALSE) {
+        LOGD("Failed to append input data to buf\n");
+        destroy_stream_buf(stream_buf);
+        return;
+    }
+
+    buf = get_buf(stream_buf);
+    if (!buf) {
+        LOGD("There is nothing to point the buf in the Stream Buf\n");
+        destroy_stream_buf(stream_buf);
+        return;
+    }
+
+    if (buf[read_len -3] != EOP) {
+        LOGD("Packet is wrong\n");
+        destroy_stream_buf(stream_buf);
+        return;
+    }
+
+    check_sum = create_check_sum(NULL, stream_buf);
+    result = is_check_sum_true(check_sum, stream_buf);
+
+    if (result == FALSE) {
+        LOGD("check_sum is wrong\n");
+        destroy_stream_buf(stream_buf);
+        return;
+    }
+
+    packet = new_packet(NULL, NULL, NULL);
+    if (!packet) {
+        LOGD("Failed to make the Packet\n");
+        return;
+    }
+
+    result = convert_buf_to_packet(buf, packet);
+    destroy_stream_buf(stream_buf);
+    if (result == FALSE) {
+        LOGD("Faield to convert buf to packet\n");
+        return;
+    }
+
+    LOGD("Finish handle_res_events()\n");
 }
 
 static void handle_disconnect(Client *client, int fd) {
@@ -112,7 +297,7 @@ static Body* create_body(char *input_str, int input_strlen, long int *payload_le
     current_time = time(NULL);
 
     if (current_time == ((time_t) - 1)) {
-        printf("Failed to obtain the current time.\n");
+        LOGD("Failed to obtain the current time.\n");
         return 0;
     }   
 
@@ -432,6 +617,9 @@ Client* new_client(Looper *looper) {
     }
 
     client->fd = client_fd;
+    client->read_state = READY_TO_READ_RES; 
+    client->stream_buf_list = NULL;
+    client->packet_len = 0;
 
     add_watcher(looper, STDIN_FILENO, handle_events, client, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
     add_watcher(looper, client_fd, handle_events, client, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);

@@ -326,3 +326,56 @@ int convert_payload_to_mesg(char *payload, Message *mesg) {
     print_mesg(mesg);
     return TRUE;
 }
+
+int convert_mesgs_to_payload(Message *mesgs, char *payload, int len) {
+    long int time;
+    int str_len, i;
+    char *str, *tmp;
+    Message *mesg;
+
+    if (!mesgs || !payload) {
+        LOGD("Can't convert mesgs to buf\n");
+        return FALSE;
+    }
+    str_len = 0;
+    tmp = payload;
+    memcpy(tmp, &len, sizeof(len));
+    tmp += sizeof(len);
+
+    for (i = 0; i < len; i++) {
+        mesg = next_mesg(mesgs, i);
+        if (!mesg) {
+            LOGD("There is nothing to point the mesg\n");
+            return FALSE;
+        }
+
+        if (!str_len) {
+            tmp += str_len;
+        }
+
+        time = get_time(mesg);
+        if (time == -1) {
+            LOGD("Failed to get the time\n");
+            return FALSE;
+        }
+        memcpy(tmp, &time, sizeof(time));
+        tmp += sizeof(time);
+
+        str_len = get_str_len(mesg);
+        if (str_len == -1) {
+            LOGD("Failed to get the str_len\n");
+            return FALSE;
+        }
+        memcpy(tmp, &str_len, sizeof(str_len));
+        tmp += sizeof(str_len);
+
+        str = get_str(mesg);
+        if (!str) {
+            LOGD("Faield to get the str\n");
+            return FALSE;
+        }
+        memcpy(tmp, str, str_len);
+    }
+
+    return TRUE;
+}

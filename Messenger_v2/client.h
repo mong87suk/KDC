@@ -8,6 +8,11 @@
 #define REQ_STR_MIN_LEN 10
 #define REQ_FIRST_OR_LAST_MESG_PACKET_SIZE 12
 
+typedef enum {
+    READY_TO_READ_RES = 0,
+    START_TO_READ_RES = 1
+} READ_RES_STATE;
+
 typedef struct _Client Client;
 
 Client* new_client(Looper *looper);

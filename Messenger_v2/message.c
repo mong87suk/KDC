@@ -49,14 +49,14 @@ int set_str_len(Message *mesg, int str_len) {
     return TRUE;
 }
 
-char* set_str(Message *mesg, char *str) {
+int set_str(Message *mesg, char *str) {
     if (!mesg) {
         LOGD("Failed to set the str\n");
-        return NULL;
+        return FALSE;
     }
 
     mesg->str = str;
-    return NULL;
+    return TRUE;
 }
 
 long int get_time(Message *mesg) {
@@ -84,4 +84,29 @@ char* get_str(Message *mesg) {
     }
 
     return mesg->str;
+}
+
+Message* create_mesg_array(int len) {
+    Message *mesgs;
+    if (len == 0) {
+        LOGD("Len is zero\n");
+        return NULL;
+    }
+
+    mesgs = (Message*) malloc(sizeof(Message) * len);
+    if (!mesgs) {
+        LOGD("Failed to make the mesg array\n");
+        return NULL;
+    }
+
+    return mesgs;
+}
+
+Message* next_mesg(Message* mesgs, int i) {
+    if (!mesgs) {
+        LOGD("There is nothing to point the message\n");
+        return NULL;
+    }
+
+    return (mesgs + i);
 }
