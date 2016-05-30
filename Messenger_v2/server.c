@@ -24,6 +24,7 @@ struct _Server {
     int fd;
     DList *client_list;
     DList *mesg_list;
+    DList *last_read_mesg_node;
     Looper *looper;
     Mesg_File *mesg_file;
     Mesg_File_DB *mesg_file_db;
@@ -300,7 +301,6 @@ static int copy_mesgs(DList *mesg_list, Message *mesgs, int len) {
     return TRUE;
 }
 
-
 static Packet* create_res_packet(Server *server, Packet *req_packet) {
     short op_code, check_sum;
     char *payload, *buf;
@@ -312,6 +312,8 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
     int payload_len;
     int mesgs_size, list_len; 
     Message *mesg, *mesgs;
+
+    LOGD("Start create_res_packet()\n");
 
     if (!req_packet) {
         LOGD("There is nothing to point the Packet\n");
@@ -356,6 +358,7 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
 
         list_len = d_list_length(server->mesg_list);
         payload_len =  sizeof(int) + mesgs_size + (list_len * (sizeof(long int) + sizeof(int)));
+        LOGD("payload_len:%d\n", payload_len);
         result = set_payload_len(res_packet, payload_len);
         if (result == FALSE) {
             LOGD("Failed to set the payload_len\n");
@@ -459,6 +462,14 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
         }
         break;
     case REQ_FIRST_OR_LAST_MSG:
+        LOGD("REQ_FIRST_OR_LAST_MSG\n");
+        payload_len = get_payload_len(req_packet, NULL);
+        LOGD("payload_len:%d\n", payload_len);
+        payload = get_payload(req_packet, NULL);
+        if (!payload) {
+            LOGD("Failed to get the payload\n");
+            return NULL;
+        }
         break;
     default:
         return NULL;
@@ -485,6 +496,7 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
         return NULL;
     }
 
+    LOGD("Finished create_res_packet()\n"); 
     return res_packet;
 }
 

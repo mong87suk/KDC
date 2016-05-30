@@ -128,7 +128,7 @@ static void print_packet(Packet *packet) {
         }
         payload = get_payload(NULL, body);
 
-        print_payload(payload, payload_len);
+        print_buf(payload, payload_len);
     }
 
     LOGD("Print Tail\n\n");
@@ -273,14 +273,14 @@ short convert_packet_to_buf(Packet *packet, char *buf) {
     memcpy(tmp_dest, &payload_len, sizeof(payload_len));
     print_buf(buf, HEADER_SIZE);
     LOGD("Finished to copy Header\n");
-
     tmp_dest += sizeof(payload_len);
+
     if (payload_len) {
         LOGD("Strart to copy Body\n");
         payload = get_payload(packet, NULL);
         memcpy(tmp_dest, payload, payload_len);
 
-        print_payload(buf + HEADER_SIZE, payload_len);
+        print_buf(buf + HEADER_SIZE, payload_len);
         tmp_dest += payload_len;
         LOGD("Finished to copy Body\n");
     }
@@ -340,6 +340,7 @@ int convert_mesgs_to_payload(Message *mesgs, char *payload, int len) {
     str_len = 0;
     tmp = payload;
     memcpy(tmp, &len, sizeof(len));
+    print_buf(tmp, sizeof(len));
     tmp += sizeof(len);
 
     for (i = 0; i < len; i++) {
@@ -349,7 +350,7 @@ int convert_mesgs_to_payload(Message *mesgs, char *payload, int len) {
             return FALSE;
         }
 
-        if (!str_len) {
+        if (str_len) {
             tmp += str_len;
         }
 
@@ -359,6 +360,7 @@ int convert_mesgs_to_payload(Message *mesgs, char *payload, int len) {
             return FALSE;
         }
         memcpy(tmp, &time, sizeof(time));
+        print_buf(tmp, sizeof(time));
         tmp += sizeof(time);
 
         str_len = get_str_len(mesg);
@@ -367,6 +369,7 @@ int convert_mesgs_to_payload(Message *mesgs, char *payload, int len) {
             return FALSE;
         }
         memcpy(tmp, &str_len, sizeof(str_len));
+        print_buf(tmp, sizeof(str_len));
         tmp += sizeof(str_len);
 
         str = get_str(mesg);
@@ -375,6 +378,7 @@ int convert_mesgs_to_payload(Message *mesgs, char *payload, int len) {
             return FALSE;
         }
         memcpy(tmp, str, str_len);
+        print_buf(tmp, str_len);
     }
 
     return TRUE;

@@ -3,6 +3,7 @@
 typedef struct _Message Message;
 
 Message* new_mesg(long int time, int str_len, char *str);
+void destroy_mesg(Message *mesg);
 
 int set_time(Message *mesg, long int time);
 int set_str_len(Message *mesg, int str_len);

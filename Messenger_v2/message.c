@@ -29,6 +29,18 @@ Message* new_mesg(long int time, int str_len, char *str) {
     return mesg;
 }
 
+void destroy_mesg(Message *mesg) {
+    if (!mesg) {
+        LOGD("Can't destroy the mesg\n");
+        return;
+    }
+
+    if(mesg->str) {
+        free(mesg->str);
+    }
+
+    free(mesg);
+}
 int set_time(Message *mesg, long int time) {
     if (!mesg) {
         LOGD("Failed to set the time\n");
