@@ -22,7 +22,9 @@ struct _Client
     int fd;
     Looper *looper;
     READ_RES_STATE read_state;
+    READ_STDIN_STATE read_stdin_state;
     DList *stream_buf_list;
+    DList *stdin_stream_buf_list;
     int packet_len;
 };
 
@@ -500,6 +502,46 @@ static void handle_stdin_event(Client* client, int fd) {
 
     stream_buf_list = NULL;
 
+    if (client->read_stdin_state == READ_DATA) {
+        stream_buf = d_list_get_data(d_list_last(client->stdin_stream_buf_list));
+        if (stream_buf == NULL ||get_available_size(stream_buf) == 0) {
+            stream_buf = new_stream_buf(MAX_BUF_LEN);
+            client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
+        }
+
+        n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
+        LOGD("stream_buf = %p, n_byte = %d\n", stream_buf, n_byte);
+
+        if (n_byte < 0) { 
+            LOGD("Failed to read\n");
+            return;
+        }
+
+        result = increase_position(stream_buf, n_byte);
+        if (result == FALSE) {
+            LOGD("Failed to set the position\n");
+            return;
+        }
+
+        buf = get_buf(stream_buf);
+        if (!buf) {
+            LOGD("Failed to get the buf\n");
+            return;
+        }
+        position = get_position(stream_buf);
+        if (position == 0) {
+            LOGD("Position is zero\n");
+            return;
+        }
+
+        if (buf[position -1] == '\n') {
+            LOGD("Finished to read stdin data\n");
+            client->read_stdin_state = FINISH_TO_READ_DATA;
+            return;
+        }
+    }
+
+
     do {
         if (position >= MAX_BUF_LEN || stream_buf_list == NULL) {
             stream_buf = new_stream_buf(MAX_BUF_LEN);
@@ -629,7 +671,9 @@ Client* new_client(Looper *looper) {
     client->fd = client_fd;
     client->read_state = READY_TO_READ_RES; 
     client->stream_buf_list = NULL;
+    client->stdin_stream_buf_list = NULL;
     client->packet_len = 0;
+    client->read_stdin_state = READ_DATA;
 
     add_watcher(looper, STDIN_FILENO, handle_events, client, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
     add_watcher(looper, client_fd, handle_events, client, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);

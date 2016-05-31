@@ -13,6 +13,11 @@ typedef enum {
     START_TO_READ_RES = 1
 } READ_RES_STATE;
 
+typedef enum {
+    READ_DATA = 0,
+    FNINISH_TO_READ_DATA = 1
+} READ_STDIN_STATE;
+
 typedef struct _Client Client;
 
 Client* new_client(Looper *looper);
