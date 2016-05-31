@@ -1,7 +1,7 @@
 #ifndef __STREAM_BUF_H__
 #define __STREAM_BUF_H__
 
-#define MAX_BUF_LEN 2
+#define MAX_BUF_LEN 10
 
 typedef struct _Stream_Buf Stream_Buf;
 

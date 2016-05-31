@@ -258,7 +258,7 @@ static void handle_res_events(Client *client, int fd) {
         return;
     }
 
-    check_sum = create_check_sum(NULL, stream_buf);
+    check_sum = create_check_sum(NULL, buf, read_len);
     result = is_check_sum_true(check_sum, stream_buf);
 
     if (result == FALSE) {
@@ -275,11 +275,9 @@ static void handle_res_events(Client *client, int fd) {
 
     result = convert_buf_to_packet(buf, packet);
     char *test, *test2;
-    int i;
     Message *mesg;
     mesg = new_mesg(0, 0, 0);
     test = get_payload(packet, NULL);
-    i = get_payload_len(packet, NULL);
     convert_payload_to_mesg(test, mesg);
 
     test2 = get_str(mesg);
@@ -441,7 +439,7 @@ static Packet* create_req_packet(char *input_str, short op_code, int input_strle
         return NULL;
     }
 
-    check_sum = create_check_sum(packet, NULL);
+    check_sum = create_check_sum(packet, NULL, 0);
     if (check_sum == -1) {
         LOGD("Failed to do check_sum\n");
         return NULL;

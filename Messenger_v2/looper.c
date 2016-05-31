@@ -4,6 +4,7 @@
 
 #include "DBLinkedList.h"
 #include "looper.h"
+#include "utils.h"
 
 struct _Looper
 {
@@ -121,14 +122,14 @@ int run(Looper *looper) {
     nfds = 0;
 
     if (!looper) {
-        printf("%s %s There is nothing to pointer the Looper\n", __FILE__, __func__);
+        LOGD("There is nothing to pointer the Looper\n");
         return 0;
     }
 
     list = looper->watcher_list;
 
    if (!(d_list_length(list))) {
-       printf("%s %s There is no Watcher\n", __FILE__, __func__);
+       LOGD("There is no Watcher\n");
        return 0;
    }
 
@@ -137,7 +138,7 @@ int run(Looper *looper) {
     while (looper->state) {
         n_watcher = d_list_length(looper->watcher_list);
         if (n_watcher <= 0) {
-            printf("%s %s There is no Watcher\n", __FILE__, __func__);
+            LOGD("There is no Watcher\n");
             return 0;
         }
         struct pollfd fds[n_watcher];
@@ -148,7 +149,7 @@ int run(Looper *looper) {
         if (nfds > 0) {
             for (i = 0; i < n_watcher; i++) {
                 if (fds[i].revents != 0) {
-                    printf("%s %s pollfd index:%d revent:%d\n", __FILE__, __func__, i, fds[i].revents);
+                    LOGD("pollfd index:%d revent:%d\n", i, fds[i].revents);
                     fd = fds[i].fd;
                     revents = fds[i].revents;
                     looper_event = 0;

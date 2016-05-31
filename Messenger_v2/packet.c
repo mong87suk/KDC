@@ -277,14 +277,14 @@ char* get_payload(Packet *packet, Body *body) {
     return body->payload;
 }
 
-short create_check_sum(Packet *packet, Stream_Buf *stream_buf) {
+short create_check_sum(Packet *packet, char *buf, int len) {
     short op_code;
     long int payload_len;
-    char *payload, *buf;
-    int i, position;
+    char *payload;
+    int i;
     short check_sum;
 
-    if (!packet && !stream_buf) {
+    if (!packet && !buf) {
         LOGD("Can't craet the check_sum\n");
         return -1;
     }
@@ -307,10 +307,8 @@ short create_check_sum(Packet *packet, Stream_Buf *stream_buf) {
         check_sum += get_eop(packet, NULL);
     }
 
-    if (stream_buf) {
-        buf = get_buf(stream_buf);
-        position = get_position(stream_buf);
-        for(i = 0; i < position -2; i++) {
+    if (buf) {
+        for(i = 0; i < len -2; i++) {
             check_sum += buf[i];
         }
     }

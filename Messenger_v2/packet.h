@@ -29,7 +29,7 @@ Body* new_body(char *payload);
 void destroy_body(Body *body);
 Tail* new_tail(char eop, short check_sum);
 void destroy_tail(Tail *tail);
-short create_check_sum(Packet *packet, Stream_Buf *stream_buf);
+short create_check_sum(Packet *packet, char *buf, int len);
 Header* get_header(Packet *packet);
 Tail* get_tail(Packet *packet);
 Body* get_body(Packet *packet);

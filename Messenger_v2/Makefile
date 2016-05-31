@@ -6,6 +6,8 @@ SERVER_MAIN = server_main
 
 CLIENT_MAIN = client_main
 
+TEST = test
+
 DBLINKED_LIST_SOURCE = ../chapter3/DBLinkedList/DBLinkedList.c
 
 INC = -I../chapter3/DBLinkedList/
@@ -32,6 +34,10 @@ CLIENT_MAIN_OBJECT = \
 			converter.o\
 			message.o\
 
+TEST_OBJECT = \
+		test.o\
+		looper.o\
+
 SHARED_LIBRARY = lib$(DBLINKED_LIST).so
 
 CFLAGS += -Wall -g $(INC)
@@ -39,13 +45,16 @@ CFLAGS += -Wall -g $(INC)
 .c.o:
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-all: $(SERVER_MAIN) $(CLIENT_MAIN)
+all: $(SERVER_MAIN) $(CLIENT_MAIN) $(TEST)
 
 $(SERVER_MAIN) : $(SERVER_MAIN_OBJECT) $(SHARED_LIBRARY)
 	$(CC) -o $(SERVER_MAIN) $(SERVER_MAIN_OBJECT) -L. -l$(DBLINKED_LIST)
 
 $(CLIENT_MAIN) : $(CLIENT_MAIN_OBJECT)
 	$(CC) -o $(CLIENT_MAIN) $(CLIENT_MAIN_OBJECT) -L. -l$(DBLINKED_LIST)
+
+$(TEST) : $(TEST_OBJECT)
+	$(CC) -o $(TEST) $(TEST_OBJECT) -L. -l$(DBLINKED_LIST)
 
 $(SHARED_LIBRARY):$(DBLINKED_LIST_OBJECT)
 	$(CC) -shared -o $@ $^
