@@ -10,13 +10,9 @@
 
 typedef enum {
     READY_TO_READ_RES = 0,
-    START_TO_READ_RES = 1
+    START_TO_READ_RES = 1,
+    FINISH_TO_READ_RES = 2
 } READ_RES_STATE;
-
-typedef enum {
-    READ_DATA = 0,
-    FNINISH_TO_READ_DATA = 1
-} READ_STDIN_STATE;
 
 typedef struct _Client Client;
 

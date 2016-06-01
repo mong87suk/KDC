@@ -15,7 +15,8 @@ typedef enum {
 
 typedef enum {
     READY_TO_READ_REQ = 0,
-    START_TO_READ_REQ = 1
+    START_TO_READ_REQ = 1,
+    FINISH_TO_READ_REQ = 2
 } READ_REQ_STATE;
 
 typedef struct _Server Server;

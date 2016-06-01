@@ -145,7 +145,8 @@ static void print_packet(Packet *packet) {
     printf("\n\n");
 }
 
-int convert_buf_to_packet(char *buf, Packet *packet) {
+Packet* convert_buf_to_packet(char *buf) {
+    Pakcet *packet;
     Header *header;
     Body *body;
     Tail *tail;
@@ -155,33 +156,43 @@ int convert_buf_to_packet(char *buf, Packet *packet) {
     char *payload;
     short result;
 
-    if (!buf || !packet) {
+    if (!buf) {
         LOGD("Can't convert the buf to the packet\n");
-        return FALSE;
+        return NULL;
+    }
+
+    packet = (Packet*) malloc(sizeof(Pakcet));
+    if (!packet) {
+        LOGD("Failed to make the Packet\n");
+        return NULL;
     }
 
     header = new_header(0, 0, 0);
     if (!header) {
         LOGD("Faield to make the Header\n");
-        return FALSE;
+        destroy_packet(packet);
+        return NULL;
     }
 
     result = set_header(packet, header);
     if (result == FALSE) {
         LOGD("Failed to set the header\n");
-        return FALSE;
+        destroy_packet(packet);
+        return NULL;
     }
 
     tail = new_tail(0, 0);
     if (!tail) {
         LOGD("Failed to make the Tail\n");
-        return FALSE;
+        destroy_packet(packet);
+        return NULL;
     }
 
     result = set_tail(packet, tail);
     if (result == FALSE) {
         LOGD("Failed to set the tail\n");
-        return FALSE;
+        destroy_packet(packet);
+        return NULL;
     }
 
     sop = buf[0];
@@ -234,7 +245,7 @@ int convert_buf_to_packet(char *buf, Packet *packet) {
     }
 
     print_packet(packet);
-    return TRUE;
+    return packet;
 }
 
 short convert_packet_to_buf(Packet *packet, char *buf) {

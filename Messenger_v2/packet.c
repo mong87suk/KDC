@@ -6,6 +6,7 @@
 #include "utils.h"
 #include "m_boolean.h"
 #include "stream_buf.h"
+#include "converter.h"
 
 struct _Header
 {
@@ -32,20 +33,14 @@ struct _Packet
     Tail *tail;
 };
 
-Packet* new_packet(Header *header, Body *body, Tail *tail) {
+Packet* new_packet(char *buf) {
     Packet *packet;
 
-    packet = (Packet*) malloc(sizeof(Packet));
-
+    packet = convert_buf_to_packet(buf);
     if (!packet) {
-        LOGD("Failed to make Packet");
+        LOGD("Failed to convert buf to the Packet");
         return NULL;
     }
-
-    packet->header = header;
-    packet->body = body;
-    packet->tail = tail;
-
     return packet;
 }
 

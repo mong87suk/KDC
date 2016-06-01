@@ -243,8 +243,8 @@ static int get_all_mesgs_size(DList *mesg_list) {
     int size;
 
     if (!mesg_list) {
-        LOGD("There is nothing to point the mesg list\n");
-        return -1;
+        LOGD("There is nothing to point the mesg\n");
+        return 0;
     }
 
     d_list_foreach(mesg_list, sum_mesgs_size, &size);
@@ -366,16 +366,9 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
 
     switch(op_code) {
     case REQ_ALL_MSG:
-        LOGD("REQ_ALL_MSG\n");
         mesgs_size = get_all_mesgs_size(server->mesg_list);
-        if (mesgs_size == -1) {
-            LOGD("Failed to get all mesgs size\n");
-            return NULL;
-        }
-
         list_len = d_list_length(server->mesg_list);
         payload_len =  sizeof(int) + mesgs_size + (list_len * (sizeof(long int) + sizeof(int)));
-        LOGD("payload_len:%d\n", payload_len);
         result = set_payload_len(res_packet, payload_len);
         if (result == FALSE) {
             LOGD("Failed to set the payload_len\n");
@@ -517,32 +510,34 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
     return res_packet;
 }
 
-static short copy_payload_len(char *buf, long int *payload_len) {
+static int copy_payload_len(Stream_Buf *stream_buf, long int *payload_len) {
+    char *buf;
+    if (!stream_buf) {
+        LOGD("There is nothing to point the stream buf\n");
+        return FALSE;
+    }
+
+    buf = get_buf(stream_buf);
     if (!buf) {
         LOGD("There is nothing to point the buf\n");
         return FALSE;
     }
-    buf = buf + sizeof(char) + sizeof(short);
 
+    buf = buf + sizeof(char) + sizeof(short);
     memcpy(payload_len, buf, sizeof(long int));
     return TRUE;
 }
 
-static int is_check_sum_true(short check_sum, Stream_Buf *stream_buf) {
-    int position;
-    char *buf;
+static int is_check_sum_true(short check_sum, char *buf, int packet_len) {
     int i;
     short comp_check_sum;
 
-    if (!stream_buf) {
+    if (!buf) {
         LOGD("Failed to check enable check_sum\n");
         return FALSE;
     }
 
-    position = get_position(stream_buf);
-    buf = get_buf(stream_buf);
-
-    for (i = position -1 ; i < position; i++) {
+    for (i = packet_len -2 ; i < packet_len; i++) {
         comp_check_sum += buf[i];
     }
 
@@ -692,16 +687,61 @@ static int check_overread(Stream_Buf *r_stream_buf, int packet_len) {
     return (pos - packet_len);
 }
 
+static void handle_req_packet(Server *server, Packet *req_packet) {
+    short op_code;
+    int mesg_size;
+    Packet *res_packet;
+
+    if (!req_packet || !server) {
+        LOGD("There is nothing to point the Packet\n");
+        return;
+    }
+
+    op_code = get_op_code(!req_packet);
+    if (op_code == -1) {
+        LOGD("Failed to get the op_code\n");
+        return;
+    }
+
+    mesg_size = get_all_mesgs_size(server->mesg_list);
+
+    switch (op_code) {
+    case REQ_ALL_MES:
+        if (!mesg_size) {
+            LOGD("There is no message\n");
+            return;
+        }
+        res_packet = create_res_packet(server, req_packet);
+        break;
+    case SND_MSG:
+        res_create_res_packet(server, req_packet);
+        break;
+    case REQ_FIRST_OR_LAST_MSG:
+        if (!mesg_size) {
+            LOGD("There is no message\n");
+            return;
+        }
+        res_create_res_packet(server, req_packet);
+        break;
+    }
+}
+
 static void handle_req_event(Server *server, int fd) {
     char *buf;
     Client *client;
     short check_sum, op_code;
     Stream_Buf *stream_buf, *r_stream_buf, *c_stream_buf;
-    int n_byte, read_len, packet_len, result, len;
+    int n_byte, read_len, packet_len, result, len, buf_size;
     long int payload_len;
     Packet *packet, *res_packet;
 
     payload_len = 0;
+    packet_len = 0;
+    buf_size = 0;
+    buf = NULL;
+    r_stream_buf = NULL;
+
+    LOGD("Start handle_req_event()\n");
 
     if (!server) {
         LOGD("There is nothing to point the Server\n");
@@ -714,9 +754,17 @@ static void handle_req_event(Server *server, int fd) {
         return;
     }
 
-    LOGD("Start handle_req_event()\n");
-
     if (client->read_state == READY_TO_READ_REQ) {
+        LOGD("READY_TO_READ_REQ\n");
+        packet_len = client->packet_len;
+        if (buf) {
+            free(buf);
+        }
+
+        if (r_stream_buf) {
+            destroy_stream_buf(r_stream_buf);
+        }
+
         stream_buf = d_list_get_data(d_list_last(client->stream_buf_list));
         if (stream_buf == NULL || get_available_size(stream_buf) == 0) {
             stream_buf = new_stream_buf(MAX_BUF_LEN);
@@ -724,7 +772,6 @@ static void handle_req_event(Server *server, int fd) {
         }
 
         n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
-        LOGD("stream_buf = %p, n_byte = %d\n", stream_buf, n_byte);
         if (n_byte < 0) {
             LOGD("Failed to read\n");
             destroy_client_stream_buf_list(client);
@@ -739,14 +786,11 @@ static void handle_req_event(Server *server, int fd) {
         }
 
         read_len = get_read_size(client->stream_buf_list);
-        LOGD("Read_len:%d\n", read_len);
-
         if (read_len < HEADER_SIZE) {
             LOGD("Not enough\n");
             return;
         }
 
-        client->read_state = START_TO_READ_REQ;
         r_stream_buf = new_stream_buf(read_len);
         if (!r_stream_buf) {
             LOGD("Failed to make the Stream Buf\n");
@@ -760,7 +804,24 @@ static void handle_req_event(Server *server, int fd) {
             return;
         }
 
-        buf = (char*) malloc(HEADER_SIZE);
+        result = copy_payload_len(r_stream_buf, &payload_len);
+        if (result == FALSE) {
+            LOGD("Failed to  copy payload_len\n");
+            return;
+        }
+
+        packet_len = HEADER_SIZE + payload_len + TAIL_SIZE;
+        client->packet_len = packet_len; 
+
+        if (read_len >= packet_len) {
+            client->read_state = FINISH_TO_READ_REQ;
+            buf_size = packet_len;
+        } else {
+            client->read_state = START_TO_READ_REQ;
+            buf_size = HEADER_SIZE;
+        }
+
+        buf = (char*) malloc(buf_size);
         if (!buf) {
             LOGD("Failed to make buf to check Header\n");
             destroy_client_stream_buf_list(client);
@@ -768,7 +829,7 @@ static void handle_req_event(Server *server, int fd) {
             return;
         }
 
-        result = append_n_data_to_buf(r_stream_buf, buf, HEADER_SIZE);
+        result = append_n_data_to_buf(r_stream_buf, buf, buf_size);
         if (result == FALSE) {
             LOGD("Failed to append n_data to buf\n");
             destroy_client_stream_buf_list(client);
@@ -785,21 +846,15 @@ static void handle_req_event(Server *server, int fd) {
             return;
         }
 
-        result = copy_payload_len(buf, &payload_len);
-        free(buf);
-        destroy_stream_buf(r_stream_buf);
-
         if (result == FALSE) {
             LOGD("Failed to copy payload\n");
             destroy_client_stream_buf_list(client);
             return;
         }
-        client->packet_len = HEADER_SIZE + payload_len + TAIL_SIZE;
     }
 
-    packet_len = client->packet_len;
-
     if (client->read_state == START_TO_READ_REQ) {
+        LOGD("START_TO_READ_REQ\n");
         stream_buf = d_list_get_data(d_list_last(client->stream_buf_list));
         if (stream_buf == NULL || get_available_size(stream_buf) == 0) {
             stream_buf = new_stream_buf(MAX_BUF_LEN);
@@ -807,7 +862,6 @@ static void handle_req_event(Server *server, int fd) {
         }
 
         n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
-        LOGD("stream_buf = %p, n_byte = %d\n", stream_buf, n_byte);
         if (n_byte < 0) {
             LOGD("Failed to read\n");
             destroy_client_stream_buf_list(client);
@@ -822,12 +876,13 @@ static void handle_req_event(Server *server, int fd) {
         }
 
         read_len = get_read_size(client->stream_buf_list);
-        LOGD("Read_len:%d\n", read_len);
 
         if (read_len < (client->packet_len)) {
             LOGD("Not enough\n");
             return;
         }
+
+        client->read_state = FINISH_TO_READ_REQ;
 
         r_stream_buf = new_stream_buf(read_len);
         if (!r_stream_buf) {
@@ -860,7 +915,10 @@ static void handle_req_event(Server *server, int fd) {
             free(buf);
             return;
         }
+    }
 
+    if (client->read_state == FINISH_TO_READ_REQ) {
+        LOGD("FINISH_TO_READ_REQ\n");
         if (buf[packet_len -3] != EOP) {
             LOGD("Packet is wrong\n");
             destroy_client_stream_buf_list(client);
@@ -869,43 +927,44 @@ static void handle_req_event(Server *server, int fd) {
             return;
         }
 
-        check_sum = create_check_sum(NULL, buf, packet_len);
-        result = is_check_sum_true(check_sum, stream_buf);
+        LOGD("check EOP\n");
 
+        check_sum = create_check_sum(NULL, buf, packet_len);
+        LOGD("Create check_sum\n");
+        result = is_check_sum_true(check_sum, buf, packet_len);
+        LOGD("Check chekc sum\n");
         if (result == FALSE) {
             LOGD("check_sum is wrong\n");
             free(buf);
         }
-        destroy_stream_buf(r_stream_buf);
+
         destroy_client_stream_buf_list(client);
-    }
+        LOGD("before check_overread\n");
+        len = check_overread(r_stream_buf, packet_len);
+        LOGD("after check overread\n");
+        if (len > 0) {
+            LOGD("Packet is overread\n");
 
-    len = check_overread(r_stream_buf, packet_len);
-    if (len > 0) {
-        LOGD("Packet is overread\n");
-        c_stream_buf = new_stream_buf(len);
-
-        if (!c_stream_buf) {
-            LOGD("Failed to make the Stream_Buf\n");
-            return;
+            c_stream_buf = new_stream_buf(len);
+            if (!c_stream_buf) {
+                LOGD("Failed to make the Stream_Buf\n");
+                return;
+            }
+            copy_overread_buf(c_stream_buf, r_stream_buf, packet_len, len);
+            client->stream_buf_list = d_list_append(client->stream_buf_list, c_stream_buf);
         }
-        copy_overread_buf(c_stream_buf, r_stream_buf, packet_len, len);
-        client->stream_buf_list = d_list_append(client->stream_buf_list, c_stream_buf);
+
+        destroy_stream_buf(r_stream_buf);
     }
 
-    LOGD("len:%d\n", len);
-
-    packet = new_packet(NULL, NULL, NULL);
+    packet = new_packet(buf);
     if (!packet) {
         LOGD("Failed to make the Packet\n");
         return;
     }
 
-    result = convert_buf_to_packet(buf, packet);
-    if (result == FALSE) {
-        LOGD("Faield to convert buf to packet\n");
-        return;
-    }
+    free(buf);
+    res_packet = handle_req_packet(server, packet);
 
     res_packet = create_res_packet(server, packet);
     if (!res_packet) {

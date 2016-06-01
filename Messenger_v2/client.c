@@ -22,7 +22,6 @@ struct _Client
     int fd;
     Looper *looper;
     READ_RES_STATE read_state;
-    READ_STDIN_STATE read_stdin_state;
     DList *stream_buf_list;
     DList *stdin_stream_buf_list;
     int packet_len;
@@ -38,8 +37,13 @@ static void sum_size(void *data, void *user_data) {
     *size += get_position(stream_buf);
 }
 
-static int get_buffer_size(DList *stream_buf_list) {
+static int get_read_size(DList *stream_buf_list) {
     int size;
+
+    if (!stream_buf_list) {
+        LOGD("There is nothing to point the stream_buf_list\n");
+        return -1;
+    }
 
     size = 0;
     d_list_foreach(stream_buf_list, sum_size, &size);
@@ -86,6 +90,24 @@ static void destroy_stream_buf_list(void *data) {
     destroy_stream_buf(stream_buf);
 }
 
+static int append_n_data_to_buf(Stream_Buf *stream_buf, char *buf, int n) {
+    char *src;
+    
+    if (!stream_buf || !buf) {
+        LOGD("Can't append n_data to buf\n");
+        return FALSE;
+    }
+
+    src = get_buf(stream_buf);
+    if (!src) {
+        LOGD("Failed to get buf\n");
+        return FALSE;
+    }
+
+    memcpy(buf, src, n);
+    return TRUE;
+}
+
 static short  append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf) {
     if (!stream_buf_list || !stream_buf) {
         LOGD("There is no a pointer to Stream_Buf\n");
@@ -95,7 +117,7 @@ static short  append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf)
     return TRUE;
 }
 
-static void destroy_client_stream_buf_list(Client* client) {
+static void destroy_client_stream_buf_list(Client *client) {
     if (!client) {
         LOGD("There is nothing to point the Client\n");
         return;
@@ -105,32 +127,43 @@ static void destroy_client_stream_buf_list(Client* client) {
     client->read_state = READY_TO_READ_RES;
 }
 
-static short copy_payload_len(char *buf, long int *payload_len) {
+static void destroy_stdin_stream_buf_list(Client *client) {
+    if (!client) {
+        LOGD("There is nothing to point the Client\n");
+        return;
+    }
+    d_list_free(client->stdin_stream_buf_list, destroy_stream_buf_list);
+    client->stdin_stream_buf_list = NULL;
+}
+
+static short copy_payload_len(Stream_Buf *stream_buf, long int *payload_len) {
+    char *buf;
+    if (!stream_buf) {
+        LOGD("There is nothing to point the stream buf\n");
+        return FALSE;
+    }
+
+    buf = get_buf(stream_buf);
     if (!buf) {
         LOGD("There is nothing to point the buf\n");
         return FALSE;
     }
-    buf = buf + sizeof(char) + sizeof(short);
 
+    buf = buf + sizeof(char) + sizeof(short);
     memcpy(payload_len, buf, sizeof(long int));
     return TRUE;
 }
 
-static int is_check_sum_true(short check_sum, Stream_Buf *stream_buf) {
-    int position;
-    char *buf;
+static int is_check_sum_true(short check_sum, char *buf, int packet_len) {
     int i;
     short comp_check_sum;
 
-    if (!stream_buf) {
+    if (!buf) {
         LOGD("Failed to check enable check_sum\n");
         return FALSE;
     }
 
-    position = get_position(stream_buf);
-    buf = get_buf(stream_buf);
-
-    for (i = position -1 ; i < position; i++) {
+    for (i = packet_len -2 ; i < packet_len; i++) {
         comp_check_sum += buf[i];
     }
 
@@ -142,13 +175,59 @@ static int is_check_sum_true(short check_sum, Stream_Buf *stream_buf) {
     return TRUE;
 }
 
+static int copy_overread_buf(Stream_Buf *c_stream_buf, Stream_Buf *r_stream_buf, int packet_len, int len) {
+    char *copy_buf, *buf;
+
+    if (!r_stream_buf || !c_stream_buf) {
+        LOGD("Can't check overwrite\n");
+        return FALSE;
+    }
+
+    buf = get_buf(r_stream_buf);
+    if (!buf) {
+        LOGD("Failed to get the buf\n");
+        return FALSE;
+    }
+
+    copy_buf = get_buf(c_stream_buf);
+    if (!copy_buf) {
+        LOGD("Failed to get the buf\n");
+        return FALSE;
+    }
+
+    memcpy(copy_buf, buf + packet_len, len);
+    return TRUE;
+}
+
+static int check_overread(Stream_Buf *r_stream_buf, int packet_len) {
+    int pos;
+
+    if (!r_stream_buf) {
+        LOGD("There is nothing to point the Stream_Buf\n");
+        return 0;
+    }
+
+    pos = get_position(r_stream_buf);
+    if (!pos) {
+        LOGD("Stream Buffer Position is zero\n");
+        return 0;
+    }
+    return (pos - packet_len);
+}
+
 static void handle_res_events(Client *client, int fd) {
     char *buf;
-    Stream_Buf *stream_buf;
-    int result, position, read_len, n_byte, packet_len;
+    Stream_Buf *stream_buf, *r_stream_buf, *c_stream_buf;
+    int result, read_len, n_byte, packet_len, len, buf_size;
     long int payload_len;
-    Packet *packet, *res_packet;
+    Packet *packet;
     short check_sum;
+
+    payload_len = 0;
+    packet_len = 0;
+    buf_size = 0;
+    buf = NULL;
+    r_stream_buf = NULL;
 
     LOGD("Start handle_res_events()\n");
 
@@ -158,115 +237,205 @@ static void handle_res_events(Client *client, int fd) {
     }
 
     if (client->read_state == READY_TO_READ_RES) {
-        client->read_state = START_TO_READ_RES;
-        do {
-            if (client->stream_buf_list == NULL) {
-                stream_buf = new_stream_buf(HEADER_SIZE);
-                client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
-            }
-            n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
-            if (n_byte < 0) {
-                LOGD("Failed to read\n");
-                destroy_client_stream_buf_list(client);
-                return;
-            }
+        stream_buf = d_list_get_data(d_list_last(client->stream_buf_list));
 
-            result = increase_position(stream_buf, n_byte);
-            if (result == FALSE) {
-                LOGD("Failed to set the position\n");
-                destroy_client_stream_buf_list(client);
-                return;
-            }
-            position = get_position(stream_buf);
-        } while (position != HEADER_SIZE);
+        if (stream_buf == NULL || get_available_size(stream_buf) == 0) {
+            stream_buf = new_stream_buf(MAX_BUF_LEN);
+            client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
+        }
 
-        buf = get_buf(stream_buf);
-        if (buf[0] != SOP) {
-            LOGD("Failed to get binary\n");
+        n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
+        if (n_byte < 0) {
+            LOGD("Failed to read\n");
             destroy_client_stream_buf_list(client);
             return;
         }
-        result = copy_payload_len(buf, &payload_len);
+
+        result = increase_position(stream_buf, n_byte);
+        if (result == FALSE) {
+            LOGD("Failed to set the position\n");
+            destroy_client_stream_buf_list(client);
+            return;
+        }
+
+        read_len = get_read_size(client->stream_buf_list);
+        if (read_len < HEADER_SIZE) {
+            LOGD("Not enough\n");
+            return;
+        }
+
+        r_stream_buf = new_stream_buf(read_len);
+        if (!r_stream_buf) {
+            LOGD("Failed to make the Stream Buf\n");
+            return;
+        }
+
+        result = append_data_to_buf(client->stream_buf_list, r_stream_buf);
+        if (result == FALSE) {
+            LOGD("Failed to append data of stream buf list to buf\n");
+            destroy_stream_buf(r_stream_buf);
+            return;
+        }
+
+        result = copy_payload_len(r_stream_buf, &payload_len);
+        if (result == FALSE) {
+            LOGD("Failed to  copy payload_len\n");
+            return;
+        }
+
+        packet_len = HEADER_SIZE + payload_len + TAIL_SIZE;
+        client->packet_len = packet_len; 
+
+        if (read_len >= packet_len) {
+            client->read_state = FINISH_TO_READ_RES;
+            buf_size = packet_len;
+        } else {
+            client->read_state = START_TO_READ_RES;
+            buf_size = HEADER_SIZE;
+        }
+
+        buf = (char*) malloc(buf_size);
+        if (!buf) {
+            LOGD("Failed to make buf to check Header\n");
+            destroy_client_stream_buf_list(client);
+            destroy_stream_buf(r_stream_buf);
+            return;
+        }
+
+        result = append_n_data_to_buf(r_stream_buf, buf, buf_size);
+        if (result == FALSE) {
+            LOGD("Failed to append n_data to buf\n");
+            destroy_client_stream_buf_list(client);
+            destroy_stream_buf(r_stream_buf);
+            free(buf);
+            return;
+        }
+
+        if (buf[0] != SOP) {
+            LOGD("Failed to get binary\n");
+            destroy_client_stream_buf_list(client);
+            destroy_stream_buf(r_stream_buf);
+            free(buf);
+            return;
+        }
+
         if (result == FALSE) {
             LOGD("Failed to copy payload\n");
             destroy_client_stream_buf_list(client);
             return;
         }
-        LOGD("payload_len:%ld\n", payload_len);
-        client->packet_len = HEADER_SIZE + payload_len + TAIL_SIZE;
-    }
-
+    } 
 
     if (client->read_state == START_TO_READ_RES) {
-        stream_buf = new_stream_buf(MAX_BUF_LEN);
-        client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
+        LOGD("START_TO_READ_RES\n");
         packet_len = client->packet_len;
-        read_len = get_buffer_size(client->stream_buf_list);
+        if (buf) {
+            free(buf);
+        }
 
-        do {
-            position = get_position(stream_buf);
-            if (position >= MAX_BUF_LEN) {
-                stream_buf = new_stream_buf(MAX_BUF_LEN);
-                client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
-            }
+        if (r_stream_buf) {
+            destroy_stream_buf(r_stream_buf);
+        }
 
-            n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
-            if (n_byte < 0) {
-                LOGD("Failed to read\n");
-                destroy_client_stream_buf_list(client);
+        stream_buf = d_list_get_data(d_list_last(client->stream_buf_list));
+        if (stream_buf == NULL || get_available_size(stream_buf) == 0) {
+            stream_buf = new_stream_buf(MAX_BUF_LEN);
+            client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
+        }
+
+        n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
+
+        if (n_byte < 0) {
+            LOGD("Failed to read\n");
+            destroy_client_stream_buf_list(client);
+            return;
+        }
+
+        result = increase_position(stream_buf, n_byte);
+        if (result == FALSE) {
+            LOGD("Failed to set the position\n");
+            destroy_client_stream_buf_list(client);
+            return;
+        }
+
+        read_len = get_read_size(client->stream_buf_list);
+
+        if (read_len < (client->packet_len)) {
+            LOGD("Not enough\n");
+            return;
+        }
+        client->read_state = FINISH_TO_READ_RES;
+
+        r_stream_buf = new_stream_buf(read_len);
+        if (!r_stream_buf) {
+            LOGD("Failed to make the Stream Buf\n");
+            destroy_client_stream_buf_list(client);
+            return;
+        }
+
+        result = append_data_to_buf(client->stream_buf_list, r_stream_buf);
+        if (result == FALSE) {
+            LOGD("Failed to append data of stream buf list to buf\n");
+            destroy_client_stream_buf_list(client);
+            destroy_stream_buf(r_stream_buf);
+            return;
+        }
+
+        buf = (char*) malloc(packet_len);
+        if (!buf) {
+            LOGD("Failed to make buf to check Header\n");
+            destroy_client_stream_buf_list(client);
+            destroy_stream_buf(r_stream_buf);
+            return;
+        }
+        LOGD("packet_len:%d\n", packet_len);
+        result = append_n_data_to_buf(r_stream_buf, buf, packet_len);
+        if (result == FALSE) {
+            LOGD("Failed to append n_data to buf\n");
+            destroy_client_stream_buf_list(client);
+            destroy_stream_buf(r_stream_buf);
+            free(buf);
+            return;
+        }
+    }
+
+
+    if (client->read_state == FINISH_TO_READ_RES) {
+        LOGD("FINISH_TO_READ_REQ\n");
+        if (buf[packet_len -3] != EOP) {
+            LOGD("Packet is wrong\n");
+            destroy_client_stream_buf_list(client);
+            destroy_stream_buf(r_stream_buf);
+            free(buf);
+            return;
+        }
+
+        check_sum = create_check_sum(NULL, buf, packet_len);
+        LOGD("Create check_sum\n");
+        result = is_check_sum_true(check_sum, buf, packet_len);
+        LOGD("Check chekc sum\n");
+        if (result == FALSE) {
+            LOGD("check_sum is wrong\n");
+            free(buf);
+        }
+
+        destroy_client_stream_buf_list(client);
+        LOGD("before check_overread\n");
+        len = check_overread(r_stream_buf, packet_len);
+        LOGD("after check overread\n");
+        if (len > 0) {
+            LOGD("Packet is overread\n");
+
+            c_stream_buf = new_stream_buf(len);
+            if (!c_stream_buf) {
+                LOGD("Failed to make the Stream_Buf\n");
                 return;
             }
-            read_len += n_byte;
-            result = increase_position(stream_buf, n_byte);
-            if (result == FALSE) {
-                LOGD("Failed to set the position\n");
-                destroy_client_stream_buf_list(client);
-                return;
-            }
-        } while ((read_len - packet_len));
-    }
+            copy_overread_buf(c_stream_buf, r_stream_buf, packet_len, len);
+            client->stream_buf_list = d_list_append(client->stream_buf_list, c_stream_buf);
+        }
 
-    read_len = get_buffer_size(client->stream_buf_list);
-
-    if (!buf) {
-        LOGD("Failed to make buf\n");
-        return;
-    }
-
-    stream_buf = new_stream_buf(read_len);
-    if (!stream_buf) {
-        LOGD("Failed to make the Stream buf");
-        return;
-    }
-
-    result = append_data_to_buf(client->stream_buf_list, stream_buf);
-    destroy_client_stream_buf_list(client);
-    if (result == FALSE) {
-        LOGD("Failed to append input data to buf\n");
-        destroy_stream_buf(stream_buf);
-        return;
-    }
-
-    buf = get_buf(stream_buf);
-    if (!buf) {
-        LOGD("There is nothing to point the buf in the Stream Buf\n");
-        destroy_stream_buf(stream_buf);
-        return;
-    }
-
-    if (buf[read_len -3] != EOP) {
-        LOGD("Packet is wrong\n");
-        destroy_stream_buf(stream_buf);
-        return;
-    }
-
-    check_sum = create_check_sum(NULL, buf, read_len);
-    result = is_check_sum_true(check_sum, stream_buf);
-
-    if (result == FALSE) {
-        LOGD("check_sum is wrong\n");
-        destroy_stream_buf(stream_buf);
-        return;
+        destroy_stream_buf(r_stream_buf);
     }
 
     packet = new_packet(NULL, NULL, NULL);
@@ -276,6 +445,7 @@ static void handle_res_events(Client *client, int fd) {
     }
 
     result = convert_buf_to_packet(buf, packet);
+    free(buf);
     char *test, *test2;
     Message *mesg;
     mesg = new_mesg(0, 0, 0);
@@ -286,7 +456,6 @@ static void handle_res_events(Client *client, int fd) {
     LOGD("test2: %s\n", test2);
 
 
-    destroy_stream_buf(stream_buf);
     if (result == FALSE) {
         LOGD("Faield to convert buf to packet\n");
         return;
@@ -431,7 +600,7 @@ static Packet* create_req_packet(char *input_str, short op_code, int input_strle
             }
             break;
         default:
-            LOGD("Request number is %c Please recommand\n", op_code);
+            LOGD("Request number is 0x%02X Please recommand\n", op_code);
             return NULL;
     }
 
@@ -491,7 +660,7 @@ static short send_packet_to_server(Client *client, Packet *packet) {
     return TRUE;
 }
 
-static void handle_stdin_event(Client* client, int fd) {
+static void handle_stdin_event(Client *client, int fd) {
     char *buf, *input_str;
     int n_byte, input_size, position, input_strlen;
     DList *stream_buf_list;
@@ -502,70 +671,48 @@ static void handle_stdin_event(Client* client, int fd) {
 
     stream_buf_list = NULL;
 
-    if (client->read_stdin_state == READ_DATA) {
-        stream_buf = d_list_get_data(d_list_last(client->stdin_stream_buf_list));
-        if (stream_buf == NULL ||get_available_size(stream_buf) == 0) {
-            stream_buf = new_stream_buf(MAX_BUF_LEN);
-            client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf);
-        }
-
-        n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
-        LOGD("stream_buf = %p, n_byte = %d\n", stream_buf, n_byte);
-
-        if (n_byte < 0) { 
-            LOGD("Failed to read\n");
-            return;
-        }
-
-        result = increase_position(stream_buf, n_byte);
-        if (result == FALSE) {
-            LOGD("Failed to set the position\n");
-            return;
-        }
-
-        buf = get_buf(stream_buf);
-        if (!buf) {
-            LOGD("Failed to get the buf\n");
-            return;
-        }
-        position = get_position(stream_buf);
-        if (position == 0) {
-            LOGD("Position is zero\n");
-            return;
-        }
-
-        if (buf[position -1] == '\n') {
-            LOGD("Finished to read stdin data\n");
-            client->read_stdin_state = FINISH_TO_READ_DATA;
-            return;
-        }
+    stream_buf = d_list_get_data(d_list_last(client->stdin_stream_buf_list));
+    if (stream_buf == NULL ||get_available_size(stream_buf) == 0) {
+        stream_buf = new_stream_buf(MAX_BUF_LEN);
+        client->stdin_stream_buf_list = d_list_append(client->stdin_stream_buf_list, stream_buf);
     }
 
+    n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
+    LOGD("stream_buf = %p, n_byte = %d\n", stream_buf, n_byte);
 
-    do {
-        if (position >= MAX_BUF_LEN || stream_buf_list == NULL) {
-            stream_buf = new_stream_buf(MAX_BUF_LEN);
-            stream_buf_list = d_list_append(stream_buf_list, stream_buf);
-        }
+    if (n_byte < 0) {
+        LOGD("Failed to read\n");
+        destroy_stdin_stream_buf_list(client);
+        return;
+    }
 
-        n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
-        if (n_byte < 0) {
-            LOGD("Failed to read\n");
-            return;
-        }
+    result = increase_position(stream_buf, n_byte);
+    if (result == FALSE) {
+        LOGD("Failed to set the position\n");
+        destroy_stdin_stream_buf_list(client);
+        return;
+    }
 
-        result = increase_position(stream_buf, n_byte);
-        if (result == FALSE) {
-            LOGD("Failed to set the position\n");
-            d_list_free(stream_buf_list, destroy_stream_buf_list);
-            return;
-        }
+    buf = get_buf(stream_buf);
+    if (!buf) {
+        LOGD("Failed to get the buf\n");
+        destroy_stdin_stream_buf_list(client);
+        return;
+    }
+    position = get_position(stream_buf);
+    if (position == 0) {
+        LOGD("Position is zero\n");
+        destroy_stdin_stream_buf_list(client);
+        return;
+    }
 
-        position = get_position(stream_buf);
-        buf = get_buf(stream_buf);
-    } while (buf[position - 1] != '\n');
+    if (buf[position -1] != '\n') {
+        LOGD("Not read new line\n");
+        return;
+    }
 
-    input_size = get_buffer_size(stream_buf_list);
+    stream_buf_list = client->stdin_stream_buf_list;
+    input_size = get_read_size(stream_buf_list);
     stream_buf = new_stream_buf(input_size);
     LOGD("input_size:%d\n", input_size);
 
@@ -580,12 +727,9 @@ static void handle_stdin_event(Client* client, int fd) {
         LOGD("Failed to append input data to buf\n");
         return;
     }
+    destroy_stdin_stream_buf_list(client);
 
     input_str = get_buf(stream_buf);
-
-    d_list_free(stream_buf_list, destroy_stream_buf_list);
-    stream_buf_list = NULL;
-
     input_strlen = input_size;
     if (input_strlen >= REQ_STR_MIN_LEN && (strncasecmp(input_str, REQ_STR, strlen(REQ_STR))) == 0) {
         LOGD("input_str:%s", input_str);
@@ -673,7 +817,6 @@ Client* new_client(Looper *looper) {
     client->stream_buf_list = NULL;
     client->stdin_stream_buf_list = NULL;
     client->packet_len = 0;
-    client->read_stdin_state = READ_DATA;
 
     add_watcher(looper, STDIN_FILENO, handle_events, client, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
     add_watcher(looper, client_fd, handle_events, client, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);

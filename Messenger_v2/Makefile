@@ -63,4 +63,4 @@ $(DBLINKED_LIST_OBJECT):
 	$(CC) -c -Wall -fpic $(INC) $(DBLINKED_LIST_SOURCE)
 
 clean:
-	$(RM) $(SERVER_MAIN) $(CLIENT_MAIN) *.o *.so
+	$(RM) $(SERVER_MAIN) $(CLIENT_MAIN) $(TEST) *.o *.so
