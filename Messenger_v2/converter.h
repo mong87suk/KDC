@@ -6,6 +6,8 @@
 
 short convert_packet_to_buf(Packet *packet, char *buf);
 Packet* convert_buf_to_packet(char *buf);
-int convert_payload_to_mesg(char *payload, Message *mesg);
+Message* convert_payload_to_mesgs(char *payload, int *mesg_num);
+Message* convert_payload_to_mesg(char *payload, int *mesg_len);
 int convert_mesgs_to_payload(Message *mesgs, char *payload, int len);
+void print_mesg(Message *mesg);
 #endif

@@ -12,6 +12,7 @@ int set_str(Message *mesg, char *str);
 long int get_time(Message *mesg);
 int get_str_len(Message *mesg);
 char* get_str(Message *mesg);
+int get_message_size();
 
 Message *create_mesg_array(int lne);
 Message* next_mesg(Message* mesgs, int i);

@@ -8,7 +8,7 @@
 #include "utils.h"
 #include "message.h"
 
-static void print_mesg(Message *mesg) {
+void print_mesg(Message *mesg) {
     long int time;
     int str_len, i;
     char *str, *pos;
@@ -155,17 +155,20 @@ Packet* convert_buf_to_packet(char *buf) {
     long int payload_len;
     char *payload;
     short result;
+    int packet_size;
 
     if (!buf) {
         LOGD("Can't convert the buf to the packet\n");
         return NULL;
     }
 
-    packet = (Packet*) malloc(get_packet_size());
+    packet_size = get_packet_size();
+    packet = (Packet*) malloc(packet_size);
     if (!packet) {
         LOGD("Failed to make the Packet\n");
         return NULL;
     }
+    memset(packet, 0, packet_size);
 
     header = new_header(0, 0, 0);
     if (!header) {
@@ -207,6 +210,7 @@ Packet* convert_buf_to_packet(char *buf) {
     result = set_payload_len(packet, payload_len);
     buf += sizeof(payload_len);
 
+    LOGD("payload_len:%ld\n", payload_len);
     if (payload_len > 0) {
         payload = (char*) malloc(payload_len);
         if (!payload) {
@@ -308,15 +312,60 @@ short convert_packet_to_buf(Packet *packet, char *buf) {
     return TRUE;
 }
 
-int convert_payload_to_mesg(char *payload, Message *mesg) {
-    long int time;
-    int len;
-    char *str;
+Message* convert_payload_to_mesgs(char *payload, int *mesg_num) {
+    int n, i;
+    int mesgs_size;
+    int mesg_size;
+    int mesg_len;
 
-    if (!payload || !mesg) {
-        LOGD("Can't convert payload to Message\n");
-        return FALSE;
+    Message *mesgs;
+    Message *mesg, *tmp;
+
+    if (!payload) {
+        LOGD("There is nothing to point the Payload\n");
+        return NULL;
     }
+
+    memcpy(&n, payload, sizeof(n));
+    LOGD("Message number: %d\n", n);
+    payload += sizeof(n);
+
+    mesg_size = get_message_size();
+    mesgs_size = n * mesg_size;
+    mesgs = (Message*) malloc(mesgs_size);
+    tmp = mesgs;
+
+    for (i = 0; i < n; i++) {
+        mesgs = next_mesg(tmp, i);
+        mesg = convert_payload_to_mesg(payload, &mesg_len);
+        if (!mesg) {
+            continue;
+        }
+        memcpy(mesgs, mesg, mesg_size);
+        payload += mesg_len;
+    }
+
+    *mesg_num = n;
+    return tmp;
+}
+
+Message* convert_payload_to_mesg(char *payload, int *mesg_len) {
+    long int time;
+    int len, mesg_size;
+    char *str;
+    Message *mesg;
+
+    if (!payload) {
+        LOGD("Can't convert payload to Message\n");
+        return NULL;
+    }
+    mesg_size = get_message_size();
+    mesg = (Message*) malloc(get_message_size());
+    if (!mesg) {
+        LOGD("Failed to make message \n");
+        return NULL;
+    }
+    memset(mesg, 0, mesg_size);
 
     memcpy(&time, payload, sizeof(time));
     payload += sizeof(time);
@@ -329,13 +378,13 @@ int convert_payload_to_mesg(char *payload, Message *mesg) {
     str = (char*) malloc(len);
     if (!str) {
         LOGD("Failed to make the str\n");
-        return FALSE;
+        return NULL;
     }
     memcpy(str, payload, len);
     set_str(mesg, str);
 
-    print_mesg(mesg);
-    return TRUE;
+    *mesg_len = sizeof(time) + sizeof(len) + len;
+    return mesg;
 }
 
 int convert_mesgs_to_payload(Message *mesgs, char *payload, int len) {

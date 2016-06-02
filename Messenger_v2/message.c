@@ -98,6 +98,10 @@ char* get_str(Message *mesg) {
     return mesg->str;
 }
 
+int get_message_size() {
+    return sizeof(Message);
+}
+
 Message* create_mesg_array(int len) {
     Message *mesgs;
     if (len == 0) {
@@ -114,11 +118,11 @@ Message* create_mesg_array(int len) {
     return mesgs;
 }
 
-Message* next_mesg(Message* mesgs, int i) {
+Message* next_mesg(Message *mesgs, int i) {
     if (!mesgs) {
         LOGD("There is nothing to point the message\n");
         return NULL;
     }
 
-    return (mesgs + i);
+    return (mesgs + i );
 }

@@ -38,7 +38,7 @@ Packet* new_packet(char *buf) {
 
     packet = convert_buf_to_packet(buf);
     if (!packet) {
-        LOGD("Failed to convert buf to the Packet");
+        LOGD("Failed to convert buf to the Packet\n");
         return NULL;
     }
     return packet;
@@ -46,10 +46,11 @@ Packet* new_packet(char *buf) {
 
 void destroy_packet(Packet *packet) {
     if (!packet) {
-        LOGD("There is nothing to remove packet");
+        LOGD("There is nothing to remove packet\n");
         return;
     }
 
+    LOGD("handle_req_packet\n");
     destroy_header(packet->header);
     destroy_body(packet->body);
     destroy_tail(packet->tail);
@@ -62,7 +63,7 @@ Header* new_header(char sop, short op_code, long int payload_len) {
 
     header = (Header*) malloc(sizeof(Header));
     if (!header) {
-        LOGD("Failed to make Header");
+        LOGD("Failed to make Header\n");
         return NULL;
     }
 
@@ -76,7 +77,7 @@ Header* new_header(char sop, short op_code, long int payload_len) {
 
 void destroy_header(Header *header) {
     if (!header) {
-        LOGD("There is nothing to remove header");
+        LOGD("There is nothing to remove header\n");
         return;
     }
 
@@ -98,7 +99,7 @@ Body* new_body(char *payload) {
 
 void destroy_body(Body *body) {
     if (!body) {
-        LOGD("There is nothing to remove Body");
+        LOGD("There is nothing to remove Body\n");
         return;
     }
 

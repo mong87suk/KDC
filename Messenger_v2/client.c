@@ -216,12 +216,14 @@ static int check_overread(Stream_Buf *r_stream_buf, int packet_len) {
 }
 
 static void handle_res_events(Client *client, int fd) {
-    char *buf;
+    char *buf, *payload;
     Stream_Buf *stream_buf, *r_stream_buf, *c_stream_buf;
-    int result, read_len, n_byte, packet_len, len, buf_size;
+    int result, read_len, n_byte, packet_len, len, buf_size, n_mesg, mesg_len;
+    int i;
     long int payload_len;
     Packet *packet;
-    short check_sum;
+    short check_sum, op_code;
+    Message *mesg, *tmp;
 
     payload_len = 0;
     packet_len = 0;
@@ -441,23 +443,33 @@ static void handle_res_events(Client *client, int fd) {
     packet = new_packet(buf);
     if (!packet) {
         LOGD("Failed to make the Packet\n");
+        return;
     }
+    op_code = get_op_code(packet, NULL);
+    if (op_code == -1) {
+        LOGD("Failed to get the OPCODE\n");
+        return;
+    }
+
     free(buf);
 
-
-    char *test, *test2;
-    Message *mesg;
-    mesg = new_mesg(0, 0, 0);
-    test = get_payload(packet, NULL);
-    convert_payload_to_mesg(test, mesg);
-
-    test2 = get_str(mesg);
-    LOGD("test2: %s\n", test2);
-
-
-    if (result == FALSE) {
-        LOGD("Faield to convert buf to packet\n");
-        return;
+    payload = get_payload(packet, NULL);
+    switch (op_code) {
+    case RES_ALL_MSG: case RCV_FIRST_OR_LAST_MSG:
+        LOGD("RES_ALL_MSG\n");
+        mesg =  convert_payload_to_mesgs(payload, &n_mesg);
+        LOGD("FINISH CONVERT\n");
+        tmp = mesg;
+        for (i = 0; i < n_mesg; i++) {
+            mesg = next_mesg(tmp, i);
+            print_mesg(mesg);
+        }
+        break;
+    case RCV_MSG:
+        LOGD("RCV_MSG\n");
+        mesg = convert_payload_to_mesg(payload, &mesg_len);
+        print_mesg(mesg);
+        break;
     }
 
     LOGD("Finish handle_res_events()\n");
@@ -511,7 +523,7 @@ static Packet* create_req_packet(char *input_str, short op_code, int input_strle
     Packet *req_packet;
     char *payload, *packet_buf, *tmp;
     long int payload_len;
-    short check_sum, result;
+    short check_sum;
     char sop, eop;
     int packet_len;
 
@@ -655,14 +667,42 @@ static short send_packet_to_server(Client *client, Packet *packet) {
     return TRUE;
 }
 
+static void handle_req_input_str(Client *client, char *input_str, int input_strlen) {
+    Packet *req_packet;
+    int result;
+    short op_code;
+
+    if (input_strlen >= REQ_STR_MIN_LEN && (strncasecmp(input_str, REQ_STR, strlen(REQ_STR))) == 0) {
+        LOGD("input_str:%s", input_str);
+        op_code = input_str[8] - '0';
+    } else {
+        LOGD("Request was wrong. Please recommand\n");
+        return;
+    }
+ 
+    if (!input_str) {
+        LOGD("Can't handle req input str\n");
+        return;
+    }
+
+    req_packet = create_req_packet(input_str, op_code, input_strlen);
+    if (!req_packet) {
+        LOGD("Failed to create the req packet\n");
+        return;
+    }
+
+    result = send_packet_to_server(client, req_packet);
+    if (result == FALSE) {
+        LOGD("Failed to send the packet to server");
+    }
+}
+
 static void handle_stdin_event(Client *client, int fd) {
     char *buf, *input_str;
     int n_byte, input_size, position, input_strlen;
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
-
-    Packet *packet;
-    short result, op_code;
+    short result;
 
     stream_buf_list = NULL;
 
@@ -673,7 +713,6 @@ static void handle_stdin_event(Client *client, int fd) {
     }
 
     n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
-    LOGD("stream_buf = %p, n_byte = %d\n", stream_buf, n_byte);
 
     if (n_byte < 0) {
         LOGD("Failed to read\n");
@@ -726,24 +765,9 @@ static void handle_stdin_event(Client *client, int fd) {
 
     input_str = get_buf(stream_buf);
     input_strlen = input_size;
-    if (input_strlen >= REQ_STR_MIN_LEN && (strncasecmp(input_str, REQ_STR, strlen(REQ_STR))) == 0) {
-        LOGD("input_str:%s", input_str);
-        op_code = input_str[8] - '0';
-    } else {
-        LOGD("Request was wrong. Please recommand\n");
-        return;
-    }
 
-    packet = create_req_packet(input_str, op_code, input_strlen);
-    if (!packet) {
-        LOGD("Failed to make the packet\n");
-        return;
-    }
-
-    result = send_packet_to_server(client, packet);
-    if (result == FALSE) {
-        LOGD("Failed to send the packet to server");
-    }
+    handle_req_input_str(client, input_str, input_strlen);
+    destroy_stream_buf(stream_buf);
 
     return;
 }

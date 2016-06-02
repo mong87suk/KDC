@@ -323,9 +323,9 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
     char *payload, *packet_buf, *tmp, *req_payload;
     Packet *res_packet;
     int result; 
-    int payload_len;
+    long int payload_len;
     int mesgs_size, list_len; 
-    int packet_len;
+    int packet_len, mesg_len;
     Message *mesg, *mesgs;
     char sop, eop;
 
@@ -343,6 +343,7 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
     switch(op_code) {
     case REQ_ALL_MSG:
         mesgs_size = get_all_mesgs_size(server->mesg_list);
+        LOGD("mesgs_size:%d\n", mesgs_size);
         list_len = d_list_length(server->mesg_list);
         payload_len =  sizeof(int) + mesgs_size + (list_len * (sizeof(long int) + sizeof(int)));
         
@@ -375,6 +376,7 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
 
     case SND_MSG:
         payload_len = get_payload_len(req_packet, NULL);
+        LOGD("payload_len:%ld\n", payload_len);
         if (payload_len == -1) {
             LOGD("Failed to get the payload_len\n");
             return NULL;
@@ -394,9 +396,9 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
 
         memcpy(payload, req_payload, payload_len);
 
-        mesg = new_mesg(0, 0, 0);
+        mesg = convert_payload_to_mesg(payload, &mesg_len);
         if (!mesg) {
-            LOGD("Failed to make the Message\n");
+            LOGD("Failed to convert payload to the Message\n");
             return NULL;
         }
 
@@ -407,18 +409,12 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
         }
 
         op_code = RCV_MSG;
-
-        result = convert_payload_to_mesg(payload, mesg);
-        if (result == FALSE) {
-            LOGD("Failed to convert payload to the Message\n");
-            return NULL;
-        }
         break;
 
     case REQ_FIRST_OR_LAST_MSG:
         LOGD("REQ_FIRST_OR_LAST_MSG\n");
         payload_len = get_payload_len(req_packet, NULL);
-        LOGD("payload_len:%d\n", payload_len);
+        LOGD("payload_len:%ld\n", payload_len);
         payload = get_payload(req_packet, NULL);
         if (!payload) {
             LOGD("Failed to get the payload\n");
@@ -670,6 +666,7 @@ static void handle_req_packet(Server *server, Client *client, Packet *req_packet
     }
 
     mesg_size = get_all_mesgs_size(server->mesg_list);
+    LOGD("mesg_size:%d\n", mesg_size);
 
     switch (op_code) {
     case REQ_ALL_MSG:
@@ -682,25 +679,25 @@ static void handle_req_packet(Server *server, Client *client, Packet *req_packet
             LOGD("Failed to create the res packet\n");
             return;
         }
-        send_packet_to_all_clients(server, client, res_packet);
+        send_packet_to_client(res_packet, fd);
         break;
-    
+
     case SND_MSG:
         res_packet = create_res_packet(server, req_packet);
         if (!res_packet) {
             LOGD("Failed to create the res packet\n");
             return;
         }
-        send_packet_to_client(res_packet, fd);
+        send_packet_to_all_clients(server, client, res_packet);
         break;
-    
+
     case REQ_FIRST_OR_LAST_MSG:
         if (!mesg_size) {
             LOGD("There is no message\n");
             return;
         }
         break;
-    
+
     default:
         LOGD("OPCODE is wrong\n");
         return;
@@ -794,7 +791,7 @@ static void handle_req_event(Server *server, int fd) {
         }
 
         packet_len = HEADER_SIZE + payload_len + TAIL_SIZE;
-        client->packet_len = packet_len; 
+        client->packet_len = packet_len;
 
         if (read_len >= packet_len) {
             client->read_state = FINISH_TO_READ_REQ;
@@ -838,6 +835,7 @@ static void handle_req_event(Server *server, int fd) {
 
     if (client->read_state == START_TO_READ_REQ) {
         LOGD("START_TO_READ_REQ\n");
+        packet_len = client->packet_len;
         stream_buf = d_list_get_data(d_list_last(client->stream_buf_list));
         if (stream_buf == NULL || get_available_size(stream_buf) == 0) {
             stream_buf = new_stream_buf(MAX_BUF_LEN);
@@ -902,6 +900,8 @@ static void handle_req_event(Server *server, int fd) {
 
     if (client->read_state == FINISH_TO_READ_REQ) {
         LOGD("FINISH_TO_READ_REQ\n");
+        packet_len = client->packet_len;
+        LOGD("packet_len:%d\n", packet_len);
         if (buf[packet_len -3] != EOP) {
             LOGD("Packet is wrong\n");
             destroy_client_stream_buf_list(client);
@@ -910,21 +910,15 @@ static void handle_req_event(Server *server, int fd) {
             return;
         }
 
-        LOGD("check EOP\n");
-
         check_sum = create_check_sum(NULL, buf, packet_len);
-        LOGD("Create check_sum\n");
         result = is_check_sum_true(check_sum, buf, packet_len);
-        LOGD("Check chekc sum\n");
         if (result == FALSE) {
             LOGD("check_sum is wrong\n");
             free(buf);
         }
 
         destroy_client_stream_buf_list(client);
-        LOGD("before check_overread\n");
         len = check_overread(r_stream_buf, packet_len);
-        LOGD("after check overread\n");
         if (len > 0) {
             LOGD("Packet is overread\n");
 
@@ -947,9 +941,8 @@ static void handle_req_event(Server *server, int fd) {
     }
 
     free(buf);
-   
-    handle_req_packet(server, client, packet);
 
+    handle_req_packet(server, client, packet);
     destroy_packet(packet);
     LOGD("Finished to handle_req_event()\n");
 }
