@@ -220,6 +220,10 @@ short get_check_sum(Packet *packet, Tail *tail) {
     return tail->check_sum;
 }
 
+int get_packet_size() {
+    return sizeof(Packet);
+}
+
 short set_payload_len(Packet *packet, long int payload_len) {
     Header *header;
 

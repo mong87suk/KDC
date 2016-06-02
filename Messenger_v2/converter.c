@@ -146,7 +146,7 @@ static void print_packet(Packet *packet) {
 }
 
 Packet* convert_buf_to_packet(char *buf) {
-    Pakcet *packet;
+    Packet *packet;
     Header *header;
     Body *body;
     Tail *tail;
@@ -161,7 +161,7 @@ Packet* convert_buf_to_packet(char *buf) {
         return NULL;
     }
 
-    packet = (Packet*) malloc(sizeof(Pakcet));
+    packet = (Packet*) malloc(get_packet_size());
     if (!packet) {
         LOGD("Failed to make the Packet\n");
         return NULL;

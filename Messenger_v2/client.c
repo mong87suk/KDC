@@ -438,14 +438,13 @@ static void handle_res_events(Client *client, int fd) {
         destroy_stream_buf(r_stream_buf);
     }
 
-    packet = new_packet(NULL, NULL, NULL);
+    packet = new_packet(buf);
     if (!packet) {
         LOGD("Failed to make the Packet\n");
-        return;
     }
-
-    result = convert_buf_to_packet(buf, packet);
     free(buf);
+
+
     char *test, *test2;
     Message *mesg;
     mesg = new_mesg(0, 0, 0);
@@ -468,12 +467,11 @@ static void handle_disconnect(Client *client, int fd) {
 
 }
 
-static Body* create_body(char *input_str, int input_strlen, long int *payload_len) {
+static char* create_payload(char *input_str, int input_strlen, long int *payload_len) {
     int str_len;
     int body_len;
     char *payload, *tmp_dest;
     time_t current_time;
-    Body *body;
 
     current_time = time(NULL);
 
@@ -506,32 +504,22 @@ static Body* create_body(char *input_str, int input_strlen, long int *payload_le
     tmp_dest += sizeof(str_len);
 
     memcpy(tmp_dest, input_str + REQ_STR_MIN_LEN, str_len);
-
-    body = new_body(payload);
-    if (!body) {
-        LOGD("Failed to make the Packet\n");
-        return NULL;
-    }
-    return body;
+    return payload;
 }
 
 static Packet* create_req_packet(char *input_str, short op_code, int input_strlen) {
-    Packet *packet;
-    Header *header;
-    Body *body;
-    Tail *tail;
-    int long payload_len;
+    Packet *req_packet;
+    char *payload, *packet_buf, *tmp;
+    long int payload_len;
     short check_sum, result;
+    char sop, eop;
+    int packet_len;
 
-    header = new_header(SOP, 0, 0);
-    tail = new_tail(EOP, 0);
-    packet = new_packet(header, NULL, tail);
+    sop = SOP;
+    eop = EOP;
+
     payload_len = 0;
-
-    if (!header || !tail || !packet) {
-        LOGD("Can't make the Packet\n");
-        return NULL;
-    }
+    payload = NULL;
 
     if (!input_str) {
         LOGD("There is nothing to point input_str\n");
@@ -545,48 +533,27 @@ static Packet* create_req_packet(char *input_str, short op_code, int input_strle
                 return NULL;
             }
             break;
+
         case SND_MSG:
             if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
-                body = create_body(input_str, input_strlen, &payload_len);
-                if (!body) {
+                payload = create_payload(input_str, input_strlen, &payload_len);
+                if (!payload) {
                     LOGD("Failed to make the Body\n");
                     return NULL;
                 }
-                result = set_body(packet, body);
-                if (result == FALSE) {
-                    LOGD("Failed to set the Body\n");
-                    return NULL;
-                }
-
-                result = set_payload_len(packet, payload_len);
-                if (result == FALSE) {
-                    LOGD("Failed to set the payload_len\n");
-                    return NULL;
-                }
-
             } else {
                 LOGD("Request was wrong. Please recommand\n");
                 return NULL;
             }
             break;
+
         case REQ_FIRST_OR_LAST_MSG:
             if (input_strlen == REQ_FIRST_OR_LAST_MESG_PACKET_SIZE && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
+
                 if (*(input_str + REQ_STR_MIN_LEN) == '0' || *(input_str + REQ_STR_MIN_LEN) == '1') {
-                    body = create_body(input_str, input_strlen, &payload_len);
-                    if (!body) {
+                    payload = create_payload(input_str, input_strlen, &payload_len);
+                    if (!payload) {
                         LOGD("Failed to make the Body\n");
-                        return NULL;
-                    }
-
-                    result = set_body(packet,body);
-                    if (result == FALSE) {
-                        LOGD("Failed to set the Body\n");
-                        return NULL;
-                    }
-
-                    result = set_payload_len(packet, payload_len);
-                    if (result == FALSE) {
-                        LOGD("Failed to set the payload_len\n");
                         return NULL;
                     }
 
@@ -599,30 +566,58 @@ static Packet* create_req_packet(char *input_str, short op_code, int input_strle
                 return NULL;
             }
             break;
+
         default:
             LOGD("Request number is 0x%02X Please recommand\n", op_code);
             return NULL;
     }
 
-    result = set_op_code(packet, op_code);
-    if (result == FALSE) {
-        LOGD("Failed to set the op_code\n");
+    packet_len = HEADER_SIZE + payload_len + TAIL_SIZE;
+
+    packet_buf = (char*) malloc(packet_len);
+    if (!packet_buf) {
+        LOGD("Failed to make the buf for packet\n");
+        free(payload);
         return NULL;
     }
 
-    check_sum = create_check_sum(packet, NULL, 0);
+    tmp = packet_buf;
+
+    memcpy(tmp, &sop, sizeof(sop));
+    tmp += sizeof(sop);
+
+    memcpy(tmp, &op_code, sizeof(op_code));
+    tmp += sizeof(op_code);
+
+    memcpy(tmp, &payload_len, sizeof(payload_len));
+    tmp += sizeof(payload_len);
+
+    if (payload_len > 0) {
+        memcpy(tmp, payload, payload_len);
+        tmp += payload_len;
+    }
+
+    memcpy(tmp, &eop, sizeof(eop));
+    tmp += sizeof(eop);
+
+    check_sum = create_check_sum(NULL, packet_buf, packet_len);
     if (check_sum == -1) {
         LOGD("Failed to do check_sum\n");
+        free(packet_buf);
+        free(payload);
         return NULL;
     }
+    memcpy(tmp, &check_sum, sizeof(check_sum));
 
-    result = set_check_sum(packet, check_sum);
-    if (result == FALSE) {
-        LOGD("Failed to set the check_sum\n");
+    req_packet = new_packet(packet_buf);
+    if (!req_packet) {
+        LOGD("Failed to make the Packet\n");
         return NULL;
+        free(packet_buf);
+        free(payload);
     }
 
-    return packet;
+    return req_packet;
 }
 
 static short send_packet_to_server(Client *client, Packet *packet) {

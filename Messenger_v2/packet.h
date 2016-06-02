@@ -21,7 +21,7 @@ typedef struct _Body Body;
 typedef struct _Tail Tail;
 typedef struct _Packet Packet;
 
-Packet* new_packet(Header *header, Body *body, Tail *tail);
+Packet* new_packet(char *buf);
 void destroy_packet(Packet *packet);
 Header* new_header(char sop, short op_code, long int payload_len);
 void destroy_header(Header *header);
@@ -40,6 +40,7 @@ short get_check_sum(Packet *packet, Tail *tail);
 short get_op_code(Packet *packet, Header *header);
 long int get_payload_len(Packet *packet, Header *header);
 char* get_payload(Packet *packet, Body *body);
+int get_packet_size();
 
 short set_sop(Packet *packet, char sop);
 short set_eop(Packet *packet, char eop);

@@ -320,15 +320,14 @@ static int copy_mesgs(DList *mesg_list, Message *mesgs, int len) {
 
 static Packet* create_res_packet(Server *server, Packet *req_packet) {
     short op_code, check_sum;
-    char *payload, *buf;
+    char *payload, *packet_buf, *tmp, *req_payload;
     Packet *res_packet;
-    Header *header;
-    Body *body;
-    Tail *tail;
     int result; 
     int payload_len;
     int mesgs_size, list_len; 
+    int packet_len;
     Message *mesg, *mesgs;
+    char sop, eop;
 
     LOGD("Start create_res_packet()\n");
 
@@ -337,43 +336,15 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
         return NULL;
     }
 
-    header = new_header(SOP, 0, 0);
-    if (!header) {
-        LOGD("Failed to make the Header\n");
-        return NULL;
-    }
-
-    body = new_body(NULL);
-    if (!body) {
-        LOGD("Failed to make the Body\n");
-        return NULL;
-    }
-
-    tail = new_tail(EOP, 0);
-    if (!tail) {
-        LOGD("Failed to make the Tail\n");
-        return NULL;
-    }
-
-    res_packet = new_packet(header, body, tail);
-
-    if (!res_packet) {
-        LOGD("There is nothing to point the Packet\n");
-        return NULL;
-    }
-
     op_code = get_op_code(req_packet, NULL);
+    sop = SOP;
+    eop = EOP;
 
     switch(op_code) {
     case REQ_ALL_MSG:
         mesgs_size = get_all_mesgs_size(server->mesg_list);
         list_len = d_list_length(server->mesg_list);
         payload_len =  sizeof(int) + mesgs_size + (list_len * (sizeof(long int) + sizeof(int)));
-        result = set_payload_len(res_packet, payload_len);
-        if (result == FALSE) {
-            LOGD("Failed to set the payload_len\n");
-            return NULL;
-        }
         
         payload = (char*) malloc(payload_len);
         if (!payload) {
@@ -398,67 +369,40 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
             return NULL;
         }
 
-        result = set_payload(res_packet, payload);
-        if (result == FALSE) {
-            LOGD("Failed to set the payload\n");
-            destroy_packet(res_packet);
-            return NULL;
-        }
+        op_code = RES_ALL_MSG;
+
         break;
+
     case SND_MSG:
         payload_len = get_payload_len(req_packet, NULL);
         if (payload_len == -1) {
             LOGD("Failed to get the payload_len\n");
-            destroy_packet(res_packet);
             return NULL;
         }
 
-        result = set_payload_len(res_packet, payload_len);
-        if (result == FALSE) {
-            LOGD("Failed to set payload_len\n");
-            destroy_packet(res_packet);
-            return NULL;
-        }
-
-        payload = get_payload(req_packet, NULL);
-        if (!payload) {
+        req_payload = get_payload(req_packet, NULL);
+        if (!req_payload) {
             LOGD("Failed to get the payload\n");
-            destroy_packet(res_packet);
             return NULL;
         }
 
-        buf = (char*) malloc(payload_len);
-        if (!buf) {
-            LOGD("Failed to make the buf for payload\n");
-            destroy_packet(res_packet);
+        payload = (char*) malloc(payload_len);
+        if (!payload) {
+            LOGD("Failed to make buf for payload\n");
             return NULL;
         }
 
-        result = copy_payload(payload, payload_len, buf);
-        if (result == FALSE) {
-            LOGD("Failed to copy the payload\n");
-            destroy_packet(res_packet);
-            return NULL;
-        }
-
-        result = set_payload(res_packet, buf);
-        if (result == FALSE) {
-            LOGD("Failed to set the payload\n");
-            destroy_packet(res_packet);
-            return NULL;
-        }
+        memcpy(payload, req_payload, payload_len);
 
         mesg = new_mesg(0, 0, 0);
         if (!mesg) {
             LOGD("Failed to make the Message\n");
-            destroy_packet(res_packet);
             return NULL;
         }
 
         server->mesg_list = d_list_append(server->mesg_list, mesg);
         if (!(server->mesg_list)) {
             LOGD("Failed to add the Message\n");
-            destroy_packet(res_packet);
             return NULL;
         }
 
@@ -467,10 +411,10 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
         result = convert_payload_to_mesg(payload, mesg);
         if (result == FALSE) {
             LOGD("Failed to convert payload to the Message\n");
-            destroy_packet(req_packet);
             return NULL;
         }
         break;
+
     case REQ_FIRST_OR_LAST_MSG:
         LOGD("REQ_FIRST_OR_LAST_MSG\n");
         payload_len = get_payload_len(req_packet, NULL);
@@ -481,30 +425,52 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
             return NULL;
         }
         break;
+
     default:
+        LOGD("The OPCODE is wrong\n");
         return NULL;
     }
 
-    result = set_op_code(res_packet, op_code);
-    if (result == FALSE) {
-        LOGD("Failed to set the op_code\n");
-        destroy_packet(res_packet);
+    packet_len = HEADER_SIZE + payload_len + TAIL_SIZE;
+    packet_buf = (char*) malloc(packet_len);
+    if (!packet_buf) {
+        LOGD("Failed to maked the packet_buf\n");
         return NULL;
     }
 
-    check_sum = create_check_sum(res_packet, NULL, 0);
+    tmp = packet_buf;
+
+    memcpy(tmp, &sop, sizeof(sop));
+    tmp += sizeof(sop);
+
+    memcpy(tmp, &op_code, sizeof(op_code));
+    tmp += sizeof(op_code);
+
+    memcpy(tmp, &payload_len, sizeof(payload_len));
+    tmp += sizeof(payload_len);
+
+    memcpy(tmp, payload, payload_len);
+    tmp += payload_len;
+
+    memcpy(tmp, &eop, sizeof(eop));
+    tmp += sizeof(eop);
+
+    check_sum = create_check_sum(NULL, packet_buf, packet_len);
     if (check_sum == -1) {
         LOGD("Failed to do check_sum\n");
-        destroy_packet(res_packet);
+        free(packet_buf);
+        return NULL;
+    }
+    memcpy(tmp, &check_sum, sizeof(check_sum));
+
+    res_packet = new_packet(packet_buf);
+    if (!res_packet) {
+        LOGD("Failed to make the Packet\n");
         return NULL;
     }
 
-    result = set_check_sum(res_packet, check_sum);
-    if (result == FALSE) {
-        LOGD("Failed to set the check_sum\n");
-        destroy_packet(res_packet);
-        return NULL;
-    }
+    free(packet_buf);
+    free(payload);
 
     LOGD("Finished create_res_packet()\n"); 
     return res_packet;
@@ -687,17 +653,17 @@ static int check_overread(Stream_Buf *r_stream_buf, int packet_len) {
     return (pos - packet_len);
 }
 
-static void handle_req_packet(Server *server, Packet *req_packet) {
+static void handle_req_packet(Server *server, Client *client, Packet *req_packet) {
     short op_code;
-    int mesg_size;
+    int mesg_size, fd;
     Packet *res_packet;
 
-    if (!req_packet || !server) {
+    if (!req_packet || !server || !client) {
         LOGD("There is nothing to point the Packet\n");
         return;
     }
-
-    op_code = get_op_code(!req_packet);
+    fd = client->fd;
+    op_code = get_op_code(req_packet, NULL);
     if (op_code == -1) {
         LOGD("Failed to get the op_code\n");
         return;
@@ -706,34 +672,51 @@ static void handle_req_packet(Server *server, Packet *req_packet) {
     mesg_size = get_all_mesgs_size(server->mesg_list);
 
     switch (op_code) {
-    case REQ_ALL_MES:
+    case REQ_ALL_MSG:
         if (!mesg_size) {
             LOGD("There is no message\n");
             return;
         }
         res_packet = create_res_packet(server, req_packet);
+        if (!res_packet) {
+            LOGD("Failed to create the res packet\n");
+            return;
+        }
+        send_packet_to_all_clients(server, client, res_packet);
         break;
+    
     case SND_MSG:
-        res_create_res_packet(server, req_packet);
+        res_packet = create_res_packet(server, req_packet);
+        if (!res_packet) {
+            LOGD("Failed to create the res packet\n");
+            return;
+        }
+        send_packet_to_client(res_packet, fd);
         break;
+    
     case REQ_FIRST_OR_LAST_MSG:
         if (!mesg_size) {
             LOGD("There is no message\n");
             return;
         }
-        res_create_res_packet(server, req_packet);
         break;
+    
+    default:
+        LOGD("OPCODE is wrong\n");
+        return;
     }
+
+    destroy_packet(res_packet);
 }
 
 static void handle_req_event(Server *server, int fd) {
     char *buf;
     Client *client;
-    short check_sum, op_code;
+    short check_sum;
     Stream_Buf *stream_buf, *r_stream_buf, *c_stream_buf;
     int n_byte, read_len, packet_len, result, len, buf_size;
     long int payload_len;
-    Packet *packet, *res_packet;
+    Packet *packet;
 
     payload_len = 0;
     packet_len = 0;
@@ -964,31 +947,10 @@ static void handle_req_event(Server *server, int fd) {
     }
 
     free(buf);
-    res_packet = handle_req_packet(server, packet);
-
-    res_packet = create_res_packet(server, packet);
-    if (!res_packet) {
-        LOGD("Failed to create the res packet\n");
-        destroy_packet(packet);
-        return;
-    }
-
-    op_code = get_op_code(res_packet, NULL);
-
-    if (op_code == RCV_MSG) {
-        result = send_packet_to_all_clients(server, client, res_packet);
-    } else {
-        result = send_packet_to_client(res_packet, fd);
-    }
-
-    if (result == FALSE) {
-        LOGD("Failed to send packet to client\n");
-        destroy_packet(res_packet);
-        return;
-    }
+   
+    handle_req_packet(server, client, packet);
 
     destroy_packet(packet);
-    destroy_packet(res_packet);
     LOGD("Finished to handle_req_event()\n");
 }
 
