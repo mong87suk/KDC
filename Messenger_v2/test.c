@@ -19,20 +19,38 @@ struct _Test
 typedef struct _Test Test;
 
 void handle_stdin_event(Test *test, int fd) {
-    int max = 100;
-    char a[max];
-    char t[10];
-    int i;
+    char r[10];
+    char *t;
+    char test1[] = {0xAA, 0x03, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x97, 0x5F, 0x55, 0x57, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x74, 0x65, 0x73, 0x74,
+                    0xFF, 0x22, 0x05, 0};
 
-    LOGD("handle_stdin_event\n");
+    char test2[] = {0xAA, 0x03, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x0E, 0x60, 0x55, 0x57, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x61, 0x62, 0x63, 0x64,
+                    0xFF, 0x64, 0x04,
+                    0xAA, 0x03, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x0E, 0x60, 0x55, 0x57, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x61, 0x62, 0x63, 0x64,
+                    0xFF, 0x64, 0x04, 0};
 
-    for(i = 0; i < max; i++) {
-        a[i] = 'a' + i;
+    int size;
+    read(fd, r, sizeof(r));
+   
+    switch(r[0]) {
+        case '1':
+            t = test1;
+            size = sizeof(test1) - 1;
+            break;
+        case '2':
+            t = test2;
+            size = sizeof(test2) - 1;
+            break;
+        case '3':
+            break;
+        case '4':
+            break;
     }
 
-    read(fd, t, sizeof(t));
-
-    write(test->fd, a, sizeof(a));
+    write(test->fd, t, size);
 }
 
 static void handle_events(int fd, void *user_data, int looper_event) {
@@ -63,6 +81,7 @@ int main() {
     Test *test;
 
     looper = new_looper();
+
     test = (Test*) malloc(sizeof(Test));
     if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         LOGD("socket error\n");
@@ -82,4 +101,3 @@ int main() {
     add_watcher(looper, STDIN_FILENO, handle_events, test, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
     run(looper);
 }
-

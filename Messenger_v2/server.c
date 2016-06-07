@@ -499,11 +499,10 @@ static int is_check_sum_true(short check_sum, char *buf, int packet_len) {
         return FALSE;
     }
 
-    for (i = packet_len -2 ; i < packet_len; i++) {
-        comp_check_sum += buf[i];
-    }
+    comp_check_sum = 0;
+    memcpy(&comp_check_sum, buf + packet_len - 2, sizeof(comp_check_sum));
 
-    if (comp_check_sum == check_sum) {
+    if (comp_check_sum != check_sum) {
         LOGD("Not enabled check sum\n");
         return FALSE;
     }
@@ -741,10 +740,6 @@ static void handle_req_event(Server *server, int fd) {
             free(buf);
         }
 
-        if (r_stream_buf) {
-            destroy_stream_buf(r_stream_buf);
-        }
-
         stream_buf = d_list_get_data(d_list_last(client->stream_buf_list));
         if (stream_buf == NULL || get_available_size(stream_buf) == 0) {
             stream_buf = new_stream_buf(MAX_BUF_LEN);
@@ -836,12 +831,17 @@ static void handle_req_event(Server *server, int fd) {
     if (client->read_state == START_TO_READ_REQ) {
         LOGD("START_TO_READ_REQ\n");
         packet_len = client->packet_len;
+
+        if (r_stream_buf) {
+            destroy_stream_buf(r_stream_buf);
+        }
+
         stream_buf = d_list_get_data(d_list_last(client->stream_buf_list));
         if (stream_buf == NULL || get_available_size(stream_buf) == 0) {
             stream_buf = new_stream_buf(MAX_BUF_LEN);
             client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf); 
         }
-
+        LOGD("read\n");
         n_byte = read(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
         if (n_byte < 0) {
             LOGD("Failed to read\n");
@@ -857,7 +857,7 @@ static void handle_req_event(Server *server, int fd) {
         }
 
         read_len = get_read_size(client->stream_buf_list);
-
+        LOGD("read_len:%d\n", read_len);
         if (read_len < (client->packet_len)) {
             LOGD("Not enough\n");
             return;
@@ -905,16 +905,20 @@ static void handle_req_event(Server *server, int fd) {
         if (buf[packet_len -3] != EOP) {
             LOGD("Packet is wrong\n");
             destroy_client_stream_buf_list(client);
-            destroy_stream_buf(stream_buf);
+            destroy_stream_buf(r_stream_buf);
             free(buf);
             return;
         }
 
         check_sum = create_check_sum(NULL, buf, packet_len);
+        LOGD("check_sum:%d\n", check_sum);
         result = is_check_sum_true(check_sum, buf, packet_len);
         if (result == FALSE) {
-            LOGD("check_sum is wrong\n");
+            LOGD("Check_Sum is wrong\n");
             free(buf);
+            destroy_client_stream_buf_list(client);
+            destroy_stream_buf(r_stream_buf);
+            return;
         }
 
         destroy_client_stream_buf_list(client);

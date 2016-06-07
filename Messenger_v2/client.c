@@ -155,7 +155,6 @@ static short copy_payload_len(Stream_Buf *stream_buf, long int *payload_len) {
 }
 
 static int is_check_sum_true(short check_sum, char *buf, int packet_len) {
-    int i;
     short comp_check_sum;
 
     if (!buf) {
@@ -163,11 +162,11 @@ static int is_check_sum_true(short check_sum, char *buf, int packet_len) {
         return FALSE;
     }
 
-    for (i = packet_len -2 ; i < packet_len; i++) {
-        comp_check_sum += buf[i];
-    }
+    comp_check_sum = 0;
 
-    if (comp_check_sum == check_sum) {
+    memcpy(&comp_check_sum, buf + packet_len - 2, sizeof(comp_check_sum));
+
+    if (comp_check_sum != check_sum) {
         LOGD("Not enabled check sum\n");
         return FALSE;
     }
@@ -413,12 +412,13 @@ static void handle_res_events(Client *client, int fd) {
         }
 
         check_sum = create_check_sum(NULL, buf, packet_len);
-        LOGD("Create check_sum\n");
         result = is_check_sum_true(check_sum, buf, packet_len);
-        LOGD("Check chekc sum\n");
         if (result == FALSE) {
             LOGD("check_sum is wrong\n");
+            destroy_client_stream_buf_list(client);
+            destroy_stream_buf(r_stream_buf);
             free(buf);
+            return;
         }
 
         destroy_client_stream_buf_list(client);

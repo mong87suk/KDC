@@ -24,6 +24,7 @@ SERVER_MAIN_OBJECT = \
 			packet.o\
 			converter.o\
 			message.o\
+			utils.o\
 
 CLIENT_MAIN_OBJECT = \
 			client_main.o\
@@ -33,10 +34,13 @@ CLIENT_MAIN_OBJECT = \
 			packet.o\
 			converter.o\
 			message.o\
+			utils.o\
 
 TEST_OBJECT = \
 		test.o\
 		looper.o\
+		utils.o\
+		message.o\
 
 SHARED_LIBRARY = lib$(DBLINKED_LIST).so
 

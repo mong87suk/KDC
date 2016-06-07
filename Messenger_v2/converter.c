@@ -8,37 +8,6 @@
 #include "utils.h"
 #include "message.h"
 
-void print_mesg(Message *mesg) {
-    long int time;
-    int str_len, i;
-    char *str, *pos;
-
-    if (!mesg) {
-        LOGD("Can't print the Message\n");
-        return;
-    }
-
-    LOGD("\nPrint Message\n");
-    time = get_time(mesg);
-    pos = (char*) &time;
-    for (i = 0; i < sizeof(time); i++) {
-        printf("0x%02X ", (unsigned char)*(pos + i));
-    }
-
-    str_len = get_str_len(mesg);
-    pos = (char*) &str_len;
-    for (i = 0; i < sizeof(str_len); i++) {
-        printf("0x%02X ", (unsigned char)*(pos + i));
-    }
-
-    str = get_str(mesg);
-    pos = str;
-    for (i = 0; i < str_len; i++) {
-        printf("%c ", (unsigned char) *(pos + i));
-    }
-    printf("\n\n");
-}
-
 static void print_buf(char *buf, int len) {
     int i;
 
@@ -156,13 +125,13 @@ Packet* convert_buf_to_packet(char *buf) {
     char *payload;
     short result;
     int packet_size;
-
     if (!buf) {
         LOGD("Can't convert the buf to the packet\n");
         return NULL;
     }
 
     packet_size = get_packet_size();
+    check_sum = 0;
     packet = (Packet*) malloc(packet_size);
     if (!packet) {
         LOGD("Failed to make the Packet\n");
@@ -242,6 +211,7 @@ Packet* convert_buf_to_packet(char *buf) {
     buf += sizeof(eop);
 
     memcpy(&check_sum, buf, sizeof(check_sum));
+    LOGD("chekc_sum:%d\n", check_sum);
     result = set_check_sum(packet, check_sum);
     if (result == FALSE) {
         LOGD("Failed to set the check_sum\n");

@@ -23,7 +23,7 @@ struct _Body
 struct _Tail
 {
     char eop;
-    char check_sum;
+    short check_sum;
 };
 
 struct _Packet
@@ -289,9 +289,9 @@ short create_check_sum(Packet *packet, char *buf, int len) {
         return -1;
     }
 
-    if (packet) {
-        check_sum = 0;
+    check_sum = 0;
 
+    if (packet) {
         op_code = get_op_code(packet, NULL);
         payload_len = get_payload_len(packet, NULL);
         payload = get_payload(packet, NULL);
@@ -309,7 +309,7 @@ short create_check_sum(Packet *packet, char *buf, int len) {
 
     if (buf) {
         for(i = 0; i < len -2; i++) {
-            check_sum += buf[i];
+            check_sum += (unsigned char) buf[i];
         }
     }
     return check_sum;
@@ -325,6 +325,7 @@ short set_check_sum(Packet *packet, short check_sum) {
 
     tail = packet->tail;
     tail->check_sum = check_sum;
+    LOGD("check_sum:%d\n", tail->check_sum);
 
     return TRUE;
 }
