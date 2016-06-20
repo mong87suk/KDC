@@ -1,6 +1,8 @@
 #ifndef __DATA_FILE_H__
 #define __DATA_FILE_H__
 
+#define DATAFILE "data_file"
+
 typedef struct _Data_File Data_File;
 
 Data_File* new_data_file(char *data_file_name);

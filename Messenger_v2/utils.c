@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 
 #include "message.h"
 #include "utils.h"
@@ -34,7 +35,7 @@ void print_mesg(Message *mesg) {
     printf("\n\n");
 }
 
-int read_n_byte(int fd, char *buf, int size) {
+int read_n_byte(int fd, void *buf, int size) {
     int n, tmp;
 
     tmp = size;
@@ -55,7 +56,7 @@ int read_n_byte(int fd, char *buf, int size) {
     return size;
 }
 
-int write_n_byte(int fd, char *buf, int size) {
+int write_n_byte(int fd, void *buf, int size) {
     int n, tmp;
 
     tmp = size;
@@ -74,4 +75,4 @@ int write_n_byte(int fd, char *buf, int size) {
     }
 
     return size;
-}   
+}
