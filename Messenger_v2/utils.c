@@ -33,3 +33,45 @@ void print_mesg(Message *mesg) {
     }   
     printf("\n\n");
 }
+
+int read_n_byte(int fd, char *buf, int size) {
+    int n, tmp;
+
+    tmp = size;
+
+    if (!buf) {
+        LOGD("Can't read n byte\n");
+    }
+
+    if (size < 0 || fd < 0) {
+        LOGD("Can't read n byte\n");
+    }
+
+    while (tmp > 0) {
+        n = read(fd, buf, size);
+        tmp -= n;
+    }
+
+    return size;
+}
+
+int write_n_byte(int fd, char *buf, int size) {
+    int n, tmp;
+
+    tmp = size;
+
+    if (!buf) {
+        LOGD("Can't read n byte\n");
+    }
+
+    if (size < 0 || fd < 0) {
+        LOGD("Can't read n byte\n");
+    }
+
+    while (tmp > 0) {
+        n = write(fd, buf, size);
+        tmp -= n;
+    }
+
+    return size;
+}   

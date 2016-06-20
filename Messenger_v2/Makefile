@@ -41,6 +41,11 @@ TEST_OBJECT = \
 		looper.o\
 		utils.o\
 		message.o\
+		database.o\
+		data_file.o\
+		index_file.o\
+		entry_point.o\
+		
 
 SHARED_LIBRARY = lib$(DBLINKED_LIST).so
 
