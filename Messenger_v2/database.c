@@ -10,8 +10,8 @@
 #include "utils.h"
 
 struct _DataBase {
-    Index_File *index_file;
-    Data_File *data_file;
+    IndexFile *index_file;
+    DataFile *data_file;
     int field_mask;
 };
 
@@ -47,8 +47,8 @@ static int convert_data_format_to_field_mask(char *data_format) {
 
 DataBase* new_database(char *file_name, char *data_format) {
     DataBase *database;
-    Index_File *index_file;
-    Data_File *data_file;
+    IndexFile *index_file;
+    DataFile *data_file;
     int end_offset;
     int result;
     int field_mask;
@@ -64,7 +64,7 @@ DataBase* new_database(char *file_name, char *data_format) {
         return NULL;
     }
 
-    index_file = new_index_file(file_name);
+    index_file = new_index_file(file_name, field_mask);
     data_file = new_data_file(file_name);
 
     if (!index_file || !data_file) {
@@ -148,6 +148,12 @@ int add_entry(DataBase *database, char *buf) {
         return -1;
     }
 
+    result = set_last_id(database->index_file, id);
+    if (!result) {
+        LOGD("Failed to set last id\n");
+        return -1;
+    }
+
     result = add_entry_point(database->index_file, entry_point);
     if (!result) {
         LOGD("Failed to add EntryPoint\n");
@@ -161,4 +167,37 @@ int add_entry(DataBase *database, char *buf) {
     }
 
     return id;
+}
+
+int get_entry_point_count(DataBase *database) {
+    int count;
+    if(!database) {
+        LOGD("There is nothing to point the DataBase\n");
+        return -1;
+    }
+
+    count = get_count(database->index_file);
+    if (count < 0) {
+        LOGD("Failed to get count\n");
+        return -1;
+    }
+    return count;
+}
+
+void delete_entry(DataBase *database, int entry_point_id) {
+    EntryPoint *entry_point;
+    if (!database) {
+        LOGD("There is nothing to point the DataBase\n");
+        return;
+    }
+
+    entry_point = find_entry_point(database->index_file, entry_point_id);
+
+    if (!entry_point) {
+        LOGD("There is nothing to point the EntryPoint\n");
+        return;
+    }
+
+    delete_entry_point(entry_point);
+    update_index_file(database->index_file);
 }

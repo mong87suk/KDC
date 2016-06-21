@@ -23,7 +23,7 @@ int main() {
     char *test_buf;
     char *file_name = "test";
     DataBase *database;
-    Data_File *data_file;
+    DataFile *data_file;
     int size;
     int str_len;
     int data_file_fd;
@@ -45,6 +45,7 @@ int main() {
     //Add entry
     database = new_database(file_name, data_format);
     add_entry(database, test_buf);
+    assert(get_entry_point_count(database) == 1);
     destroy_database(database);
 
     //Create Data file

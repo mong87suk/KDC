@@ -10,13 +10,13 @@
 #include "m_boolean.h"
 #include "utils.h"
 
-struct _Data_File {
+struct _DataFile {
     int fd;
     char *path;
 };
 
-Data_File *new_data_file(char *file_name) {
-    Data_File *data_file;
+DataFile *new_data_file(char *file_name) {
+    DataFile *data_file;
     char *homedir, *data_file_path;
     int data_file_namelen, home_pathlen, data_file_pathlen;
     int file_fd;
@@ -52,7 +52,7 @@ Data_File *new_data_file(char *file_name) {
         return NULL;
     }
 
-    data_file = (Data_File*) malloc(sizeof(Data_File));
+    data_file = (DataFile*) malloc(sizeof(DataFile));
     if (!data_file) {
         LOGD("Faield to make the Index File\n");
         return NULL;
@@ -63,7 +63,7 @@ Data_File *new_data_file(char *file_name) {
     return data_file;
 }
 
-void destroy_data_file(Data_File *data_file) {
+void destroy_data_file(DataFile *data_file) {
     if (!data_file) {
         LOGD("There is nothing to point the Data_File\n");
         return;
@@ -79,7 +79,7 @@ void destroy_data_file(Data_File *data_file) {
     return;
 }
 
-int get_data_file_offset(Data_File *data_file) {
+int get_data_file_offset(DataFile *data_file) {
     int offset;
     if (!data_file) {
         LOGD("There is nothing to point the Data_File\n");
@@ -95,7 +95,7 @@ int get_data_file_offset(Data_File *data_file) {
     return offset;
 }
 
-int get_data_file_fd(Data_File *data_file) {
+int get_data_file_fd(DataFile *data_file) {
     if (!data_file) {
         LOGD("There is nothing to point the Data File\n");
         return -1;

@@ -7,5 +7,6 @@ EntryPoint* new_entry_point(int id, int fd, int offset, int field_mask);
 void destroy_entry_point(EntryPoint *entry_point);
 int get_entry_point_size();
 int set_value(EntryPoint *entry_point, char *buf);
+int get_entry_point_id(EntryPoint *entry_point);
 
 #endif

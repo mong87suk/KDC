@@ -12,7 +12,8 @@
 #include "entry_point.h"
 #include "m_boolean.h"
 
-struct _Index_File {
+struct _IndexFile {
+    int field_mask;
     int fd;
     int last_id;
     int entry_count;
@@ -51,8 +52,8 @@ void free_entry_point(void *data) {
     destroy_entry_point((EntryPoint*) data);
 }
 
-Index_File* new_index_file(char *file_name) {
-    Index_File *index_file;
+IndexFile* new_index_file(char *file_name, int field_mask) {
+    IndexFile *index_file;
     char *homedir, *index_file_path;
     int index_file_namelen, home_pathlen, index_file_pathlen;
     int file_fd;
@@ -83,12 +84,12 @@ Index_File* new_index_file(char *file_name) {
 
     file_fd = open(index_file_path, O_RDWR | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
 
-    if (file_fd == -1) {
+    if (file_fd < 0) {
         LOGD("Failed to make the index file\n");
         return NULL;
     }
 
-    index_file = (Index_File*) malloc(sizeof(Index_File));
+    index_file = (IndexFile*) malloc(sizeof(IndexFile));
     if (!index_file) {
         LOGD("Faield to make the Index File\n");
         return NULL;
@@ -99,11 +100,12 @@ Index_File* new_index_file(char *file_name) {
     index_file->entry_count = 0;
     index_file->entry_list = NULL;
     index_file->path = index_file_path;
+    index_file->field_mask = field_mask;
 
     return index_file;
 }
 
-int get_index_file_end_offset(Index_File *index_file) {
+int get_index_file_end_offset(IndexFile *index_file) {
     int end_offset;
 
     if (!index_file) {
@@ -116,7 +118,7 @@ int get_index_file_end_offset(Index_File *index_file) {
     return end_offset;
 }
 
-int set_index_info(Index_File *index_file) {
+int set_index_info(IndexFile *index_file) {
     int last_id, size, entry_count;
     int n_byte, fd;
     int i;
@@ -159,14 +161,14 @@ int set_index_info(Index_File *index_file) {
     return TRUE;
 }
 
-void destroy_index_file(Index_File *index_file) {
+void destroy_index_file(IndexFile *index_file) {
     if (!index_file) {
         LOGD("There is nothing to point the Index_File\n");
         return;
     }
 
     d_list_free(index_file->entry_list, free_entry_point);
-    if (unlink(index_file->path) < 0) {
+    if (close(index_file->path) < 0) {
         LOGD("Failed to unlink\n");
         return;
     }
@@ -176,7 +178,7 @@ void destroy_index_file(Index_File *index_file) {
     return;
 }
 
-int create_entry_point_id(Index_File *index_file) {
+int create_entry_point_id(IndexFile *index_file) {
     if (!index_file) {
         LOGD("There is nothing to point the Index_File\n");
         return -1;
@@ -185,7 +187,7 @@ int create_entry_point_id(Index_File *index_file) {
     return (index_file->last_id + 1);
 }
 
-int get_last_id(Index_File *index_file) {
+int get_last_id(IndexFile *index_file) {
     if (!index_file) {
         LOGD("There is nohting to point the Index_File\n");
         return -1;
@@ -194,7 +196,7 @@ int get_last_id(Index_File *index_file) {
     return index_file->last_id;
 }
 
-int set_last_id(Index_File *index_file, int last_id) {
+int set_last_id(IndexFile *index_file, int last_id) {
     if (!index_file) {
         LOGD("There is nothing to point the Index_File\n");
         return FALSE;
@@ -204,18 +206,19 @@ int set_last_id(Index_File *index_file, int last_id) {
     return TRUE;
 }
 
-int add_entry_point(Index_File *index_file, EntryPoint *entry_point) {
+int add_entry_point(IndexFile *index_file, EntryPoint *entry_point) {
     if (!index_file || !entry_point) {
         LOGD("Can't add the EntryPoint\n");
         return FALSE;
     }
 
     index_file->entry_list = d_list_append(index_file->entry_list, entry_point);
+    index_file->entry_count = d_list_length(index_file->entry_list);
     return TRUE;
 }
 
-int update_index_file(Index_File *index_file, int field_mask) {
-    int fd, last_id, entry_count;
+int update_index_file(IndexFile *index_file) {
+    int fd, last_id, entry_count, field_mask;
     int n_byte;
 
     if (!index_file) {
@@ -223,6 +226,20 @@ int update_index_file(Index_File *index_file, int field_mask) {
         return FALSE;
     }
 
+    if (unlink(index_file->path) < 0) {
+        LOGD("Failed to unlink\n");
+        return FALSE;
+    }
+
+    fd = open(index_file->path, O_RDWR | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
+
+    if (fd < 0) {
+        LOGD("Failed to open index file\n");
+        return FALSE;
+    }
+    index_file->fd = fd;
+
+    field_mask = index_file->field_mask;
     fd = index_file->fd;
     last_id = index_file->last_id;
     entry_count = index_file->entry_count;
@@ -248,4 +265,53 @@ int update_index_file(Index_File *index_file, int field_mask) {
     d_list_foreach(index_file->entry_list, write_entry_point, &fd);
 
     return TRUE;
+}
+
+int get_count(IndexFile *index_file) {
+    if (!index_file) {
+        LOGD("There is nothing to point the IndexFile\n");
+        return -1;
+    }
+
+    return index_file->entry_count;
+}
+
+EntryPoint* find_entry_point(IndexFile *index_file, int entry_point_id) {
+    DList *list;
+    EntryPoint *entry_point;
+    int id;
+
+    entry_point = NULL;
+    list = index_file->entry_list;
+
+    while (list) {
+        entry_point = (EnryPoint*) d_list_get_data(list);
+        id = get_entry_point_id(entry_point);
+
+        if (id == entry_point_id) {
+            break;
+        }
+
+        list = d_list_next(list);
+    }
+    return entry_point;
+}
+
+void delete_entry_point(IndexFile *index_file, EntryPoint *entry_point) {
+    if (!index_file || !entry_point) {
+        LOGD("Cant't delete the EntryPoint\n");
+        return;
+    }
+
+    index_file->entry_list = d_list_remove(index_file->entry_list, destroy_entry_point);
+    index_file->entry_count = d_list_length(index_file->entry_list);
+}
+
+EntryPoint* get_list(IndexFile *index_file) {
+    if (!index_file) {
+        LOGD("There is nothing to point the IndexFile\n");
+        return NULL;
+    }
+
+    return index_file->entry_list;
 }
