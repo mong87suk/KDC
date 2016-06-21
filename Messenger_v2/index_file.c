@@ -21,6 +21,28 @@ struct _IndexFile {
     DList *entry_list;
 };
 
+int match_entry_point(void *data1, void *data2) {
+    EntryPoint *entry_point;
+    int entry_id;
+    int id;
+
+    if (!data1 || !data2) {
+        LOGD("Can't to match entry point\n");
+        return FALSE;
+    }
+
+    entry_point = (EntryPoint*) data1;
+    entry_id = *((int*) data2);
+
+    id = get_entry_point_id(entry_point);
+
+    if (id == entry_id) {
+        return TRUE;
+    } else {
+        return FALSE;
+    }
+}
+
 static void write_entry_point(void *data, void *user_data) {
     EntryPoint *entry_point;
     int fd;
@@ -119,8 +141,9 @@ int get_index_file_end_offset(IndexFile *index_file) {
 }
 
 int set_index_info(IndexFile *index_file) {
-    int last_id, size, entry_count;
+    int field_mask, last_id, size, entry_count;
     int n_byte, fd;
+    int offset;
     int i;
     EntryPoint *entry_point;
 
@@ -128,17 +151,33 @@ int set_index_info(IndexFile *index_file) {
         LOGD("There is nothing to point the index file\n");
         return FALSE;
     }
-
+    offset = 0;
+    field_mask = 0;
     fd = index_file->fd;
-    lseek(fd, 0, SEEK_SET);
+
+    offset = lseek(fd, 0, SEEK_SET);
+    if (offset) {
+        LOGD("Failed to set offset\n");
+        return FALSE;
+    }
 
     size = sizeof(int);
-    n_byte = read_n_byte(fd, &last_id, size);
+    n_byte = read_n_byte(fd, &field_mask, size);
     if (n_byte != size) {
         LOGD("Failed to read the last id\n");
         return FALSE;
     }
 
+    if (index_file->field_mask != field_mask) {
+        LOGD("field_mask was updated\n");
+        index_file->field_mask = field_mask;
+    }
+
+    n_byte = read_n_byte(fd, &last_id, size);
+    if (n_byte != size) {
+        LOGD("Failed to read the last id\n");
+        return FALSE;
+    }
     index_file->last_id = last_id;
 
     n_byte = read_n_byte(fd, &entry_count, size);
@@ -146,6 +185,7 @@ int set_index_info(IndexFile *index_file) {
         LOGD("Failed to read the size\n");
         return FALSE;
     }
+    index_file->entry_count = entry_count;
 
     size = get_entry_point_size();
     for (i = 0; i < entry_count; i++) {
@@ -168,7 +208,7 @@ void destroy_index_file(IndexFile *index_file) {
     }
 
     d_list_free(index_file->entry_list, free_entry_point);
-    if (close(index_file->path) < 0) {
+    if (close(index_file->fd) < 0) {
         LOGD("Failed to unlink\n");
         return;
     }
@@ -277,37 +317,58 @@ int get_count(IndexFile *index_file) {
 }
 
 EntryPoint* find_entry_point(IndexFile *index_file, int entry_point_id) {
-    DList *list;
     EntryPoint *entry_point;
-    int id;
+
+    if (!index_file) {
+        LOGD("There is nothing to point the IndexFile\n");
+        return NULL;
+    }
 
     entry_point = NULL;
-    list = index_file->entry_list;
+    entry_point = d_list_find_data(index_file->entry_list, match_entry_point, &entry_point_id);
 
-    while (list) {
-        entry_point = (EnryPoint*) d_list_get_data(list);
-        id = get_entry_point_id(entry_point);
-
-        if (id == entry_point_id) {
-            break;
-        }
-
-        list = d_list_next(list);
-    }
     return entry_point;
 }
 
 void delete_entry_point(IndexFile *index_file, EntryPoint *entry_point) {
+    int id;
+    DList *list;
+    EntryPoint *last;
+
+    last = NULL;
+
     if (!index_file || !entry_point) {
         LOGD("Cant't delete the EntryPoint\n");
         return;
     }
 
-    index_file->entry_list = d_list_remove(index_file->entry_list, destroy_entry_point);
+    id = get_entry_point_id(entry_point);
+    if (id < 0) {
+        LOGD("the entry point id was wrong\n");
+        return;
+    }
+
+    index_file->entry_list = d_list_remove_with_data(index_file->entry_list, entry_point, free_entry_point);
+    
+    if (id == index_file->last_id) {
+        list = d_list_last(index_file->entry_list);
+        last = (EntryPoint*) d_list_get_data(list);
+        if (!last) {
+            LOGD("There is nothing to point the Entry Point\n");
+            return;
+        }
+
+        id = get_entry_point_id(last);
+        if (id < 0) {
+            LOGD("the entry point id was wrong\n");
+            return;
+        }
+        index_file->last_id = id;
+    }
     index_file->entry_count = d_list_length(index_file->entry_list);
 }
 
-EntryPoint* get_list(IndexFile *index_file) {
+DList* get_list(IndexFile *index_file) {
     if (!index_file) {
         LOGD("There is nothing to point the IndexFile\n");
         return NULL;

@@ -69,7 +69,7 @@ void destroy_data_file(DataFile *data_file) {
         return;
     }
 
-    if (unlink(data_file->path) < 0) {
+    if (close(data_file->fd) < 0) {
         LOGD("Faield to unlink\n");
         return;
     }
@@ -86,7 +86,7 @@ int get_data_file_offset(DataFile *data_file) {
         return -1;
     }
 
-    offset = lseek(data_file->fd, 0, SEEK_CUR);
+    offset = lseek(data_file->fd, 0, SEEK_END);
     if (offset < 0) {
         LOGD("Failed to get data offset\n");
         return -1;

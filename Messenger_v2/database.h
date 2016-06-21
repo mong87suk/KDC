@@ -1,6 +1,8 @@
 #ifndef __DATABASE_H__
 #define __DATABASE_H__
 
+#include "DBLinkedList.h"
+
 #define INTEGER_FIELD (int) 0x10000000
 #define STRING_FIELD  (int) 0x20000000
 
@@ -11,6 +13,6 @@ void destroy_database(DataBase *database);
 int add_entry(DataBase *database, char *buf);
 int get_entry_point_count(DataBase *database);
 void delete_entry(DataBase *database, int entry_point_id);
-EntryPoint* get_entry_point_list(DataBase *database);
+DList* get_entry_point_list(DataBase *database);
 
 #endif

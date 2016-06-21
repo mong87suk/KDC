@@ -45,7 +45,7 @@ TEST_OBJECT = \
 		data_file.o\
 		index_file.o\
 		entry_point.o\
-		
+		stream_buf.o\
 
 SHARED_LIBRARY = lib$(DBLINKED_LIST).so
 

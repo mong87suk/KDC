@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "DBLinkedList.h"
 #include "database.h"
 #include "index_file.h"
 #include "data_file.h"
@@ -76,7 +77,6 @@ DataBase* new_database(char *file_name, char *data_format) {
 
     if (end_offset > 0) {
         result = set_index_info(index_file);
-
         if (!result) {
             LOGD("Falied to make the new DataBase\n");
             return NULL;
@@ -117,7 +117,7 @@ int add_entry(DataBase *database, char *buf) {
         LOGD("Failed to add entry\n");
         return -1;
     }
-    
+
     offset = get_data_file_offset(database->data_file);
     if (offset < 0) {
         LOGD("Failed to get data file offset\n");
@@ -160,7 +160,7 @@ int add_entry(DataBase *database, char *buf) {
         return -1;
     }
 
-    result = update_index_file(database->index_file, database->field_mask);
+    result = update_index_file(database->index_file);
     if (!result) {
         LOGD("Failed to update indexfile\n");
         return -1;
@@ -192,12 +192,24 @@ void delete_entry(DataBase *database, int entry_point_id) {
     }
 
     entry_point = find_entry_point(database->index_file, entry_point_id);
+    LOGD("entry_point id:%d\n", get_entry_point_id(entry_point));
 
     if (!entry_point) {
         LOGD("There is nothing to point the EntryPoint\n");
         return;
     }
 
-    delete_entry_point(entry_point);
+    delete_entry_point(database->index_file, entry_point);
     update_index_file(database->index_file);
+}
+
+DList* get_entry_point_list(DataBase *database) {
+    DList *list;
+
+    if (!database) {
+        LOGD("There is nothing to point the DataBase\n");
+        return NULL;
+    }
+    list = get_list(database->index_file);
+    return list;
 }

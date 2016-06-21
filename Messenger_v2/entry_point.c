@@ -1,10 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
 
+#include "DBLinkedList.h"
 #include "entry_point.h"
 #include "utils.h"
 #include "m_boolean.h"
+#include "stream_buf.h"
 
 struct _EntryPoint {
     int id;
@@ -12,6 +16,33 @@ struct _EntryPoint {
     int offset;
     int field_mask;
 };
+
+static void append_data(void *data, void *user_data) {
+    char *dest, *src;
+    int copy_n;
+    Stream_Buf *data_stream_buf;
+    Stream_Buf *user_data_stream_buf;
+
+    data_stream_buf = (Stream_Buf*) data;
+    user_data_stream_buf = (Stream_Buf*) user_data;
+
+    if (!data_stream_buf || !user_data_stream_buf) {
+        LOGD("There is nothing to point Stream_Buf\n");
+        return;
+    }
+
+    dest = get_available_buf(user_data_stream_buf);
+    src = get_buf(data_stream_buf);
+
+    if (!src || !dest) {
+        LOGD("There is nothing to point buf\n");
+        return;
+    }
+
+    copy_n = get_position(data_stream_buf);
+    memcpy(dest, src, copy_n);
+    increase_position(user_data_stream_buf, copy_n);
+}
 
 static int append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf) {
     if (!stream_buf_list || !stream_buf) {
@@ -31,7 +62,7 @@ EntryPoint* new_entry_point(int id, int fd, int offset, int field_mask) {
     }
 
     entry_point = (EntryPoint*) malloc(sizeof(EntryPoint));
-    
+
     if (!entry_point) {
         LOGD("Failed to make the Entry_Point\n");
         return NULL;
@@ -45,6 +76,26 @@ EntryPoint* new_entry_point(int id, int fd, int offset, int field_mask) {
     return entry_point;
 }
 
+static void free_stream_buf(void *data) {
+    Stream_Buf *stream_buf;
+
+    stream_buf = (Stream_Buf*) data;
+
+    if (!stream_buf) {
+        LOGD("There is nothing to remove the Stream_Buf\n");
+        return;
+    }
+    destroy_stream_buf(stream_buf);
+}
+
+static void destroy_stream_buf_list(DList *stream_buf_list) {
+    if (!stream_buf_list) {
+        LOGD("There is nothing to point the Stream Buf\n");
+        return;
+    }
+    d_list_free(stream_buf_list, free_stream_buf);
+}
+
 void destroy_entry_point(EntryPoint *entry_point) {
     if (!entry_point) {
         LOGD("Failed to destroy the entry_point\n");
@@ -52,7 +103,7 @@ void destroy_entry_point(EntryPoint *entry_point) {
     }
     free(entry_point);
 }
-    
+
 int get_entry_point_size() {
     return sizeof(EntryPoint);
 }
@@ -80,26 +131,26 @@ int set_id(EntryPoint *entry_point, int id) {
 }
 
 int set_value(EntryPoint *entry_point, char *buf) {
-    int flag = 0xf;
-    int max_move = 15;
     char colum;
     int len, n_byte;
     int field_mask, fd, id;
+    int max_move;
 
+    max_move = MAX_MOVE;
     field_mask = entry_point->field_mask;
     len = 0;
     fd = entry_point->fd;
     id = entry_point->id;
 
-    n_byte = write_n_byte(fd, buf, sizeof(id));
+    n_byte = write_n_byte(fd, &id, sizeof(id));
     if (n_byte != sizeof(id)) {
         LOGD("Failed to write n byte\n");
         return FALSE;
     }
 
     do {
-        colum = (field_mask >> (4 * max_move)) & flag;
-        LOGD("%d\n", colum);
+        colum = (field_mask >> (4 * max_move)) & COLUM_FLAG;
+        LOGD("colum:%d\n", colum);        
         switch (colum) {
             case 1:
                 n_byte = write_n_byte(fd, buf, sizeof(int));
@@ -148,18 +199,27 @@ int set_value(EntryPoint *entry_point, char *buf) {
 Stream_Buf* get_value(EntryPoint *entry_point) {
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
-    int fd, offset;
-    int buf_size;
+    int colum;
+    int id, fd, offset, field_mask;
+    int buf_size, n_byte;
     char *buf;
-
-    stream_buf = NULL;
+    int max_move;
+    int len;
 
     if (!entry_point) {
         LOGD("Thre is nothing to point the EntryPoint\n");
         return NULL;
     }
 
+    id = 0;
+    len = 0;
+    buf_size = 0;
+    max_move = MAX_MOVE;
+    stream_buf = NULL;
+    stream_buf_list = NULL;
+
     fd = entry_point->fd;
+    field_mask = entry_point->field_mask;
 
     offset = lseek(fd, entry_point->offset, SEEK_SET);
     if (offset != entry_point->offset) {
@@ -167,9 +227,20 @@ Stream_Buf* get_value(EntryPoint *entry_point) {
         return NULL;
     }
 
+    n_byte = read_n_byte(fd, &id, sizeof(id));
+    if (n_byte != sizeof(id)) {
+        LOGD("Failed to read id\n");
+        return NULL;
+    }
+
+    LOGD("id:%d entry_point id:%d\n",  id, entry_point->id);
+    if (id != entry_point->id) {
+        LOGD("the entry id was wrong\n");
+        return NULL;
+    }
+
     do {
-        colum = (field_mask >> (4 * max_move)) & flag;
-        LOGD("%d\n", colum);
+        colum = (field_mask >> (4 * max_move)) & COLUM_FLAG;
         switch (colum) {
             case 1:
                 stream_buf = new_stream_buf(sizeof(int));
@@ -183,6 +254,7 @@ Stream_Buf* get_value(EntryPoint *entry_point) {
                     LOGD("Failed to write n byte\n");
                     return NULL;
                 }
+                increase_position(stream_buf, n_byte);
 
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
                 break;
@@ -199,9 +271,9 @@ Stream_Buf* get_value(EntryPoint *entry_point) {
                     LOGD("Failed to write n byte\n");
                     return NULL;
                 }
+                increase_position(stream_buf, n_byte);
                 buf = get_buf(stream_buf);
                 memcpy(&len, buf, n_byte);
-                LOGD("len:%d\n", len);
                 if (len < 0) {
                     LOGD("len value was wrong\n");
                     return NULL;
@@ -219,6 +291,8 @@ Stream_Buf* get_value(EntryPoint *entry_point) {
                     LOGD("Failed to write n byte\n");
                     return FALSE;
                 }
+                increase_position(stream_buf, n_byte);
+
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
                 break;
 
@@ -233,13 +307,16 @@ Stream_Buf* get_value(EntryPoint *entry_point) {
     } while (colum);
 
     stream_buf = new_stream_buf(buf_size);
+    append_data_to_buf(stream_buf_list, stream_buf);
+    destroy_stream_buf_list(stream_buf_list);
 
+    return stream_buf;
 }
 
 int get_entry_point_id(EntryPoint *entry_point) {
     if (!entry_point) {
         LOGD("There is nothing to point the EntryPoint\n");
-        return FALSE;
+        return -1;
     }
 
     return entry_point->id;
