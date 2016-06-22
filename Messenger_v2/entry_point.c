@@ -12,7 +12,6 @@
 
 struct _EntryPoint {
     int id;
-    int fd;
     int offset;
     int field_mask;
 };
@@ -53,10 +52,10 @@ static int append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf) {
     return TRUE;
 }
 
-EntryPoint* new_entry_point(int id, int fd, int offset, int field_mask) {
+EntryPoint* new_entry_point(int id, int offset, int field_mask) {
     EntryPoint *entry_point;
 
-    if (id < 0 || fd < 0 || offset < 0 || field_mask < 0) {
+    if (id < 0 || offset < 0 || field_mask < 0) {
         LOGD("Can't make the entry_point\n");
         return NULL;
     }
@@ -69,7 +68,6 @@ EntryPoint* new_entry_point(int id, int fd, int offset, int field_mask) {
     }
 
     entry_point->id = id;
-    entry_point->fd = fd;
     entry_point->offset = offset;
     entry_point->field_mask = field_mask;
 
@@ -130,16 +128,25 @@ int set_id(EntryPoint *entry_point, int id) {
     return TRUE;
 }
 
-int set_value(EntryPoint *entry_point, char *buf) {
+int set_value(EntryPoint *entry_point, char *buf, int fd) {
     char colum;
     int len, n_byte;
-    int field_mask, fd, id;
+    int field_mask, id;
     int max_move;
+
+    if (!entry_point) {
+        LOGD("There is nothing to point the EntryPoint\n");
+        return FALSE;
+    }
+
+    if (fd < 0) {
+        LOGD("the fd value was wrong\n");
+        return FALSE;
+    }
 
     max_move = MAX_MOVE;
     field_mask = entry_point->field_mask;
     len = 0;
-    fd = entry_point->fd;
     id = entry_point->id;
 
     n_byte = write_n_byte(fd, &id, sizeof(id));
@@ -196,11 +203,11 @@ int set_value(EntryPoint *entry_point, char *buf) {
     return TRUE;
 }
 
-Stream_Buf* get_value(EntryPoint *entry_point) {
+Stream_Buf* get_value(EntryPoint *entry_point, int fd) {
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
     int colum;
-    int id, fd, offset, field_mask;
+    int id, offset, field_mask;
     int buf_size, n_byte;
     char *buf;
     int max_move;
@@ -211,6 +218,11 @@ Stream_Buf* get_value(EntryPoint *entry_point) {
         return NULL;
     }
 
+    if (fd < 0) {
+        LOGD("fd value is wrong\n");
+        return NULL;
+    }
+
     id = 0;
     len = 0;
     buf_size = 0;
@@ -218,7 +230,6 @@ Stream_Buf* get_value(EntryPoint *entry_point) {
     stream_buf = NULL;
     stream_buf_list = NULL;
 
-    fd = entry_point->fd;
     field_mask = entry_point->field_mask;
 
     offset = lseek(fd, entry_point->offset, SEEK_SET);

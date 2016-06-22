@@ -24,22 +24,16 @@ static int convert_data_format_to_field_mask(char *data_format) {
     field_mask = 0;
 
     len = strlen(data_format);
-
     for (i = 0; i < len; i++) {
         field = data_format[i];
         LOGD("field:%c\n", field);
-        switch (field) {
-        case 'i':
-            field_mask = field_mask | ((INTEGER_FIELD) >> i);
-            break;
 
-        case 's':
-            field_mask = field_mask | ((STRING_FIELD) >> i);
-            break;
+        if (field == 'i') {
+            field_mask = field_mask | ((INTEGER_FIELD) >> (4*i));
+        }
 
-        default:
-            LOGD("filed_mask was wrong\n");
-            return -1;
+        if (field == 's') {
+            field_mask = field_mask | ((STRING_FIELD) >> (4*i));
         }
     }
     LOGD("field_mask: 0x%02X\n", field_mask);
@@ -136,13 +130,15 @@ int add_entry(DataBase *database, char *buf) {
         return -1;
     }
 
-    entry_point = new_entry_point(id, fd, offset, database->field_mask);
+    LOGD("id:%d  offset:%d\n",id, offset);
+
+    entry_point = new_entry_point(id, offset, database->field_mask);
     if (!entry_point) {
         LOGD("Failed to make the Entry_Point\n");
         return -1;
     }
 
-    result = set_value(entry_point, buf);
+    result = set_value(entry_point, buf, fd);
     if (!result) {
         LOGD("Failed to set value\n");
         return -1;
@@ -184,21 +180,23 @@ int get_entry_point_count(DataBase *database) {
     return count;
 }
 
-void delete_entry(DataBase *database, int entry_point_id) {
+int delete_entry(DataBase *database, int entry_point_id) {
     EntryPoint *entry_point;
     if (!database) {
         LOGD("There is nothing to point the DataBase\n");
-        return;
+        return FALSE;
     }
 
     entry_point = find_entry_point(database->index_file, entry_point_id);
     if (!entry_point) {
         LOGD("There is nothing to point the EntryPoint\n");
-        return;
+        return FALSE;
     }
 
     delete_entry_point(database->index_file, entry_point);
     update_index_file(database->index_file);
+
+    return TRUE;
 }
 
 DList* get_entry_point_list(DataBase *database) {
@@ -218,8 +216,9 @@ int update_entry(DataBase *database, int entry_point_id, int colum, char *field)
     char *buf;
     int offset;
     int result;
-
+    int fd;
     EntryPoint *entry_point;
+
     if (!database) {
         LOGD("There is nothing to point the DataBase\n");
         return FALSE;
@@ -231,7 +230,13 @@ int update_entry(DataBase *database, int entry_point_id, int colum, char *field)
         return FALSE;
     }
 
-    entry = get_value(entry_point);
+    fd = get_data_file_fd(database->data_file);
+    if (fd < 0) {
+        LOGD("Failed to get fd\n");
+        return FALSE;
+    }
+
+    entry = get_value(entry_point, fd);
     if (!entry) {
         LOGD("Failed to get value\n");
         return FALSE;
@@ -258,7 +263,7 @@ int update_entry(DataBase *database, int entry_point_id, int colum, char *field)
     }
 
     buf = get_buf(updated_entry);
-    result = set_value(entry_point, buf);
+    result = set_value(entry_point, buf, fd);
     destroy_stream_buf(updated_entry);
     if (!result) {
         LOGD("Failed to set value\n");
@@ -266,4 +271,35 @@ int update_entry(DataBase *database, int entry_point_id, int colum, char *field)
     }
 
     return TRUE;
+}
+
+Stream_Buf* get_entry(DataBase *database, int entry_point_id) {
+    EntryPoint *entry_point;
+    Stream_Buf *entry;
+    int fd;
+
+    if (!database) {
+        LOGD("There is nothing to point the DataBase\n");
+        return NULL;
+    }
+
+    entry_point = find_entry_point(database->index_file, entry_point_id);
+    if (!entry_point) {
+        LOGD("There is nothing to point the EntryPoint\n");
+        return NULL;
+    }
+
+    fd = get_data_file_fd(database->data_file);
+    if (fd < 0) {
+        LOGD("Failed to get fd\n");
+        return NULL;
+    }
+
+    entry = get_value(entry_point, fd);
+    if (!entry) {
+        LOGD("Failed to get value\n");
+        return NULL;
+    }
+
+    return entry;
 }

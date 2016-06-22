@@ -9,11 +9,11 @@
 
 typedef struct _EntryPoint EntryPoint;
 
-EntryPoint* new_entry_point(int id, int fd, int offset, int field_mask);
+EntryPoint* new_entry_point(int id, int offset, int field_mask);
 void destroy_entry_point(EntryPoint *entry_point);
 int get_entry_point_size();
-int set_value(EntryPoint *entry_point, char *buf);
+int set_value(EntryPoint *entry_point, char *buf, int fd);
 int get_entry_point_id(EntryPoint *entry_point);
-Stream_Buf* get_value(EntryPoint *entry_point);
+Stream_Buf* get_value(EntryPoint *entry_point, int fd);
 Stream_Buf* create_update_entry(EntryPoint *entry_point, int where, char *field, char *entry, int offset);
 #endif
