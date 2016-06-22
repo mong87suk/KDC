@@ -1,21 +1,14 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <string.h>
-#include <unistd.h>
 #include <assert.h>
 
-#include "looper.h"
 #include "utils.h"
-#include "socket.h"
 #include "database.h"
 #include "data_file.h"
 #include "index_file.h"
 #include "entry_point.h"
-#include "m_boolean.h"
 #include "DBLinkedList.h"
 #include "stream_buf.h"
 
@@ -28,10 +21,10 @@ static void add_entry_for_string(DataBase *database, int count) {
     size = sizeof(int) + str_len;
 
     int i, j;
-    for (i = 0; i < count; i++) {
+    for (i = 1; i <= count; i++) {
 
         for (j = 0; j < 4; j++) {
-            test_str[j] = 49 + i;
+            test_str[j] = 48 + (i % 10);
         }
 
         test_buf = (char*) malloc(size);
@@ -59,6 +52,7 @@ static void show_all_entry_id(DataBase *database, DList *list) {
     }
 }
 
+//Comp entry value
 static void comp_entry_for_String(int i, int len, char *buf) {
     int index;
     int value;
@@ -66,14 +60,11 @@ static void comp_entry_for_String(int i, int len, char *buf) {
     char comp_buf[4];
 
     value = i % 10;
-    LOGD("value:%d\n", value);
-    LOGD("buf:%s\n", buf);
 
     assert(len == 4);
     for (index = 0;  index < 4; index++) {
-        comp_buf[index] = 49 + value;
+        comp_buf[index] = 48 + value;
     }
-    LOGD("comp_buf:%s\n", comp_buf);
 
     result = strncmp(buf, comp_buf, 4);
     assert(result == 0);
@@ -87,6 +78,7 @@ void show_all_entry(DataBase *database, DList *list) {
     Stream_Buf* stream_buf;
     char *buf, *copy_buf;
     int len;
+    int id;
 
     count = get_entry_point_count(database);
     for (i = 0; i < count; i++) {
@@ -95,7 +87,8 @@ void show_all_entry(DataBase *database, DList *list) {
         buf = get_buf(stream_buf);
         memcpy(&len, buf, sizeof(len));
         buf += sizeof(len);
-        comp_entry_for_String(i, len, buf);
+        id = get_entry_point_id(entry_point);
+        comp_entry_for_String(id, len, buf);
 
         copy_buf = (char*) malloc(len + 1);
         memset(copy_buf, 0, len + 1);
@@ -131,7 +124,6 @@ int main() {
     //Add entry
     LOGD("\n\nAdd entry : 10\n\n");
     add_entry_for_string(database, 10);
-    LOGD("yoga\n");
     count = get_entry_point_count(database);
     LOGD("entry_coutn:%d\n", count);
 
@@ -152,11 +144,19 @@ int main() {
 
     //Delete entry
     LOGD("\n\nDelete entry id: 3\n\n");
-    delete_entry(database, 3);
     count = get_entry_point_count(database);
-    LOGD("entry_count:%d\n", count);
+    delete_entry(database, 3);
+    assert(get_entry_point_count(database) == (count - 1));
     list = get_entry_point_list(database);
     show_all_entry_id(database, list);
+    show_all_entry(database, list);
+
+    //Update entry
+    LOGD("\n\nUpdate entry id:1 String:8888\n\n");
+    int id = 3;
+    int colum = 1;
+    
+    update_entry(database, id, colum, 
 
     return 0;
 }

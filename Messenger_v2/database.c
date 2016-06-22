@@ -192,8 +192,6 @@ void delete_entry(DataBase *database, int entry_point_id) {
     }
 
     entry_point = find_entry_point(database->index_file, entry_point_id);
-    LOGD("entry_point id:%d\n", get_entry_point_id(entry_point));
-
     if (!entry_point) {
         LOGD("There is nothing to point the EntryPoint\n");
         return;
@@ -212,4 +210,60 @@ DList* get_entry_point_list(DataBase *database) {
     }
     list = get_list(database->index_file);
     return list;
+}
+
+int update_entry(DataBase *database, int entry_point_id, int colum, char *field) {
+    Stream_Buf *entry;
+    Stream_Buf *updated_entry;
+    char *buf;
+    int offset;
+    int result;
+
+    EntryPoint *entry_point;
+    if (!database) {
+        LOGD("There is nothing to point the DataBase\n");
+        return FALSE;
+    }
+
+    entry_point = find_entry_point(database->index_file, entry_point_id);
+    if (!entry_point) {
+        LOGD("There is nothing to point the EntryPoint\n");
+        return FALSE;
+    }
+
+    entry = get_value(entry_point);
+    if (!entry) {
+        LOGD("Failed to get value\n");
+        return FALSE;
+    }
+
+    offset = get_data_file_offset(database->data_file);
+    if (offset < 0) {
+        LOGD("Failed to get data file offset\n");
+        return FALSE;
+    }
+
+    buf = get_buf(entry);
+    if (!buf) {
+        LOGD("Failed to get buf\n");
+        return FALSE;
+    }
+
+    updated_entry = create_update_entry(entry_point, colum, field, buf, offset);
+    destroy_stream_buf(entry);
+
+    if (!updated_entry) {
+        LOGD("Failed to update field\n");
+        return FALSE;
+    }
+
+    buf = get_buf(updated_entry);
+    result = set_value(entry_point, buf);
+    destroy_stream_buf(updated_entry);
+    if (!result) {
+        LOGD("Failed to set value\n");
+        return FALSE;
+    }
+
+    return TRUE;
 }

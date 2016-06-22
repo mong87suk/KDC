@@ -14,5 +14,6 @@ int add_entry(DataBase *database, char *buf);
 int get_entry_point_count(DataBase *database);
 void delete_entry(DataBase *database, int entry_point_id);
 DList* get_entry_point_list(DataBase *database);
+int update_entry(DataBase *database, int id, int colum, char *field);
 
 #endif

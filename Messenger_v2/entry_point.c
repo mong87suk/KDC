@@ -233,7 +233,6 @@ Stream_Buf* get_value(EntryPoint *entry_point) {
         return NULL;
     }
 
-    LOGD("id:%d entry_point id:%d\n",  id, entry_point->id);
     if (id != entry_point->id) {
         LOGD("the entry id was wrong\n");
         return NULL;
@@ -320,4 +319,113 @@ int get_entry_point_id(EntryPoint *entry_point) {
     }
 
     return entry_point->id;
+}
+
+Stream_Buf* create_update_entry(EntryPoint *entry_point, int where, char *field, char *entry, int offset) {
+    Stream_Buf *stream_buf;
+    DList *stream_buf_list;
+    char *buf;
+    int max_move, field_mask;
+    int len;
+    int colum, index;
+    int buf_size;
+
+    if (!entry_point) {
+        LOGD("There is nothing to point the EntryPoint\n");
+        return FALSE;
+    }
+
+    stream_buf_list = NULL;
+    max_move = MAX_MOVE;
+    len = 0;
+    index = 0;
+    buf_size = 0;
+    field_mask = entry_point->field_mask;
+
+    do {
+        colum = (field_mask >> (4 * max_move)) & COLUM_FLAG;
+        switch (colum) {
+            case 1:
+                stream_buf = new_stream_buf(sizeof(int));
+                if (!stream_buf) {
+                    LOGD("Failed to make the StreamBuf\n");
+                    return NULL;
+                }
+                buf_size += sizeof(int);
+                if (index == where - 1) {
+                    memcpy(get_available_buf(stream_buf), field, get_available_size(stream_buf));
+                } else {
+                    memcpy(get_available_buf(stream_buf), entry, get_available_size(stream_buf));
+                    entry += sizeof(int);
+                }
+
+                increase_position(stream_buf, sizeof(int));
+                stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+                break;
+
+            case 2:
+                stream_buf = new_stream_buf(sizeof(int));
+                if (!stream_buf) {
+                    LOGD("Failed to make the StreamBuf\n");
+                    return NULL;
+                }
+                buf_size += sizeof(int);
+                
+                if (index == where - 1) {
+                    memcpy(get_available_buf(stream_buf), field, get_available_size(stream_buf));
+                    field += sizeof(int);
+                } else {
+                    memcpy(get_available_buf(stream_buf), entry, get_available_size(stream_buf));
+                    entry += sizeof(int);
+                }
+                
+                increase_position(stream_buf, sizeof(int));
+                buf = get_buf(stream_buf);
+                if (!buf) {
+                    LOGD("Failed to get buf\n");
+                    return NULL;
+                }
+
+                memcpy(&len, buf, sizeof(int));
+                if (len < 0) {
+                    LOGD("len value was wrong\n");
+                    return NULL;
+                }
+
+                stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+
+                stream_buf = new_stream_buf(len);
+                if (!stream_buf) {
+                    LOGD("Failed to make the StreamBuf\n");
+                    return NULL;
+                }
+                buf_size += len;
+
+                if (index == where -1) {
+                    memcpy(get_available_buf(stream_buf), field, get_available_size(stream_buf));
+                } else {
+                    memcpy(get_available_buf(stream_buf), entry, get_available_size(stream_buf));
+                    entry += len;
+                }
+                increase_position(stream_buf, len);
+                stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+                break;
+
+            case 0:
+                break;
+
+            default:
+                LOGD("field mask was wrong\n");
+                return NULL;
+        }
+        index++;
+        max_move--;
+    } while (colum);
+
+    stream_buf = new_stream_buf(buf_size);
+    append_data_to_buf(stream_buf_list, stream_buf);
+    destroy_stream_buf_list(stream_buf_list);
+    entry_point->offset = offset;
+
+    return stream_buf;
 }
