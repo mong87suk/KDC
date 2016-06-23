@@ -7,10 +7,9 @@
 
 typedef struct _IndexFile IndexFile;
 
-IndexFile* new_index_file(char *index_file_name, int field_mask);
+IndexFile* index_file_open(char *name, int field_mask);
 int get_index_file_end_offset(IndexFile *index_file);
-int set_index_info(IndexFile *index_file);
-void destroy_index_file(IndexFile *index_file);
+void index_file_close(IndexFile *index_file);
 int create_entry_point_id(IndexFile *index_file);
 int get_last_id(IndexFile *index_file);
 int set_last_id(IndexFile *index_file, int last_id);

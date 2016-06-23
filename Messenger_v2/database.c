@@ -16,7 +16,7 @@ struct _DataBase {
     int field_mask;
 };
 
-static int data_base_convert_data_format_to_field_mask(char *data_format) {
+static int database_convert_data_format_to_field_mask(char *data_format) {
     int len;
     int field_mask;
     int i, j;
@@ -27,7 +27,6 @@ static int data_base_convert_data_format_to_field_mask(char *data_format) {
     j = 0;
     for (i = len - 1; i >= 0; i--) {
         field = data_format[j];
-        LOGD("field:%c\n", field);
 
         if (field == 'i') {
             field_mask = field_mask | ((INTEGER_FIELD) << (FIELD_SIZE * i));
@@ -35,7 +34,6 @@ static int data_base_convert_data_format_to_field_mask(char *data_format) {
 
         if (field == 's') {
             field_mask = field_mask | ((STRING_FIELD) << (FIELD_SIZE * i));
-            LOGD("s field_mask: 0x%02X\n", field_mask);
         }
         j++;
     }
@@ -48,26 +46,43 @@ static int database_set_value(EntryPoint *entry_point, Stream_Buf *entry, int fi
     int len, n_byte;
     int id;
     int count = 0;
+    char *buf;
 
     if (!entry_point) {
         LOGD("There is nothing to point the EntryPoint\n");
         return FALSE;
     }
 
-    if (fd < 0 || filed_mask < 0) {
+    if (fd < 0 || field_mask < 0) {
         LOGD("Can't set value\n");
         return FALSE;
     }
 
+    if (!entry) {
+        LOGD("There is nothing to point the Entry\n");
+        return FALSE;
+    }
+
+    buf = get_buf(entry);
+    if (!buf) {
+        LOGD("Failed to get entry buf\n");
+        return FALSE;
+    }
+
     len = 0;
-    id = entry_point->id;
+    id = entry_point_get_id(entry_point);
+    if (id == -1) {
+        LOGD("Failed to get id\n");
+        return FALSE;
+    }
 
     n_byte = write_n_byte(fd, &id, sizeof(id));
     if (n_byte != sizeof(id)) {
         LOGD("Failed to write n byte\n");
         return FALSE;
     }
-    count = entry_point_get_count_to_move_flag(field_mask);
+    count = utils_get_count_to_move_flag(field_mask);
+
     do {
         colum = (field_mask >> (FIELD_SIZE * count)) & FIELD_TYPE_FLAG;
         LOGD("colum:%d\n", colum);
@@ -119,8 +134,7 @@ static int database_set_value(EntryPoint *entry_point, Stream_Buf *entry, int fi
 static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int where, Stream_Buf *field, Stream_Buf *entry, int offset, int field_mask) {
     Stream_Buf *stream_buf;
     DList *stream_buf_list;
-    char *buf;
-    int field_mask;
+    char *buf, *entry_buf, *field_buf;
     int len;
     int colum, index;
     int buf_size;
@@ -140,7 +154,19 @@ static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int whe
     len = 0;
     index = 0;
     buf_size = 0;
-    count = utils_entry_point_get_count_to_move_flag(field_mask);
+    count = utils_get_count_to_move_flag(field_mask);
+    if (count < 0) {
+        LOGD("Failed to get count\n");
+        return NULL;
+    }
+
+    entry_buf = get_buf(entry);
+    field_buf = get_buf(field);
+    if (!entry_buf || !field) {
+        LOGD("Can't buf of entry or filed\n");
+        return NULL;
+    }
+
     do {
         colum = (field_mask >> (FIELD_SIZE * count)) & FIELD_TYPE_FLAG;
         switch (colum) {
@@ -152,10 +178,10 @@ static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int whe
                 }
                 buf_size += sizeof(int);
                 if (index == where - 1) {
-                    memcpy(get_available_buf(stream_buf), field, get_available_size(stream_buf));
+                    memcpy(get_available_buf(stream_buf), field_buf, get_available_size(stream_buf));
                 } else {
-                    memcpy(get_available_buf(stream_buf), entry, get_available_size(stream_buf));
-                    entry += sizeof(int);
+                    memcpy(get_available_buf(stream_buf), entry_buf, get_available_size(stream_buf));
+                    entry_buf += sizeof(int);
                 }
 
                 increase_position(stream_buf, sizeof(int));
@@ -171,20 +197,16 @@ static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int whe
                 buf_size += sizeof(int);
                 
                 if (index == where - 1) {
-                    memcpy(get_available_buf(stream_buf), field, get_available_size(stream_buf));
-                    field += sizeof(int);
+                    buf = field_buf;
+                    memcpy(get_available_buf(stream_buf), field_buf, get_available_size(stream_buf));
+                    field_buf += sizeof(int);
                 } else {
-                    memcpy(get_available_buf(stream_buf), entry, get_available_size(stream_buf));
-                    entry += sizeof(int);
+                    buf = entry_buf;
+                    memcpy(get_available_buf(stream_buf), entry_buf, get_available_size(stream_buf));
+                    entry_buf += sizeof(int);
                 }
                 
                 increase_position(stream_buf, sizeof(int));
-                buf = get_buf(stream_buf);
-                if (!buf) {
-                    LOGD("Failed to get buf\n");
-                    return NULL;
-                }
-
                 memcpy(&len, buf, sizeof(int));
                 if (len < 0) {
                     LOGD("len value was wrong\n");
@@ -201,10 +223,10 @@ static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int whe
                 buf_size += len;
 
                 if (index == where -1) {
-                    memcpy(get_available_buf(stream_buf), field, get_available_size(stream_buf));
+                    memcpy(get_available_buf(stream_buf), field_buf, get_available_size(stream_buf));
                 } else {
-                    memcpy(get_available_buf(stream_buf), entry, get_available_size(stream_buf));
-                    entry += len;
+                    memcpy(get_available_buf(stream_buf), entry_buf, get_available_size(stream_buf));
+                    entry_buf += len;
                 }
                 increase_position(stream_buf, len);
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
@@ -222,53 +244,43 @@ static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int whe
     } while (colum && count >= 0);
 
     stream_buf = new_stream_buf(buf_size);
-    append_data_to_buf(stream_buf_list, stream_buf);
-    destroy_stream_buf_list(stream_buf_list);
-    entry_point_set_offset(offset);
+    utils_append_data_to_buf(stream_buf_list, stream_buf);
+    utils_destroy_stream_buf_list(stream_buf_list);
+    entry_point_set_offset(entry_point, offset);
 
     return stream_buf;
 }
 
-DataBase* new_database(char *file_name, char *data_format) {
+DataBase* new_database(char *name, char *data_format) {
     DataBase *database;
     IndexFile *index_file;
     DataFile *data_file;
-    int end_offset;
-    int result;
     int field_mask;
 
-    if (!file_name || !data_format) {
+    if (!name || !data_format) {
         LOGD("Can't make the DataBase\n");
         return NULL;
     }
 
-    field_mask = convert_data_format_to_field_mask(data_format);
+    field_mask = database_convert_data_format_to_field_mask(data_format);
     if (field_mask < 0) {
         LOGD("Failed to convert field_mask\n");
         return NULL;
     }
-
-    index_file = new_index_file(file_name, field_mask);
-    data_file = new_data_file(file_name);
-
-    if (!index_file || !data_file) {
-        LOGD("Failed to make the new DataBase\n");
-        return NULL;
-    }
-
-    end_offset = get_index_file_end_offset(index_file);
-
-    if (end_offset > 0) {
-        result = set_index_info(index_file);
-        if (!result) {
-            LOGD("Falied to make the new DataBase\n");
-            return NULL;
-        }
-    }
+    LOGD("index file\n");
 
     database = (DataBase*) malloc(sizeof(DataBase));
     if (!database) {
         LOGD("Faield to make the new DataBase\n");
+        return NULL;
+    }
+
+    index_file = index_file_open(name, field_mask, database);
+    LOGD("data file\n");
+    data_file = data_file_open(name);
+
+    if (!index_file || !data_file) {
+        LOGD("Failed to make the new DataBase\n");
         return NULL;
     }
 
@@ -285,8 +297,8 @@ void destroy_database(DataBase *database) {
         return;
     }
 
-    destroy_index_file(database->index_file);
-    destroy_data_file(database->data_file);
+    index_file_close(database->index_file);
+    data_file_close(database->data_file);
 
     free(database);
 }
@@ -296,7 +308,7 @@ int database_add_entry(DataBase *database, Stream_Buf *entry) {
     int offset, id, fd;
     int result;
 
-    if (!database || !buf) {
+    if (!database || !entry) {
         LOGD("Failed to add entry\n");
         return -1;
     }
@@ -304,6 +316,12 @@ int database_add_entry(DataBase *database, Stream_Buf *entry) {
     offset = get_data_file_offset(database->data_file);
     if (offset < 0) {
         LOGD("Failed to get data file offset\n");
+        return -1;
+    }
+
+    fd = data_file_get_fd(database->data_file);
+    if (fd < 0) {
+        LOGD("Failed to get data file\n");
         return -1;
     }
 
@@ -319,7 +337,7 @@ int database_add_entry(DataBase *database, Stream_Buf *entry) {
         return -1;
     }
 
-    result = data_base_set_value(entry, fd);
+    result = database_set_value(entry_point, entry, database->field_mask, fd);
     if (!result) {
         LOGD("Failed to set value\n");
         return -1;
@@ -395,7 +413,6 @@ int database_update_entry(DataBase *database, int id, int colum, Stream_Buf *fie
     Stream_Buf *entry;
     Stream_Buf *updated_entry;
     EntryPoint *entry_point;
-    char *buf;
     int offset;
     int result;
     int fd;
@@ -411,13 +428,13 @@ int database_update_entry(DataBase *database, int id, int colum, Stream_Buf *fie
         return FALSE;
     }
 
-    fd = get_data_file_fd(database->data_file);
+    fd = data_file_get_fd(database->data_file);
     if (fd < 0) {
         LOGD("Failed to get fd\n");
         return FALSE;
     }
 
-    entry = get_value(entry_point, fd);
+    entry = entry_point_get_value(entry_point, fd);
     if (!entry) {
         LOGD("Failed to get value\n");
         return FALSE;
@@ -429,7 +446,7 @@ int database_update_entry(DataBase *database, int id, int colum, Stream_Buf *fie
         return FALSE;
     }
 
-    updated_entry = database_create_update_entry(entry_point, colum, field, entry, offset);
+    updated_entry = database_create_update_entry(entry_point, colum, field, entry, offset, database->field_mask);
     destroy_stream_buf(entry);
 
     if (!updated_entry) {
@@ -462,17 +479,26 @@ Stream_Buf* get_entry(DataBase *database, int entry_point_id) {
         return NULL;
     }
 
-    fd = get_data_file_fd(database->data_file);
+    fd = data_file_get_fd(database->data_file);
     if (fd < 0) {
         LOGD("Failed to get fd\n");
         return NULL;
     }
 
-    entry = get_value(entry_point, fd);
+    entry = entry_point_get_value(entry_point, fd);
     if (!entry) {
         LOGD("Failed to get value\n");
         return NULL;
     }
 
     return entry;
+}
+
+int database_get_field_mask(DataBase *database) {
+    if (!database) {
+        LOGD("There is nothing to point the DataBase\n");
+        return -1;
+    }
+
+    return database->field_mask;
 }

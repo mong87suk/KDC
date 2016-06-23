@@ -3,6 +3,7 @@
 
 #include "stream_buf.h"
 #include "DBLinkedList.h"
+#include "database.h"
 
 #define MAX_MOVE         15
 #define FIELD_TYPE_FLAG  0xf
@@ -10,11 +11,12 @@
 
 typedef struct _EntryPoint EntryPoint;
 
-EntryPoint* new_entry_point(int id, int offset, int field_mask);
+EntryPoint* new_entry_point(int id, int offset, DataBase *database);
 void destroy_entry_point(EntryPoint *entry_point);
 int get_entry_point_size();
-int get_entry_point_id(EntryPoint *entry_point);
+int entry_point_get_id(EntryPoint *entry_point);
 Stream_Buf* entry_point_get_value(EntryPoint *entry_point, int fd);
 int entry_point_set_offset(EntryPoint *entry_point, int offset);
+int entry_point_get_offset(EntryPoint *entry_point);
 
 #endif

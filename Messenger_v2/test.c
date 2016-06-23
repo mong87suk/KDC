@@ -12,7 +12,7 @@
 #include "DBLinkedList.h"
 #include "stream_buf.h"
 #include "m_boolean.h"
-
+/*
 static void add_entry_for_Type_S(DataBase *database, int count) { 
     char *test_buf;
     char test_str[4];
@@ -244,9 +244,11 @@ static void show_all_entry_for_type_IS_format(DataBase *database, DList *list, i
         free(copy_str);
     }
 }
+*/
 
 int main() {
     // s is String
+
     char *data_format = "s";
 
     char *file_name = "test";
@@ -262,6 +264,7 @@ int main() {
     //Create database
     database = new_database(file_name, data_format);
     assert(database);
+    /*
 
     //Count
     LOGD("\n\nentry count\n\n");
@@ -325,6 +328,6 @@ int main() {
 
     //Get entry of id :2
     LOGD("\n\nGet entry id: 2\n\n");
-    get_entry_for_type_IS(database, 2);
+    get_entry_for_type_IS(database, 2); */
     return 0;
 }

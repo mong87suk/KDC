@@ -1,9 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <unistd.h>
 
 #include "DBLinkedList.h"
@@ -34,7 +31,7 @@ int match_entry_point(void *data1, void *data2) {
     entry_point = (EntryPoint*) data1;
     entry_id = *((int*) data2);
 
-    id = get_entry_point_id(entry_point);
+    id = entry_point_get_id(entry_point);
 
     if (id == entry_id) {
         return TRUE;
@@ -47,6 +44,8 @@ static void write_entry_point(void *data, void *user_data) {
     EntryPoint *entry_point;
     int fd;
     int size, n_byte;
+    int id;
+    int offset;
 
     if (!data || !user_data) {
         LOGD("Can't write the EntryPoint\n");
@@ -57,90 +56,32 @@ static void write_entry_point(void *data, void *user_data) {
     fd = *((int*)user_data);
     size = get_entry_point_size();
 
-    n_byte = write_n_byte(fd, entry_point, size);
+    id = entry_point_get_id(entry_point);
+    if (id < 0) {
+        LOGD("Failed to get the id\n");
+        return;
+    }
+
+    n_byte = write_n_byte(fd, id, sizeof(id));
+    if (n_byte != sizeof(id)) {
+        LOGD("Failed to write the id\n");
+        return;
+    }
+
+    offset = entry_point_get_offset(entry_point);
+    if (offset < 0) {
+        LOGD("Failed to get the offset\n");
+        return;
+    }
+
+    n_byte = write_n_byte(fd, offset, sizeof(offset));
     if (n_byte != size) {
         LOGD("Failed to write EntryPoint\n");
         return;
     }
 }
 
-
-void free_entry_point(void *data) {
-    if (!data) {
-        LOGD("There is nothing to point the Entry_Point\n");
-        return;
-    }
-
-    destroy_entry_point((EntryPoint*) data);
-}
-
-IndexFile* new_index_file(char *file_name, int field_mask) {
-    IndexFile *index_file;
-    char *homedir, *index_file_path;
-    int index_file_namelen, home_pathlen, index_file_pathlen;
-    int file_fd;
-
-    homedir = getenv("HOME");
-
-    home_pathlen = strlen(homedir);
-    index_file_namelen = strlen(file_name) + strlen(INDEXFILE) + 2;
-
-    index_file_pathlen = home_pathlen + index_file_namelen;
-
-    index_file_path = (char*) malloc(index_file_pathlen + 1);
-    if (!index_file_path) {
-        LOGD("Failed to make the index_file_path\n");
-        return NULL;
-    }
-
-    memset(index_file_path, 0, index_file_pathlen + 1);
-
-    strncpy(index_file_path, homedir, home_pathlen);
-    index_file_path[home_pathlen] = '/';
-
-    strncpy(index_file_path + home_pathlen + 1, file_name, strlen(file_name));
-    index_file_path[home_pathlen + 1 + strlen(file_name)] = '_';
-
-    strncpy(index_file_path + home_pathlen + 1 + strlen(file_name) + 1, INDEXFILE, strlen(INDEXFILE));
-    LOGD("index_file_path:%s\n", index_file_path);
-
-    file_fd = open(index_file_path, O_RDWR | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
-
-    if (file_fd < 0) {
-        LOGD("Failed to make the index file\n");
-        return NULL;
-    }
-
-    index_file = (IndexFile*) malloc(sizeof(IndexFile));
-    if (!index_file) {
-        LOGD("Faield to make the Index File\n");
-        return NULL;
-    }
-
-    index_file->fd = file_fd;
-    index_file->last_id = 0;
-    index_file->entry_count = 0;
-    index_file->entry_list = NULL;
-    index_file->path = index_file_path;
-    index_file->field_mask = field_mask;
-
-    return index_file;
-}
-
-int get_index_file_end_offset(IndexFile *index_file) {
-    int end_offset;
-
-    if (!index_file) {
-        LOGD("There is nothing to point the index_file\n");
-        return FALSE;
-    }
-
-    end_offset = lseek(index_file->fd, 0, SEEK_END);
-
-    return end_offset;
-}
-
-int set_index_info(IndexFile *index_file) {
+static int index_file_load(IndexFile *index_file, DataBase *database) {
     int field_mask, last_id, size, entry_count;
     int n_byte, fd;
     int offset;
@@ -201,7 +142,72 @@ int set_index_info(IndexFile *index_file) {
     return TRUE;
 }
 
-void destroy_index_file(IndexFile *index_file) {
+static void free_entry_point(void *data) {
+    if (!data) {
+        LOGD("There is nothing to point the Entry_Point\n");
+        return;
+    }
+
+    destroy_entry_point((EntryPoint*) data);
+}
+
+IndexFile* index_file_open(char *name, int field_mask, DataBase *database) {
+    IndexFile *index_file;
+    char *path;
+    int fd, size;
+    int result;
+
+    if (!name || strlen(name) < 0) {
+        LOGD("Can't open\n");
+        return NULL;
+    }
+
+    LOGD("utils_create_path\n");
+    path = utils_create_path(name, INDEXFILE);
+    if (!path) {
+        LOGD("Failed to make path\n");
+        return NULL;
+    }
+    LOGD("utils_create_path :%s\n", path);
+
+    fd = utils_open(path);
+    if (fd < 0) {
+        LOGD("Failed to make open the index file\n");
+        return NULL;
+    }
+
+    index_file = (IndexFile*) malloc(sizeof(IndexFile));
+    if (!index_file) {
+        LOGD("Faield to make the Index File\n");
+        return NULL;
+    }
+
+    size = lseek(fd, 0, SEEK_END);
+    if (size < 0) {
+        LOGD("Failed to get the size\n");
+        return NULL;
+    }
+
+    if (size > 0) {
+        result = index_file_load(index_file, database);
+        if (!result) {
+            LOGD("Failed to load indexfile\n");
+            return NULL;
+        }
+    } else {
+        index_file->last_id = 0;
+        index_file->entry_count = 0;
+        index_file->entry_list = NULL;
+        index_file->path = path;
+        index_file->field_mask = field_mask;
+    }
+
+    index_file->fd = fd;
+
+    return index_file;
+}
+
+void index_file_close(IndexFile *index_file) {
     if (!index_file) {
         LOGD("There is nothing to point the Index_File\n");
         return;
@@ -271,7 +277,7 @@ int update_index_file(IndexFile *index_file) {
         return FALSE;
     }
 
-    fd = open(index_file->path, O_RDWR | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
+    fd = utils_open(index_file->path);
 
     if (fd < 0) {
         LOGD("Failed to open index file\n");
@@ -342,7 +348,7 @@ void delete_entry_point(IndexFile *index_file, EntryPoint *entry_point) {
         return;
     }
 
-    id = get_entry_point_id(entry_point);
+    id = entry_point_get_id(entry_point);
     if (id < 0) {
         LOGD("the entry point id was wrong\n");
         return;
@@ -358,7 +364,7 @@ void delete_entry_point(IndexFile *index_file, EntryPoint *entry_point) {
             return;
         }
 
-        id = get_entry_point_id(last);
+        id = entry_point_get_id(last);
         if (id < 0) {
             LOGD("the entry point id was wrong\n");
             return;

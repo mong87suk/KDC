@@ -15,40 +15,25 @@ struct _DataFile {
     char *path;
 };
 
-DataFile *new_data_file(char *file_name) {
+DataFile *data_file_open(char *name) {
     DataFile *data_file;
-    char *homedir, *data_file_path;
-    int data_file_namelen, home_pathlen, data_file_pathlen;
-    int file_fd;
+    char *path;
+    int fd;
 
-    homedir = getenv("HOME");
-
-    home_pathlen = strlen(homedir);
-    data_file_namelen = strlen(file_name) + strlen(DATAFILE) + 2;
-
-    data_file_pathlen = home_pathlen + data_file_namelen;
-
-    data_file_path = (char*) malloc(data_file_pathlen + 1);
-    if (!data_file_path) {
-        LOGD("Failed to make the data_file_path\n");
+    if (!name || strlen(name) < 0) {
+        LOGD("Can't open\n");
         return NULL;
     }
 
-    memset(data_file_path, 0, data_file_pathlen + 1);
+    path = utils_create_path(name, DATAFILE);
+    if (!path) {
+        LOGD("Failed to make path\n");
+        return NULL;
+    }
 
-    strncpy(data_file_path, homedir, home_pathlen);
-    data_file_path[home_pathlen] = '/';
-
-    strncpy(data_file_path + home_pathlen + 1, file_name, strlen(file_name));
-    data_file_path[home_pathlen + 1 + strlen(file_name)] = '_';
-
-    strncpy(data_file_path + home_pathlen + 1 + strlen(file_name) + 1, DATAFILE, strlen(DATAFILE));
-    LOGD("index_file_path:%s\n", data_file_path);
-
-    file_fd = open(data_file_path, O_RDWR | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
-
-    if (file_fd == -1) {
-        LOGD("Failed to make the index file\n");
+    fd = utils_open(path);
+    if (fd < 0) {
+        LOGD("Failed to make open the index file\n");
         return NULL;
     }
 
@@ -58,12 +43,12 @@ DataFile *new_data_file(char *file_name) {
         return NULL;
     }
 
-    data_file->fd = file_fd;
-    data_file->path = data_file_path;
+    data_file->fd = fd;
+    data_file->path = path;
     return data_file;
 }
 
-void destroy_data_file(DataFile *data_file) {
+void data_file_close(DataFile *data_file) {
     if (!data_file) {
         LOGD("There is nothing to point the Data_File\n");
         return;
@@ -95,7 +80,7 @@ int get_data_file_offset(DataFile *data_file) {
     return offset;
 }
 
-int get_data_file_fd(DataFile *data_file) {
+int data_file_get_fd(DataFile *data_file) {
     if (!data_file) {
         LOGD("There is nothing to point the Data File\n");
         return -1;
