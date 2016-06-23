@@ -2,12 +2,13 @@
 #define __INDEX_FILE_H__
 
 #include "entry_point.h"
+#include "database.h"
 
 #define INDEXFILE "index_file"
 
 typedef struct _IndexFile IndexFile;
 
-IndexFile* index_file_open(char *name, int field_mask);
+IndexFile* index_file_open(char *name, int field_mask, DataBase *database);
 int get_index_file_end_offset(IndexFile *index_file);
 void index_file_close(IndexFile *index_file);
 int create_entry_point_id(IndexFile *index_file);

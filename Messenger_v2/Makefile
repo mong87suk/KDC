@@ -18,13 +18,12 @@ SERVER_MAIN_OBJECT = \
 			stream_buf.o\
 			server_main.o\
 			server.o\
-			mesg_file.o\
-			mesg_file_db.o\
 			looper.o\
 			packet.o\
 			converter.o\
 			message.o\
 			utils.o\
+			message_db.o\
 
 CLIENT_MAIN_OBJECT = \
 			client_main.o\

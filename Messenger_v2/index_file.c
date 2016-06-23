@@ -8,6 +8,7 @@
 #include "utils.h"
 #include "entry_point.h"
 #include "m_boolean.h"
+#include "database.h"
 
 struct _IndexFile {
     int field_mask;
@@ -43,7 +44,7 @@ int match_entry_point(void *data1, void *data2) {
 static void write_entry_point(void *data, void *user_data) {
     EntryPoint *entry_point;
     int fd;
-    int size, n_byte;
+    int n_byte;
     int id;
     int offset;
 
@@ -54,7 +55,6 @@ static void write_entry_point(void *data, void *user_data) {
 
     entry_point = (EntryPoint*) data;
     fd = *((int*)user_data);
-    size = get_entry_point_size();
 
     id = entry_point_get_id(entry_point);
     if (id < 0) {
@@ -62,7 +62,7 @@ static void write_entry_point(void *data, void *user_data) {
         return;
     }
 
-    n_byte = write_n_byte(fd, id, sizeof(id));
+    n_byte = write_n_byte(fd, &id, sizeof(id));
     if (n_byte != sizeof(id)) {
         LOGD("Failed to write the id\n");
         return;
@@ -74,18 +74,19 @@ static void write_entry_point(void *data, void *user_data) {
         return;
     }
 
-    n_byte = write_n_byte(fd, offset, sizeof(offset));
-    if (n_byte != size) {
+    n_byte = write_n_byte(fd, &offset, sizeof(offset));
+    if (n_byte != sizeof(offset)) {
         LOGD("Failed to write EntryPoint\n");
         return;
     }
 }
 
 static int index_file_load(IndexFile *index_file, DataBase *database) {
-    int field_mask, last_id, size, entry_count;
+    int field_mask, last_id, entry_count;
     int n_byte, fd;
-    int offset;
+    int id, offset;
     int i;
+    int read_size;
     EntryPoint *entry_point;
 
     if (!index_file) {
@@ -96,15 +97,20 @@ static int index_file_load(IndexFile *index_file, DataBase *database) {
     field_mask = 0;
     fd = index_file->fd;
 
+    if (fd < 0) {
+        LOGD("fd was wrong\n");
+        return FALSE;
+    }
+
     offset = lseek(fd, 0, SEEK_SET);
-    if (offset) {
+    if (offset < 0) {
         LOGD("Failed to set offset\n");
         return FALSE;
     }
 
-    size = sizeof(int);
-    n_byte = read_n_byte(fd, &field_mask, size);
-    if (n_byte != size) {
+    read_size = sizeof(int);
+    n_byte = read_n_byte(fd, &field_mask, read_size);
+    if (n_byte != read_size) {
         LOGD("Failed to read the last id\n");
         return FALSE;
     }
@@ -114,27 +120,38 @@ static int index_file_load(IndexFile *index_file, DataBase *database) {
         index_file->field_mask = field_mask;
     }
 
-    n_byte = read_n_byte(fd, &last_id, size);
-    if (n_byte != size) {
+    n_byte = read_n_byte(fd, &last_id, read_size);
+    if (n_byte != read_size) {
         LOGD("Failed to read the last id\n");
         return FALSE;
     }
     index_file->last_id = last_id;
 
-    n_byte = read_n_byte(fd, &entry_count, size);
-    if (n_byte != size) {
+    n_byte = read_n_byte(fd, &entry_count, read_size);
+    if (n_byte != read_size) {
         LOGD("Failed to read the size\n");
         return FALSE;
     }
     index_file->entry_count = entry_count;
-
-    size = get_entry_point_size();
+    
+    offset = 0;
     for (i = 0; i < entry_count; i++) {
-        entry_point = (EntryPoint*) malloc(size);
-        n_byte = read_n_byte(fd, entry_point, size);
 
-        if (n_byte != size) {
+        n_byte = read_n_byte(fd, &id , sizeof(id));
+        if (n_byte != sizeof(id)  || id < 0) {
             LOGD("Failed to read the entry point\n");
+            return FALSE;
+        }
+
+        n_byte = read_n_byte(fd, &offset, sizeof(offset));
+        if (n_byte != sizeof(offset) || offset < 0) {
+            LOGD("Failed to read the entry point\n");
+            return FALSE;
+        }
+
+        entry_point = new_entry_point(id, offset, database);
+        if (!entry_point) {
+            LOGD("Failed to get buf\n");
             return FALSE;
         }
         index_file->entry_list = d_list_append(index_file->entry_list, entry_point);
@@ -162,7 +179,6 @@ IndexFile* index_file_open(char *name, int field_mask, DataBase *database) {
         return NULL;
     }
 
-    LOGD("utils_create_path\n");
     path = utils_create_path(name, INDEXFILE);
     if (!path) {
         LOGD("Failed to make path\n");
@@ -188,6 +204,9 @@ IndexFile* index_file_open(char *name, int field_mask, DataBase *database) {
         return NULL;
     }
 
+    index_file->fd = fd;
+    index_file->path = path;
+
     if (size > 0) {
         result = index_file_load(index_file, database);
         if (!result) {
@@ -198,11 +217,8 @@ IndexFile* index_file_open(char *name, int field_mask, DataBase *database) {
         index_file->last_id = 0;
         index_file->entry_count = 0;
         index_file->entry_list = NULL;
-        index_file->path = path;
         index_file->field_mask = field_mask;
     }
-
-    index_file->fd = fd;
 
     return index_file;
 }
@@ -359,17 +375,18 @@ void delete_entry_point(IndexFile *index_file, EntryPoint *entry_point) {
     if (id == index_file->last_id) {
         list = d_list_last(index_file->entry_list);
         last = (EntryPoint*) d_list_get_data(list);
+
         if (!last) {
             LOGD("There is nothing to point the Entry Point\n");
-            return;
+            index_file->last_id = 0;
+        } else {
+            id = entry_point_get_id(last);
+            if (id < 0) {
+                LOGD("the entry point id was wrong\n");
+                return;
+            }
+            index_file->last_id = id;
         }
-
-        id = entry_point_get_id(last);
-        if (id < 0) {
-            LOGD("the entry point id was wrong\n");
-            return;
-        }
-        index_file->last_id = id;
     }
     index_file->entry_count = d_list_length(index_file->entry_list);
 }

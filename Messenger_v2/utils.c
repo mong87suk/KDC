@@ -211,15 +211,12 @@ char* utils_create_path(char *name, char *file_name) {
         return NULL;
     }
 
-    LOGD("utils_create_full_name\n");
     full_name = utils_create_full_name(name, file_name);
     if (!full_name) {
         LOGD("Failed to create full name\n");
         return NULL;
     }
 
-    LOGD("full_name:%s\n", full_name);
-    
     homedir = getenv("HOME");
     if (!homedir) {
         LOGD("There is no 'HOME' enviorment\n");
@@ -242,7 +239,6 @@ char* utils_create_path(char *name, char *file_name) {
     path[home_pathlen] = '/';
 
     strncpy(path + home_pathlen + 1, full_name, full_namelen);
-    LOGD("path:%s\n", path);
     return path;
 }
 

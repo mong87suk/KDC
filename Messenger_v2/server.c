@@ -10,8 +10,6 @@
 #include "server.h"
 #include "looper.h"
 #include "DBLinkedList.h"
-#include "mesg_file_db.h"
-#include "mesg_file.h"
 #include "socket.h"
 #include "packet.h"
 #include "stream_buf.h"
@@ -19,15 +17,15 @@
 #include "utils.h"
 #include "converter.h"
 #include "message.h"
+#include "message_db.h"
 
 struct _Server {
     int fd;
     DList *client_list;
     DList *mesg_list;
     DList *last_read_mesg_node;
+    MessageDB *mesg_db;
     Looper *looper;
-    Mesg_File *mesg_file;
-    Mesg_File_DB *mesg_file_db;
 };
 
 struct _Client {
@@ -328,6 +326,7 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
     int packet_len, mesg_len;
     Message *mesg, *mesgs;
     char sop, eop;
+    int result;
 
     LOGD("Start create_res_packet()\n");
 
@@ -402,8 +401,8 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
             return NULL;
         }
 
-        server->mesg_list = d_list_append(server->mesg_list, mesg);
-        if (!(server->mesg_list)) {
+        result = add_message(server->mesg_db, mesg);
+        if (!result) {
             LOGD("Failed to add the Message\n");
             return NULL;
         }
@@ -491,7 +490,6 @@ static int copy_payload_len(Stream_Buf *stream_buf, long int *payload_len) {
 }
 
 static int is_check_sum_true(short check_sum, char *buf, int packet_len) {
-    int i;
     short comp_check_sum;
 
     if (!buf) {
@@ -997,13 +995,13 @@ static void handle_events(int fd, void *user_data, int looper_event) {
 
 Server* new_server(Looper *looper) {
     Server *server;
+    MessageDB *mesg_db;
+    char *data_format, *str;
     struct sockaddr_un addr;
     int server_fd;
-    Mesg_File *mesg_file;
-    Mesg_File_DB *mesg_file_db;
 
     if (!looper) {
-        printf("%s %s Looper is empty\n", __FILE__, __func__);
+        LOGD("Looper is empty\n");
         return NULL;
     }
 
@@ -1041,12 +1039,18 @@ Server* new_server(Looper *looper) {
         close(server_fd);
         return NULL;
     }
+    
+    data_format = (char*) malloc(2);
+    if (!data_format) {
+        LOGD("Failed to make data_format\n");
+        return NULL;
+    }
 
-    mesg_file = new_mesg_file();
-    mesg_file_db = new_mesg_file_db();
-
-    if (!mesg_file && !mesg_file_db) {
-        printf("%s %s There is no a pointer to Mesg_File or Mesg_File_DB\n", __FILE__, __func__);
+    str = "is";
+    memcpy(data_format, str, strlen(str));
+    mesg_db = new_message_db(data_format);
+    if (!mesg_db) {
+        LOGD("Failed to make the MessageDB\n");
         return NULL;
     }
 
@@ -1054,8 +1058,7 @@ Server* new_server(Looper *looper) {
     server->fd = server_fd;
     server->client_list = NULL;
     server->mesg_list = NULL;
-    server->mesg_file = mesg_file;
-    server->mesg_file_db = mesg_file_db;
+    server->mesg_db = mesg_db;
 
     add_watcher(server->looper, server_fd, handle_events, server, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
 
@@ -1081,8 +1084,5 @@ void destroy_server(Server *server) {
     d_list_free(list, destroy_client);
 
     remove_all_watchers(server->looper);
-    destroy_mesg_file_db(server->mesg_file_db);
-    destroy_mesg_file(server->mesg_file);
-
     free(server);
 }

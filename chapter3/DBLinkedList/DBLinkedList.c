@@ -168,7 +168,7 @@ DList* d_list_nth_for(DList *list, int n) {
 
 void* d_list_get_data(DList *list) {
     if (!list) {
-        printf("Can't get data");
+        printf("Can't get data\n");
         return 0;
     }
     return list->data;

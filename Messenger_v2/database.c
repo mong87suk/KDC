@@ -267,7 +267,6 @@ DataBase* new_database(char *name, char *data_format) {
         LOGD("Failed to convert field_mask\n");
         return NULL;
     }
-    LOGD("index file\n");
 
     database = (DataBase*) malloc(sizeof(DataBase));
     if (!database) {
@@ -276,7 +275,6 @@ DataBase* new_database(char *name, char *data_format) {
     }
 
     index_file = index_file_open(name, field_mask, database);
-    LOGD("data file\n");
     data_file = data_file_open(name);
 
     if (!index_file || !data_file) {
@@ -330,6 +328,7 @@ int database_add_entry(DataBase *database, Stream_Buf *entry) {
         LOGD("Failed to create the entry point id\n");
         return -1;
     }
+    LOGD("id:%d\n", id);
 
     entry_point = new_entry_point(id, offset, database);
     if (!entry_point) {
@@ -463,7 +462,7 @@ int database_update_entry(DataBase *database, int id, int colum, Stream_Buf *fie
     return TRUE;
 }
 
-Stream_Buf* get_entry(DataBase *database, int entry_point_id) {
+Stream_Buf* database_get_entry(DataBase *database, int id) {
     EntryPoint *entry_point;
     Stream_Buf *entry;
     int fd;
@@ -473,7 +472,7 @@ Stream_Buf* get_entry(DataBase *database, int entry_point_id) {
         return NULL;
     }
 
-    entry_point = find_entry_point(database->index_file, entry_point_id);
+    entry_point = find_entry_point(database->index_file, id);
     if (!entry_point) {
         LOGD("There is nothing to point the EntryPoint\n");
         return NULL;

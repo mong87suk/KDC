@@ -52,8 +52,8 @@ void destroy_entry_point(EntryPoint *entry_point) {
     free(entry_point);
 }
 
-int get_entry_point_size() {
-    return sizeof(EntryPoint);
+int entry_point_get_size() {
+    return ENTRY_POINT_SIZE;
 }
 
 Stream_Buf* entry_point_get_value(EntryPoint *entry_point, int fd) {
