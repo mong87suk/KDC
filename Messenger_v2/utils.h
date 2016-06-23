@@ -8,5 +8,6 @@
 void print_mesg(Message *mesg);
 int read_n_byte(int fd, void *buf, int size);
 int write_n_byte(int fd, void *buf, int size);
+int utils_entry_point_get_count_to_move_flag(int field_mask);
 
 #endif

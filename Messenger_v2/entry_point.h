@@ -4,16 +4,17 @@
 #include "stream_buf.h"
 #include "DBLinkedList.h"
 
-#define MAX_MOVE    15
-#define COLUM_FLAG  (int) 0xf
+#define MAX_MOVE         15
+#define FIELD_TYPE_FLAG  0xf
+#define FIELD_SIZE       4
 
 typedef struct _EntryPoint EntryPoint;
 
 EntryPoint* new_entry_point(int id, int offset, int field_mask);
 void destroy_entry_point(EntryPoint *entry_point);
 int get_entry_point_size();
-int set_value(EntryPoint *entry_point, char *buf, int fd);
 int get_entry_point_id(EntryPoint *entry_point);
-Stream_Buf* get_value(EntryPoint *entry_point, int fd);
-Stream_Buf* create_update_entry(EntryPoint *entry_point, int where, char *field, char *entry, int offset);
+Stream_Buf* entry_point_get_value(EntryPoint *entry_point, int fd);
+int entry_point_set_offset(EntryPoint *entry_point, int offset);
+
 #endif

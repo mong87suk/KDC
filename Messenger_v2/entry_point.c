@@ -9,11 +9,12 @@
 #include "utils.h"
 #include "m_boolean.h"
 #include "stream_buf.h"
+#include "database.h"
 
 struct _EntryPoint {
     int id;
     int offset;
-    int field_mask;
+    DataBase *database;
 };
 
 static void append_data(void *data, void *user_data) {
@@ -106,113 +107,17 @@ int get_entry_point_size() {
     return sizeof(EntryPoint);
 }
 
-int set_offset(EntryPoint *entry_point, int offset) {
-    if (!entry_point) {
-        LOGD("There is nothing to point the entry_point\n");
-        return FALSE;
-    }
-
-    entry_point->offset = offset;
-
-    return TRUE;
-}
-
-int set_id(EntryPoint *entry_point, int id) {
-    if (!entry_point) {
-        LOGD("There is nothing to point the entry_point\n");
-        return FALSE;
-    }
-
-    entry_point->id = id;
-
-    return TRUE;
-}
-
-int set_value(EntryPoint *entry_point, char *buf, int fd) {
-    char colum;
-    int len, n_byte;
-    int field_mask, id;
-    int max_move;
-
-    if (!entry_point) {
-        LOGD("There is nothing to point the EntryPoint\n");
-        return FALSE;
-    }
-
-    if (fd < 0) {
-        LOGD("the fd value was wrong\n");
-        return FALSE;
-    }
-
-    max_move = MAX_MOVE;
-    field_mask = entry_point->field_mask;
-    len = 0;
-    id = entry_point->id;
-
-    n_byte = write_n_byte(fd, &id, sizeof(id));
-    if (n_byte != sizeof(id)) {
-        LOGD("Failed to write n byte\n");
-        return FALSE;
-    }
-
-    do {
-        colum = (field_mask >> (4 * max_move)) & COLUM_FLAG;
-        LOGD("colum:%d\n", colum);        
-        switch (colum) {
-            case 1:
-                n_byte = write_n_byte(fd, buf, sizeof(int));
-                if (n_byte != sizeof(int)) {
-                    LOGD("Failed to write n byte\n");
-                    return FALSE;
-                }
-                buf += sizeof(int);
-                break;
-
-            case 2:
-                memcpy(&len, buf, sizeof(int));
-                LOGD("len:%d\n", len);
-                if (len < 0) {
-                    LOGD("len value was wrong\n");
-                    return FALSE;
-                }
-                n_byte = write_n_byte(fd, buf, sizeof(int));
-                if (n_byte != sizeof(int)) {
-                    LOGD("Failed to write n byte\n");
-                    return FALSE;
-                }
-                buf += sizeof(int);
-
-                n_byte = write_n_byte(fd, buf, len);
-                if (n_byte != len) {
-                    LOGD("Failed to write n byte\n");
-                    return FALSE;
-                }
-                buf += len;
-                break;
-
-            case 0:
-                break;
-
-            default:
-                LOGD("field mask was wrong\n");
-                return FALSE;
-        }
-        max_move--;
-    } while (colum);
-
-    return TRUE;
-}
-
-Stream_Buf* get_value(EntryPoint *entry_point, int fd) {
+Stream_Buf* entry_point_get_value(EntryPoint *entry_point, int fd) {
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
     int colum;
     int id, offset, field_mask;
     int buf_size, n_byte;
     char *buf;
-    int max_move;
     int len;
+    int count = 0;
 
+    
     if (!entry_point) {
         LOGD("Thre is nothing to point the EntryPoint\n");
         return NULL;
@@ -222,14 +127,14 @@ Stream_Buf* get_value(EntryPoint *entry_point, int fd) {
         LOGD("fd value is wrong\n");
         return NULL;
     }
-
+    count = 0;
     id = 0;
     len = 0;
     buf_size = 0;
-    max_move = MAX_MOVE;
     stream_buf = NULL;
     stream_buf_list = NULL;
 
+    database_get_field_mask(entry_point->database);
     field_mask = entry_point->field_mask;
 
     offset = lseek(fd, entry_point->offset, SEEK_SET);
@@ -248,9 +153,9 @@ Stream_Buf* get_value(EntryPoint *entry_point, int fd) {
         LOGD("the entry id was wrong\n");
         return NULL;
     }
-
+    count = utils_entry_point_get_count_to_move_flag(field_mask);
     do {
-        colum = (field_mask >> (4 * max_move)) & COLUM_FLAG;
+        colum = (field_mask >> (FIELD_SIZE * count)) & FIELD_TYPE_FLAG;
         switch (colum) {
             case 1:
                 stream_buf = new_stream_buf(sizeof(int));
@@ -275,7 +180,7 @@ Stream_Buf* get_value(EntryPoint *entry_point, int fd) {
                     LOGD("Failed to make the StreamBuf\n");
                     return NULL;
                 }
-                buf_size += sizeof(int);
+                
                 n_byte = read_n_byte(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
                 if (n_byte != sizeof(int)) {
                     LOGD("Failed to write n byte\n");
@@ -313,8 +218,8 @@ Stream_Buf* get_value(EntryPoint *entry_point, int fd) {
                 LOGD("field mask was wrong\n");
                 return NULL;
         }
-        max_move--;
-    } while (colum);
+        count--;
+    } while (colum && count >= 0);
 
     stream_buf = new_stream_buf(buf_size);
     append_data_to_buf(stream_buf_list, stream_buf);
@@ -332,111 +237,18 @@ int get_entry_point_id(EntryPoint *entry_point) {
     return entry_point->id;
 }
 
-Stream_Buf* create_update_entry(EntryPoint *entry_point, int where, char *field, char *entry, int offset) {
-    Stream_Buf *stream_buf;
-    DList *stream_buf_list;
-    char *buf;
-    int max_move, field_mask;
-    int len;
-    int colum, index;
-    int buf_size;
-
+int entry_point_set_offset(EntryPoint *entry_point, int offset) {
     if (!entry_point) {
         LOGD("There is nothing to point the EntryPoint\n");
         return FALSE;
     }
 
-    stream_buf_list = NULL;
-    max_move = MAX_MOVE;
-    len = 0;
-    index = 0;
-    buf_size = 0;
-    field_mask = entry_point->field_mask;
+    if (offset < 0) {
+        LOGD("Can't set offset\n");
+        return FALSE;
+    }
 
-    do {
-        colum = (field_mask >> (4 * max_move)) & COLUM_FLAG;
-        switch (colum) {
-            case 1:
-                stream_buf = new_stream_buf(sizeof(int));
-                if (!stream_buf) {
-                    LOGD("Failed to make the StreamBuf\n");
-                    return NULL;
-                }
-                buf_size += sizeof(int);
-                if (index == where - 1) {
-                    memcpy(get_available_buf(stream_buf), field, get_available_size(stream_buf));
-                } else {
-                    memcpy(get_available_buf(stream_buf), entry, get_available_size(stream_buf));
-                    entry += sizeof(int);
-                }
-
-                increase_position(stream_buf, sizeof(int));
-                stream_buf_list = d_list_append(stream_buf_list, stream_buf);
-                break;
-
-            case 2:
-                stream_buf = new_stream_buf(sizeof(int));
-                if (!stream_buf) {
-                    LOGD("Failed to make the StreamBuf\n");
-                    return NULL;
-                }
-                buf_size += sizeof(int);
-                
-                if (index == where - 1) {
-                    memcpy(get_available_buf(stream_buf), field, get_available_size(stream_buf));
-                    field += sizeof(int);
-                } else {
-                    memcpy(get_available_buf(stream_buf), entry, get_available_size(stream_buf));
-                    entry += sizeof(int);
-                }
-                
-                increase_position(stream_buf, sizeof(int));
-                buf = get_buf(stream_buf);
-                if (!buf) {
-                    LOGD("Failed to get buf\n");
-                    return NULL;
-                }
-
-                memcpy(&len, buf, sizeof(int));
-                if (len < 0) {
-                    LOGD("len value was wrong\n");
-                    return NULL;
-                }
-
-                stream_buf_list = d_list_append(stream_buf_list, stream_buf);
-
-                stream_buf = new_stream_buf(len);
-                if (!stream_buf) {
-                    LOGD("Failed to make the StreamBuf\n");
-                    return NULL;
-                }
-                buf_size += len;
-
-                if (index == where -1) {
-                    memcpy(get_available_buf(stream_buf), field, get_available_size(stream_buf));
-                } else {
-                    memcpy(get_available_buf(stream_buf), entry, get_available_size(stream_buf));
-                    entry += len;
-                }
-                increase_position(stream_buf, len);
-                stream_buf_list = d_list_append(stream_buf_list, stream_buf);
-                break;
-
-            case 0:
-                break;
-
-            default:
-                LOGD("field mask was wrong\n");
-                return NULL;
-        }
-        index++;
-        max_move--;
-    } while (colum);
-
-    stream_buf = new_stream_buf(buf_size);
-    append_data_to_buf(stream_buf_list, stream_buf);
-    destroy_stream_buf_list(stream_buf_list);
     entry_point->offset = offset;
 
-    return stream_buf;
+    return TRUE;
 }

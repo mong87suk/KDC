@@ -76,3 +76,18 @@ int write_n_byte(int fd, void *buf, int size) {
 
     return size;
 }
+
+int utils_entry_point_get_count_to_move_flag(int field_mask) {
+    int state;
+    int i = 0;
+
+    while (1) {
+        state = field_mask & (FIELD_TYPE_FLAG << (i * FIELD_SIZE));
+        if (!state) {
+            break;
+        }
+        i++;
+    }
+    LOGD("count to move flag:%d\n", i);
+    return (i - 1);
+}
