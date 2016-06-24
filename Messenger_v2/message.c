@@ -12,7 +12,6 @@ struct _Message
     char *str;
 };
 
-
 Message* new_mesg(long int time, int str_len, char *str) {
     Message* mesg;
 

@@ -16,31 +16,6 @@ struct _DataBase {
     int field_mask;
 };
 
-static int database_convert_data_format_to_field_mask(char *data_format) {
-    int len;
-    int field_mask;
-    int i, j;
-    char field;
-    field_mask = 0;
-
-    len = strlen(data_format);
-    j = 0;
-    for (i = len - 1; i >= 0; i--) {
-        field = data_format[j];
-
-        if (field == 'i') {
-            field_mask = field_mask | ((INTEGER_FIELD) << (FIELD_SIZE * i));
-        }
-
-        if (field == 's') {
-            field_mask = field_mask | ((STRING_FIELD) << (FIELD_SIZE * i));
-        }
-        j++;
-    }
-    LOGD("field_mask: 0x%02X\n", field_mask);
-    return field_mask;
-}
-
 static int database_set_value(EntryPoint *entry_point, Stream_Buf *entry, int field_mask, int fd) {
     char colum;
     int len, n_byte;
@@ -251,6 +226,31 @@ static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int whe
     return stream_buf;
 }
 
+int database_convert_data_format_to_field_mask(char *data_format) {
+    int len;
+    int field_mask;
+    int i, j;
+    char field;
+    field_mask = 0;
+
+    len = strlen(data_format);
+    j = 0;
+    for (i = len - 1; i >= 0; i--) {
+        field = data_format[j];
+
+        if (field == 'i') {
+            field_mask = field_mask | ((INTEGER_FIELD) << (FIELD_SIZE * i));
+        }
+
+        if (field == 's') {
+            field_mask = field_mask | ((STRING_FIELD) << (FIELD_SIZE * i));
+        }
+        j++;
+    }
+    LOGD("field_mask: 0x%02X\n", field_mask);
+    return field_mask;
+}
+
 DataBase* new_database(char *name, char *data_format) {
     DataBase *database;
     IndexFile *index_file;
@@ -363,14 +363,14 @@ int database_add_entry(DataBase *database, Stream_Buf *entry) {
     return id;
 }
 
-int get_entry_point_count(DataBase *database) {
+int database_get_entry_point_count(DataBase *database) {
     int count;
     if(!database) {
         LOGD("There is nothing to point the DataBase\n");
         return -1;
     }
 
-    count = get_count(database->index_file);
+    count = index_file_get_count(database->index_file);
     if (count < 0) {
         LOGD("Failed to get count\n");
         return -1;
@@ -397,7 +397,7 @@ int delete_entry(DataBase *database, int entry_point_id) {
     return TRUE;
 }
 
-DList* get_entry_point_list(DataBase *database) {
+DList* database_get_entry_point_list(DataBase *database) {
     DList *list;
 
     if (!database) {
@@ -433,7 +433,7 @@ int database_update_entry(DataBase *database, int id, int colum, Stream_Buf *fie
         return FALSE;
     }
 
-    entry = entry_point_get_value(entry_point, fd);
+    entry = entry_point_get_value(entry_point);
     if (!entry) {
         LOGD("Failed to get value\n");
         return FALSE;
@@ -484,7 +484,7 @@ Stream_Buf* database_get_entry(DataBase *database, int id) {
         return NULL;
     }
 
-    entry = entry_point_get_value(entry_point, fd);
+    entry = entry_point_get_value(entry_point);
     if (!entry) {
         LOGD("Failed to get value\n");
         return NULL;
@@ -500,4 +500,38 @@ int database_get_field_mask(DataBase *database) {
     }
 
     return database->field_mask;
+}
+
+EntryPoint* database_get_entry_point(DataBase *database, int id) {
+    EntryPoint *entry_point;
+
+    if (!database || id < 0) {
+        LOGD("Can't get entry point\n");
+        return NULL;
+    }
+
+    entry_point = find_entry_point(database->index_file, id);
+    if (!entry_point) {
+        LOGD("Failed to fined entry point\n");
+        return NULL;
+    }
+
+    return entry_point;
+}
+
+int database_get_data_file_fd(DataBase *database) {
+    int fd;
+
+    if (!database) {
+        LOGD("There is nothing to point the DataBase");
+        return -1;
+    }
+
+    fd = data_file_get_fd(database->data_file);
+    if (fd < 0) {
+        LOGD("Failed to get the fd\n");
+        return -1;
+    }
+
+    return fd;
 }

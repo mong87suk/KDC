@@ -5,6 +5,9 @@
 #include "DBLinkedList.h"
 #include "stream_buf.h"
 
+#define FIELD_TYPE_FLAG  0xf
+#define FIELD_SIZE       4
+
 #define LOGD(fmt, ...) printf("[DEBUG]\t%s:%d %s " fmt, __FILE__, __LINE__, __func__, ## __VA_ARGS__)
 
 void print_mesg(Message *mesg);

@@ -56,14 +56,14 @@ int entry_point_get_size() {
     return ENTRY_POINT_SIZE;
 }
 
-Stream_Buf* entry_point_get_value(EntryPoint *entry_point, int fd) {
+Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
     int colum;
     int id, offset, field_mask;
     int buf_size, n_byte;
     char *buf;
-    int len;
+    int len, fd;
     int count = 0;
 
     if (!entry_point) {
@@ -71,10 +71,12 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point, int fd) {
         return NULL;
     }
 
+    fd = database_get_data_file_fd(entry_point->database);
     if (fd < 0) {
         LOGD("fd value is wrong\n");
         return NULL;
     }
+
     count = 0;
     id = 0;
     len = 0;
@@ -104,11 +106,17 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point, int fd) {
         LOGD("the entry id was wrong\n");
         return NULL;
     }
+
     count = utils_get_count_to_move_flag(field_mask);
+    if (count < 0) {
+        LOGD("field mask was wrong\n");
+        return NULL;
+    }
+
     do {
         colum = (field_mask >> (FIELD_SIZE * count)) & FIELD_TYPE_FLAG;
         switch (colum) {
-            case 1:
+            case INTEGER_FIELD:
                 stream_buf = new_stream_buf(sizeof(int));
                 if (!stream_buf) {
                     LOGD("Failed to make the StreamBuf\n");
@@ -125,7 +133,7 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point, int fd) {
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
                 break;
 
-            case 2:
+            case STRING_FIELD:
                 stream_buf = new_stream_buf(sizeof(int));
                 if (!stream_buf) {
                     LOGD("Failed to make the StreamBuf\n");

@@ -353,7 +353,10 @@ Message* convert_payload_to_mesg(char *payload, int *mesg_len) {
     memcpy(str, payload, len);
     set_str(mesg, str);
 
-    *mesg_len = sizeof(time) + sizeof(len) + len;
+    if (mesg_len) {
+        *mesg_len = sizeof(time) + sizeof(len) + len;
+    }
+
     return mesg;
 }
 

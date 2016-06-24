@@ -524,7 +524,7 @@ static Packet* create_req_packet(char *input_str, short op_code, int input_strle
     char *payload, *packet_buf, *tmp;
     long int payload_len;
     short check_sum;
-    char sop, eop;
+    char sop, eop, more;
     int packet_len;
 
     sop = SOP;
@@ -561,13 +561,16 @@ static Packet* create_req_packet(char *input_str, short op_code, int input_strle
 
         case REQ_FIRST_OR_LAST_MSG:
             if (input_strlen == REQ_FIRST_OR_LAST_MESG_PACKET_SIZE && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
+                more = *(input_str + REQ_STR_MIN_LEN);
+                if (more == '0' || more == '1') {
+                    payload_len = sizeof(more);
+                    payload = (char*) malloc(payload_len);
 
-                if (*(input_str + REQ_STR_MIN_LEN) == '0' || *(input_str + REQ_STR_MIN_LEN) == '1') {
-                    payload = create_payload(input_str, input_strlen, &payload_len);
                     if (!payload) {
                         LOGD("Failed to make the Body\n");
                         return NULL;
                     }
+                    memcpy(payload, &more, payload_len);
 
                 } else {
                     LOGD("Request was wrong. Please recommand\n");

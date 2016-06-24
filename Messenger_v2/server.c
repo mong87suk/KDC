@@ -22,7 +22,6 @@
 struct _Server {
     int fd;
     DList *client_list;
-    DList *mesg_list;
     DList *last_read_mesg_node;
     MessageDB *mesg_db;
     Looper *looper;
@@ -30,7 +29,7 @@ struct _Server {
 
 struct _Client {
     int fd;
-    int file_offset;
+    int last_read_pos;
     READ_REQ_STATE read_state;
     DList *stream_buf_list;
     int packet_len;
@@ -90,7 +89,7 @@ static ADD_CLIENT_RESULT add_client(Server *server, int fd) {
     }
 
     client->fd = fd;
-    client->file_offset = 0;
+    client->last_read_pos = 0;
     client->read_state = READY_TO_READ_REQ;
     client->stream_buf_list = NULL;
     client->packet_len = 0;
@@ -212,16 +211,6 @@ static int append_n_data_to_buf(Stream_Buf *stream_buf, char *buf, int n) {
     return TRUE;
 }
 
-static int copy_payload(char *payload, long int payload_len, char *buf) {
-    if (!payload || !buf) {
-        LOGD("Can't copy payload\n");
-        return FALSE;
-    }
-
-    memcpy(buf, payload, payload_len);
-    return TRUE;
-}
-
 static void sum_mesgs_size(void *data, void *user_data) {
     int *size;
     Message *mesg;
@@ -316,22 +305,25 @@ static int copy_mesgs(DList *mesg_list, Message *mesgs, int len) {
     return TRUE;
 }
 
-static Packet* create_res_packet(Server *server, Packet *req_packet) {
+static Packet* create_res_packet(Server *server, Packet *req_packet, Client *client, int *last_read_pos) {
     short op_code, check_sum;
     char *payload, *packet_buf, *tmp, *req_payload;
     Packet *res_packet;
-    int result; 
+    int result;
     long int payload_len;
-    int mesgs_size, list_len; 
+    int mesgs_size, count;
     int packet_len, mesg_len;
     Message *mesg, *mesgs;
     char sop, eop;
-    int result;
+    DList *mesg_list;
+    int pos;
+    int read_count;
+    char more;
 
     LOGD("Start create_res_packet()\n");
 
-    if (!req_packet) {
-        LOGD("There is nothing to point the Packet\n");
+    if (!req_packet || !server) {
+        LOGD("There is nothing to point req_packet or server\n");
         return NULL;
     }
 
@@ -341,34 +333,59 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
 
     switch(op_code) {
     case REQ_ALL_MSG:
-        mesgs_size = get_all_mesgs_size(server->mesg_list);
-        LOGD("mesgs_size:%d\n", mesgs_size);
-        list_len = d_list_length(server->mesg_list);
-        payload_len =  sizeof(int) + mesgs_size + (list_len * (sizeof(long int) + sizeof(int)));
-        
+        count = message_db_get_message_count(server->mesg_db);
+        LOGD("count:%d\n", count);
+        if (count < 0) {
+            LOGD("Faield to get message\n");
+            return NULL;
+        }
+
+        if (count == 0) {
+            LOGD("Thre is no message\n");
+            return NULL;
+        }
+
+        mesg_list = get_messages(server->mesg_db, 1, count);
+        if (!mesg_list) {
+            LOGD("There is no message\n");
+            return NULL;
+        }
+
+        mesgs_size = get_all_mesgs_size(mesg_list);
+        if (!mesgs_size) {
+            LOGD("There is no message\n");
+            return NULL;
+        }
+        payload_len =  sizeof(int) + mesgs_size + (count * (sizeof(long int) + sizeof(int)));
+        if (payload_len <= 0) {
+            LOGD("payload_len was wrong\n");
+            return NULL;
+        }
+
         payload = (char*) malloc(payload_len);
         if (!payload) {
             LOGD("Failed to make buf\n");
             return NULL;
         }
 
-        mesgs = create_mesg_array(list_len);
+        mesgs = create_mesg_array(count);
         if (!mesgs) {
             LOGD("Failed to create mesg array\n");
             return NULL;
         }
 
-        result = copy_mesgs(server->mesg_list, mesgs, list_len);
+        result = copy_mesgs(mesg_list, mesgs, count);
         if (result == FALSE) {
             LOGD("Failed to copy the mesg list\n");
             return NULL;
         }
-        result = convert_mesgs_to_payload(mesgs, payload, list_len);
+        result = convert_mesgs_to_payload(mesgs, payload, count);
         if (result == FALSE) {
             LOGD("Failed to convert mesg to payload\n");
             return NULL;
         }
 
+        *last_read_pos = count;
         op_code = RES_ALL_MSG;
 
         break;
@@ -395,12 +412,13 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
 
         memcpy(payload, req_payload, payload_len);
 
-        mesg = convert_payload_to_mesg(payload, &mesg_len);
+        mesg = convert_payload_to_mesg(payload, NULL);
         if (!mesg) {
             LOGD("Failed to convert payload to the Message\n");
             return NULL;
         }
 
+        LOGD("add_message\n");
         result = add_message(server->mesg_db, mesg);
         if (!result) {
             LOGD("Failed to add the Message\n");
@@ -412,6 +430,11 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
 
     case REQ_FIRST_OR_LAST_MSG:
         LOGD("REQ_FIRST_OR_LAST_MSG\n");
+        if (!last_read_pos) {
+            LOGD("Can't set last read pos\n");
+            return NULL;
+        }
+
         payload_len = get_payload_len(req_packet, NULL);
         LOGD("payload_len:%ld\n", payload_len);
         payload = get_payload(req_packet, NULL);
@@ -419,6 +442,88 @@ static Packet* create_res_packet(Server *server, Packet *req_packet) {
             LOGD("Failed to get the payload\n");
             return NULL;
         }
+        memcpy(&more, payload, sizeof(char));
+        LOGD("more:%c\n", more);
+        if (more == '0') {
+            pos = 1;
+        } else {
+            pos = client->last_read_pos;
+        }
+        LOGD("pos:%d\n", pos);
+
+        if (pos < 0) {
+            LOGD("Can't read message\n");
+            return NULL;
+        }
+
+        count = message_db_get_message_count(server->mesg_db);
+        LOGD("count:%d\n", count);
+        if (count < 0) {
+            LOGD("Faield to get message\n");
+            return NULL;
+        }
+
+        if (count == 0) {
+            LOGD("Thre is no message\n");
+            return NULL;
+        }
+
+        if (count > 10) {
+            read_count = 10;
+        } else {
+            read_count = count;
+        }
+
+        mesg_list = get_messages(server->mesg_db, pos, read_count);
+        if (!mesg_list) {
+            LOGD("There is no message\n");
+            return NULL;
+        }
+
+        mesg_len = d_list_length(mesg_list);
+        LOGD("mesg_len:%d\n", mesg_len);
+        if (!mesg_len) {
+            LOGD("There is no message\n");
+            return NULL;
+        }
+
+        *last_read_pos = mesg_len;
+
+        mesgs_size = get_all_mesgs_size(mesg_list);
+        if (!mesgs_size) {
+            LOGD("There is no message\n");
+            return NULL;
+        }
+        payload_len =  sizeof(int) + mesgs_size + (mesg_len * (sizeof(long int) + sizeof(int)));
+        if (payload_len <= 0) {
+            LOGD("payload_len was wrong\n");
+            return NULL;
+        }
+
+        payload = (char*) malloc(payload_len);
+        if (!payload) {
+            LOGD("Failed to make buf\n");
+            return NULL;
+        }
+
+        mesgs = create_mesg_array(mesg_len);
+        if (!mesgs) {
+            LOGD("Failed to create mesg array\n");
+            return NULL;
+        }
+
+        result = copy_mesgs(mesg_list, mesgs, mesg_len);
+        if (result == FALSE) {
+            LOGD("Failed to copy the mesg list\n");
+            return NULL;
+        }
+        result = convert_mesgs_to_payload(mesgs, payload, mesg_len);
+        if (result == FALSE) {
+            LOGD("Failed to convert mesg to payload\n");
+            return NULL;
+        }
+
+        op_code = RCV_FIRST_OR_LAST_MSG; 
         break;
 
     default:
@@ -563,12 +668,17 @@ static int send_packet_to_all_clients(Server *server, Client *comp_client, Packe
     return TRUE;
 }
 
-static int send_packet_to_client(Packet *packet, int fd) {
+static int send_packet_to_client(Packet *packet, Client *client, int last_read_pos) {
     int len, result;
     char *buf;
 
-    if (!packet) {
-        LOGD("There is nothing to point the Packet\n");
+    if (!packet || !client) {
+        LOGD("There is nothing to point the pocket or client\n");
+        return FALSE;
+    }
+
+    if (client->fd < 0) {
+        LOGD("the fd was wrong\n");
         return FALSE;
     }
 
@@ -590,10 +700,12 @@ static int send_packet_to_client(Packet *packet, int fd) {
         return FALSE;
     }
 
-    if (write(fd, buf, len) < 0) {
+    if (write(client->fd, buf, len) < 0) {
         LOGD("Failed to send the Packet to server\n");
         return FALSE;
     }
+
+    client->last_read_pos = last_read_pos;
 
     return TRUE;
 }
@@ -648,39 +760,39 @@ static int check_overread(Stream_Buf *r_stream_buf, int packet_len) {
 
 static void handle_req_packet(Server *server, Client *client, Packet *req_packet) {
     short op_code;
-    int mesg_size, fd;
+    int count;
+    int last_read_pos;
     Packet *res_packet;
 
     if (!req_packet || !server || !client) {
         LOGD("There is nothing to point the Packet\n");
         return;
     }
-    fd = client->fd;
     op_code = get_op_code(req_packet, NULL);
     if (op_code == -1) {
         LOGD("Failed to get the op_code\n");
         return;
     }
-
-    mesg_size = get_all_mesgs_size(server->mesg_list);
-    LOGD("mesg_size:%d\n", mesg_size);
+    last_read_pos = 0;
+    count = message_db_get_message_count(server->mesg_db);
+    LOGD("count:%d\n", count);
 
     switch (op_code) {
     case REQ_ALL_MSG:
-        if (!mesg_size) {
+        if (!count) {
             LOGD("There is no message\n");
             return;
         }
-        res_packet = create_res_packet(server, req_packet);
+        res_packet = create_res_packet(server, req_packet, client, &last_read_pos);
         if (!res_packet) {
             LOGD("Failed to create the res packet\n");
             return;
         }
-        send_packet_to_client(res_packet, fd);
+        send_packet_to_client(res_packet, client, last_read_pos);
         break;
 
     case SND_MSG:
-        res_packet = create_res_packet(server, req_packet);
+        res_packet = create_res_packet(server, req_packet, NULL, NULL);
         if (!res_packet) {
             LOGD("Failed to create the res packet\n");
             return;
@@ -689,17 +801,23 @@ static void handle_req_packet(Server *server, Client *client, Packet *req_packet
         break;
 
     case REQ_FIRST_OR_LAST_MSG:
-        if (!mesg_size) {
+        if (!count) {
             LOGD("There is no message\n");
             return;
         }
+        res_packet = create_res_packet(server, req_packet, client, &last_read_pos);
+        if (!res_packet) {
+            LOGD("Failed to create the res packet\n");
+            return;
+        }
+        send_packet_to_client(res_packet, client, last_read_pos);
+
         break;
 
     default:
         LOGD("OPCODE is wrong\n");
         return;
     }
-
     destroy_packet(res_packet);
 }
 
@@ -1057,7 +1175,6 @@ Server* new_server(Looper *looper) {
     server->looper = looper;
     server->fd = server_fd;
     server->client_list = NULL;
-    server->mesg_list = NULL;
     server->mesg_db = mesg_db;
 
     add_watcher(server->looper, server_fd, handle_events, server, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);

@@ -1,5 +1,6 @@
 #ifndef __MESSAGE_H__
 #define __MESSAGE_H__
+
 typedef struct _Message Message;
 
 Message* new_mesg(long int time, int str_len, char *str);

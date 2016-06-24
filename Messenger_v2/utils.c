@@ -6,7 +6,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include "entry_point.h"
 #include "message.h"
 #include "utils.h"
 #include "stream_buf.h"
@@ -173,6 +172,11 @@ int write_n_byte(int fd, void *buf, int size) {
 int utils_get_count_to_move_flag(int field_mask) {
     int state;
     int i = 0;
+
+    if (field_mask < 0) {
+        LOGD("filed_mask was wrong\n");
+        return -1;
+    }
 
     while (1) {
         state = field_mask & (FIELD_TYPE_FLAG << (i * FIELD_SIZE));

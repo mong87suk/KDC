@@ -24,6 +24,10 @@ SERVER_MAIN_OBJECT = \
 			message.o\
 			utils.o\
 			message_db.o\
+			entry_point.o\
+			database.o\
+			data_file.o\
+			index_file.o\
 
 CLIENT_MAIN_OBJECT = \
 			client_main.o\
@@ -45,6 +49,7 @@ TEST_OBJECT = \
 		index_file.o\
 		entry_point.o\
 		stream_buf.o\
+		message_db.o\
 
 SHARED_LIBRARY = lib$(DBLINKED_LIST).so
 

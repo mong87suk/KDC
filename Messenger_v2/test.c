@@ -11,6 +11,7 @@
 #include "entry_point.h"
 #include "DBLinkedList.h"
 #include "stream_buf.h"
+#include "message_db.h"
 
 int main() {
     DataBase *database;
@@ -22,6 +23,9 @@ int main() {
     Stream_Buf *entry;
     Stream_Buf *field_buf;
     int count;
+    int id;
+    EntryPoint *entry_point;
+    MessageDB *mesg_db;
 
     database = new_database(file_name, data_format);
     assert(database);
@@ -41,18 +45,18 @@ int main() {
     increase_position(stream_buf, sizeof(len));
 
     memcpy(get_available_buf(stream_buf), str, len);
-   
-    count = get_entry_point_count(database);
+
+    count = database_get_entry_point_count(database);
     database_add_entry(database, stream_buf);
-    assert(get_entry_point_count(database) == (count + 1));
+    assert(database_get_entry_point_count(database) == (count + 1));
     delete_entry(database, 1);
-    assert(get_entry_point_count(database) == count);
+    assert(database_get_entry_point_count(database) == count);
 
     database_add_entry(database, stream_buf);
     entry = database_get_entry(database, 1);
     buf = get_buf(entry);
     assert(buf);
-    
+
     num = 0;
     memcpy(&num, buf, sizeof(int));
     assert(num == 1);
@@ -66,7 +70,7 @@ int main() {
 
     assert(strncmp(cmp_str, str, len) == 0);
     delete_entry(database, 1);
-    assert(get_entry_point_count(database) == 0);
+    assert(database_get_entry_point_count(database) == 0);
 
     database_add_entry(database, stream_buf);
 
@@ -106,6 +110,16 @@ int main() {
     assert(strncmp(cmp_str, str, len) == 0);
 
     delete_entry(database, 1);
+
+    id = database_add_entry(database, stream_buf);
+    entry_point = database_get_entry_point(database, id);
+    assert(id == entry_point_get_id(entry_point));
+    delete_entry(database, 1);
+
+    assert(database_convert_data_format_to_field_mask("is") == 0x12);
+    database_add_entry(database, stream_buf);
+    assert(database_get_entry_point_list(database));
+    destroy_database(database);
 
     return 0;
 }

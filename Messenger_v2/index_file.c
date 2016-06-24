@@ -329,7 +329,7 @@ int update_index_file(IndexFile *index_file) {
     return TRUE;
 }
 
-int get_count(IndexFile *index_file) {
+int index_file_get_count(IndexFile *index_file) {
     if (!index_file) {
         LOGD("There is nothing to point the IndexFile\n");
         return -1;
