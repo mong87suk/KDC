@@ -9,7 +9,7 @@ int main() {
     looper = new_looper();
     server = new_server(looper);
 
-    state = run(looper);
+    state = looper_run(looper);
 
     destroy_server(server);
     destroy_looper(looper);

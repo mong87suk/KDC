@@ -26,17 +26,17 @@ static void utils_append_data(void *data, void *user_data) {
         return;
     }
 
-    dest = get_available_buf(user_data_stream_buf);
-    src = get_buf(data_stream_buf);
+    dest = stream_buf_get_available(user_data_stream_buf);
+    src = stream_buf_get_buf(data_stream_buf);
 
     if (!src || !dest) {
         LOGD("There is nothing to point buf\n");
         return;
     }
 
-    copy_n = get_position(data_stream_buf);
+    copy_n = stream_buf_get_position(data_stream_buf);
     memcpy(dest, src, copy_n);
-    increase_position(user_data_stream_buf, copy_n);
+    stream_buf_increase_position(user_data_stream_buf, copy_n);
 }
 
 static char* utils_create_full_name(char *name, char *file_name) {
@@ -88,7 +88,7 @@ static void utils_free_stream_buf(void *data) {
     destroy_stream_buf(stream_buf);
 }
 
-void print_mesg(Message *mesg) {
+void utils_print_mesg(Message *mesg) {
     long int time;
     int str_len, i;
     char *str, *pos;
@@ -99,19 +99,19 @@ void print_mesg(Message *mesg) {
     }   
 
     LOGD("\nPrint Message\n");
-    time = get_time(mesg);
+    time = message_get_time(mesg);
     pos = (char*) &time;
     for (i = 0; i < sizeof(time); i++) {
         printf("0x%02X ", (unsigned char)*(pos + i));
     }   
 
-    str_len = get_str_len(mesg);
+    str_len = message_get_str_len(mesg);
     pos = (char*) &str_len;
     for (i = 0; i < sizeof(str_len); i++) {
         printf("0x%02X ", (unsigned char)*(pos + i));
     }   
 
-    str = get_str(mesg);
+    str = message_get_str(mesg);
     pos = str;
     for (i = 0; i < str_len; i++) {
         printf("%c ", (unsigned char) *(pos + i));
@@ -119,7 +119,7 @@ void print_mesg(Message *mesg) {
     printf("\n\n");
 }
 
-int read_n_byte(int fd, void *buf, int size) {
+int utils_read_n_byte(int fd, void *buf, int size) {
     int n, tmp;
 
     tmp = size;

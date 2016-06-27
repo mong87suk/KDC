@@ -23,7 +23,7 @@ struct _Body
 struct _Tail
 {
     char eop;
-    short check_sum;
+    short checksum;
 };
 
 struct _Packet
@@ -51,14 +51,14 @@ void destroy_packet(Packet *packet) {
     }
 
     LOGD("handle_req_packet\n");
-    destroy_header(packet->header);
-    destroy_body(packet->body);
-    destroy_tail(packet->tail);
+    packet_destroy_header(packet->header);
+    packet_destroy_body(packet->body);
+    packet_destroy_tail(packet->tail);
 
     free(packet);
 }
 
-Header* new_header(char sop, short op_code, long int payload_len) {
+Header* packet_new_header(char sop, short op_code, long int payload_len) {
     Header *header;
 
     header = (Header*) malloc(sizeof(Header));
@@ -75,7 +75,7 @@ Header* new_header(char sop, short op_code, long int payload_len) {
     return header;
 }
 
-void destroy_header(Header *header) {
+void packet_destroy_header(Header *header) {
     if (!header) {
         LOGD("There is nothing to remove header\n");
         return;
@@ -84,7 +84,7 @@ void destroy_header(Header *header) {
     free(header);
 }
 
-Body* new_body(char *payload) {
+Body* packet_new_body(char *payload) {
     Body *body;
 
     body = (Body*) malloc(sizeof(Body));
@@ -97,7 +97,7 @@ Body* new_body(char *payload) {
     return body;
 }
 
-void destroy_body(Body *body) {
+void packet_destroy_body(Body *body) {
     if (!body) {
         LOGD("There is nothing to remove Body\n");
         return;
@@ -110,7 +110,7 @@ void destroy_body(Body *body) {
     free(body);
 }
 
-Tail* new_tail(char eop, short check_sum) {
+Tail* packet_new_tail(char eop, short checksum) {
     Tail *tail;
 
     tail = (Tail*) malloc(sizeof(Tail));
@@ -120,12 +120,12 @@ Tail* new_tail(char eop, short check_sum) {
     }
     memset(tail, 0, sizeof(Tail));
     tail->eop = eop;
-    tail->check_sum = check_sum;
+    tail->checksum = checksum;
 
     return tail;
 }
 
-void destroy_tail(Tail *tail) {
+void packet_destroy_tail(Tail *tail) {
     if (!tail) {
         LOGD("There is nothing to remove Tail");
         return;
@@ -134,7 +134,7 @@ void destroy_tail(Tail *tail) {
     free(tail);
 }
 
-short set_sop(Packet *packet, char sop) {
+short packet_set_sop(Packet *packet, char sop) {
     Header *header;
     if (!packet || !packet->header) {
         LOGD("Can't set op_code");
@@ -147,7 +147,7 @@ short set_sop(Packet *packet, char sop) {
     return TRUE;
 }
 
-short set_eop(Packet *packet, char eop) {
+short packet_set_eop(Packet *packet, char eop) {
     Tail *tail;
     if (!packet || !packet->tail) {
         LOGD("Can't set op_code");
@@ -160,7 +160,7 @@ short set_eop(Packet *packet, char eop) {
     return TRUE;
 }
 
-short set_op_code(Packet *packet, short op_code) {
+short packet_set_op_code(Packet *packet, short op_code) {
     Header *header;
     if (!packet || !packet->header) {
         LOGD("Can't set op_code");
@@ -173,7 +173,7 @@ short set_op_code(Packet *packet, short op_code) {
     return TRUE;
 }
 
-char get_sop(Packet *packet, Header *header) {
+char packet_get_sop(Packet *packet, Header *header) {
     if (packet) {
         header = packet->header;
     }
@@ -186,7 +186,7 @@ char get_sop(Packet *packet, Header *header) {
     return header->sop;
 }
 
-char get_eop(Packet *packet, Tail *tail) {
+char packet_get_eop(Packet *packet, Tail *tail) {
     if (packet) {
         tail = packet->tail;
     }
@@ -198,7 +198,7 @@ char get_eop(Packet *packet, Tail *tail) {
     return tail->eop;
 }
 
-short get_op_code(Packet *packet, Header *header) {
+short packet_get_op_code(Packet *packet, Header *header) {
     if (packet) {
         header = packet->header;
     }
@@ -209,7 +209,7 @@ short get_op_code(Packet *packet, Header *header) {
     return header->op_code;
 }
 
-short get_check_sum(Packet *packet, Tail *tail) {
+short packet_get_checksum(Packet *packet, Tail *tail) {
     if (packet) {
         tail = packet->tail;
     }
@@ -218,14 +218,14 @@ short get_check_sum(Packet *packet, Tail *tail) {
         LOGD("Can't get check_sum");
         return -1;
     }
-    return tail->check_sum;
+    return tail->checksum;
 }
 
-int get_packet_size() {
+int packet_get_size() {
     return sizeof(Packet);
 }
 
-short set_payload_len(Packet *packet, long int payload_len) {
+short packet_set_payload_len(Packet *packet, long int payload_len) {
     Header *header;
 
     if (!packet || !packet->header) {
@@ -239,7 +239,7 @@ short set_payload_len(Packet *packet, long int payload_len) {
     return TRUE;
 }
 
-long int get_payload_len(Packet *packet, Header *header) {
+long int packet_get_payload_len(Packet *packet, Header *header) {
     if (packet) {
         header = packet->header;
     }
@@ -252,7 +252,7 @@ long int get_payload_len(Packet *packet, Header *header) {
     return header->payload_len;
 }
 
-short set_payload(Packet *packet, char *payload) {
+short packet_set_payload(Packet *packet, char *payload) {
     Body *body;
 
     if(!packet || !packet->body) {
@@ -265,7 +265,7 @@ short set_payload(Packet *packet, char *payload) {
     return TRUE;
 }
 
-char* get_payload(Packet *packet, Body *body) {
+char* packet_get_payload(Packet *packet, Body *body) {
     if (packet) {
         body = packet->body;
     }
@@ -277,45 +277,45 @@ char* get_payload(Packet *packet, Body *body) {
     return body->payload;
 }
 
-short create_check_sum(Packet *packet, char *buf, int len) {
+short packet_create_checksum(Packet *packet, char *buf, int len) {
     short op_code;
     long int payload_len;
     char *payload;
     int i;
-    short check_sum;
+    short checksum;
 
     if (!packet && !buf) {
         LOGD("Can't craet the check_sum\n");
         return -1;
     }
 
-    check_sum = 0;
+    checksum = 0;
 
     if (packet) {
-        op_code = get_op_code(packet, NULL);
-        payload_len = get_payload_len(packet, NULL);
-        payload = get_payload(packet, NULL);
+        op_code = packet_get_op_code(packet, NULL);
+        payload_len = packet_get_payload_len(packet, NULL);
+        payload = packet_get_payload(packet, NULL);
 
-        check_sum += get_sop(packet, NULL);
-        check_sum += op_code;
-        check_sum += payload_len;
+        checksum += packet_get_sop(packet, NULL);
+        checksum += op_code;
+        checksum += payload_len;
 
         for(i = 0; i < payload_len; i++) {
-            check_sum += payload[i];
+            checksum += payload[i];
         }
 
-        check_sum += get_eop(packet, NULL);
+        checksum += packet_get_eop(packet, NULL);
     }
 
     if (buf) {
         for(i = 0; i < len -2; i++) {
-            check_sum += (unsigned char) buf[i];
+            checksum += (unsigned char) buf[i];
         }
     }
-    return check_sum;
+    return checksum;
 }
 
-short set_check_sum(Packet *packet, short check_sum) {
+short packet_set_checksum(Packet *packet, short checksum) {
     Tail *tail;
 
     if (!packet) {
@@ -324,13 +324,13 @@ short set_check_sum(Packet *packet, short check_sum) {
     }
 
     tail = packet->tail;
-    tail->check_sum = check_sum;
-    LOGD("check_sum:%d\n", tail->check_sum);
+    tail->checksum = checksum;
+    LOGD("checksum:%d\n", tail->checksum);
 
     return TRUE;
 }
 
-short set_body(Packet *packet, Body *body) {
+short packet_set_body(Packet *packet, Body *body) {
     if (!packet || !body) {
         LOGD("Can't set the Body");
         return FALSE;
@@ -340,7 +340,7 @@ short set_body(Packet *packet, Body *body) {
     return TRUE;
 }
 
-short set_header(Packet *packet, Header *header) {
+short packet_set_header(Packet *packet, Header *header) {
     if (!packet || !header) {
         LOGD("Can't set the Body");
         return FALSE;
@@ -350,7 +350,7 @@ short set_header(Packet *packet, Header *header) {
     return TRUE;
 }
 
-short set_tail(Packet *packet, Tail *tail) {
+short packet_set_tail(Packet *packet, Tail *tail) {
     if (!packet || !tail) {
         LOGD("Can't set the Tail");
         return FALSE;
@@ -360,7 +360,7 @@ short set_tail(Packet *packet, Tail *tail) {
     return TRUE;
 }
 
-Header* get_header(Packet *packet) {
+Header* packet_get_header(Packet *packet) {
     if (!packet) {
         LOGD("Can't get the Header");
         return NULL;
@@ -368,7 +368,7 @@ Header* get_header(Packet *packet) {
     return packet->header;
 }
 
-Tail* get_tail(Packet *packet) {
+Tail* packet_get_tail(Packet *packet) {
     if (!packet) {
         LOGD("Can't get the Tail");
         return NULL;
@@ -376,7 +376,7 @@ Tail* get_tail(Packet *packet) {
     return packet->tail;
 }
 
-Body* get_body(Packet *packet) {
+Body* packet_get_body(Packet *packet) {
     if (!packet) {
         LOGD("Can't get the Body");
         return NULL;
@@ -384,14 +384,14 @@ Body* get_body(Packet *packet) {
     return packet->body;
 }
 
-int get_packet_len(Packet *packet) {
+int packet_get_len(Packet *packet) {
     int len;
     if (!packet) {
         LOGD("There is nothing to point the Packet");
         return -1;
     }
 
-    len = get_payload_len(packet, NULL);
+    len = packet_get_payload_len(packet, NULL);
     if (len == -1) {
         LOGD("Failed to get packet_len");
         return -1;

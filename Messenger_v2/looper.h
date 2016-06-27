@@ -9,11 +9,11 @@ typedef struct _Looper Looper;
 typedef struct _Watcher Watcher;
 
 Looper* new_looper();
-int run(Looper *looper);
-void stop(Looper *looper);
-void add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, void *user_data, int revents), void *user_data, int events);
-void remove_watcher(Looper *looper, int fd);
-void remove_all_watchers(Looper *looper);
+int looper_run(Looper *looper);
+void looper_stop(Looper *looper);
+void looper_add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, void *user_data, int revents), void *user_data, int events);
+void looper_remove_watcher(Looper *looper, int fd);
+void looper_remove_all_watchers(Looper *looper);
 void destroy_looper(Looper *looper);
 
 #endif

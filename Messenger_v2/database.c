@@ -38,7 +38,7 @@ static int database_set_value(EntryPoint *entry_point, Stream_Buf *entry, int fi
         return FALSE;
     }
 
-    buf = get_buf(entry);
+    buf = stream_buf_get_buf(entry);
     if (!buf) {
         LOGD("Failed to get entry buf\n");
         return FALSE;
@@ -135,8 +135,8 @@ static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int whe
         return NULL;
     }
 
-    entry_buf = get_buf(entry);
-    field_buf = get_buf(field);
+    entry_buf = stream_buf_get_buf(entry);
+    field_buf = stream_buf_get_buf(field);
     if (!entry_buf || !field) {
         LOGD("Can't buf of entry or filed\n");
         return NULL;
@@ -153,13 +153,13 @@ static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int whe
                 }
                 buf_size += sizeof(int);
                 if (index == where - 1) {
-                    memcpy(get_available_buf(stream_buf), field_buf, get_available_size(stream_buf));
+                    memcpy(stream_buf_get_available(stream_buf), field_buf, stream_buf_get_available_size(stream_buf));
                 } else {
-                    memcpy(get_available_buf(stream_buf), entry_buf, get_available_size(stream_buf));
+                    memcpy(stream_buf_get_available(stream_buf), entry_buf, stream_buf_get_available_size(stream_buf));
                     entry_buf += sizeof(int);
                 }
 
-                increase_position(stream_buf, sizeof(int));
+                stream_buf_increase_position(stream_buf, sizeof(int));
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
                 break;
 
@@ -173,15 +173,15 @@ static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int whe
                 
                 if (index == where - 1) {
                     buf = field_buf;
-                    memcpy(get_available_buf(stream_buf), field_buf, get_available_size(stream_buf));
+                    memcpy(stream_buf_get_available(stream_buf), field_buf, stream_buf_get_available_size(stream_buf));
                     field_buf += sizeof(int);
                 } else {
                     buf = entry_buf;
-                    memcpy(get_available_buf(stream_buf), entry_buf, get_available_size(stream_buf));
+                    memcpy(stream_buf_get_available(stream_buf), entry_buf, stream_buf_get_available_size(stream_buf));
                     entry_buf += sizeof(int);
                 }
                 
-                increase_position(stream_buf, sizeof(int));
+                stream_buf_increase_position(stream_buf, sizeof(int));
                 memcpy(&len, buf, sizeof(int));
                 if (len < 0) {
                     LOGD("len value was wrong\n");
@@ -198,12 +198,12 @@ static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int whe
                 buf_size += len;
 
                 if (index == where -1) {
-                    memcpy(get_available_buf(stream_buf), field_buf, get_available_size(stream_buf));
+                    memcpy(stream_buf_get_available(stream_buf), field_buf, stream_buf_get_available_size(stream_buf));
                 } else {
-                    memcpy(get_available_buf(stream_buf), entry_buf, get_available_size(stream_buf));
+                    memcpy(stream_buf_get_available(stream_buf), entry_buf, stream_buf_get_available_size(stream_buf));
                     entry_buf += len;
                 }
-                increase_position(stream_buf, len);
+                stream_buf_increase_position(stream_buf, len);
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
                 break;
 
@@ -301,6 +301,18 @@ void destroy_database(DataBase *database) {
     free(database);
 }
 
+void database_delete_all(DataBase *database) {
+    if (!database) {
+        LOGD("There is nothing to point the DataBase\n");
+        return;
+    }
+
+    index_file_delete(database->index_file);
+    data_file_delete(database->data_file);
+
+    free(database);
+}
+
 int database_add_entry(DataBase *database, Stream_Buf *entry) {
     EntryPoint *entry_point;
     int offset, id, fd;
@@ -311,7 +323,7 @@ int database_add_entry(DataBase *database, Stream_Buf *entry) {
         return -1;
     }
 
-    offset = get_data_file_offset(database->data_file);
+    offset = data_file_get_offset(database->data_file);
     if (offset < 0) {
         LOGD("Failed to get data file offset\n");
         return -1;
@@ -323,7 +335,7 @@ int database_add_entry(DataBase *database, Stream_Buf *entry) {
         return -1;
     }
 
-    id = create_entry_point_id(database->index_file);
+    id = index_file_create_entry_point_id(database->index_file);
     if (id < 0) {
         LOGD("Failed to create the entry point id\n");
         return -1;
@@ -342,19 +354,19 @@ int database_add_entry(DataBase *database, Stream_Buf *entry) {
         return -1;
     }
 
-    result = set_last_id(database->index_file, id);
+    result = index_file_set_last_id(database->index_file, id);
     if (!result) {
         LOGD("Failed to set last id\n");
         return -1;
     }
 
-    result = add_entry_point(database->index_file, entry_point);
+    result = index_file_add_entry_point(database->index_file, entry_point);
     if (!result) {
         LOGD("Failed to add EntryPoint\n");
         return -1;
     }
 
-    result = update_index_file(database->index_file);
+    result = index_file_update(database->index_file);
     if (!result) {
         LOGD("Failed to update indexfile\n");
         return -1;
@@ -380,19 +392,26 @@ int database_get_entry_point_count(DataBase *database) {
 
 int delete_entry(DataBase *database, int entry_point_id) {
     EntryPoint *entry_point;
+    int result;
+
     if (!database) {
         LOGD("There is nothing to point the DataBase\n");
         return FALSE;
     }
 
-    entry_point = find_entry_point(database->index_file, entry_point_id);
+    entry_point = index_file_find_entry_point(database->index_file, entry_point_id);
     if (!entry_point) {
         LOGD("There is nothing to point the EntryPoint\n");
         return FALSE;
     }
 
-    delete_entry_point(database->index_file, entry_point);
-    update_index_file(database->index_file);
+    index_file_delete_entry_point(database->index_file, entry_point);
+    result = index_file_update(database->index_file);
+
+    if (!result) {
+        LOGD("Falied to update index file\n");
+        return FALSE;
+    }
 
     return TRUE;
 }
@@ -404,7 +423,7 @@ DList* database_get_entry_point_list(DataBase *database) {
         LOGD("There is nothing to point the DataBase\n");
         return NULL;
     }
-    list = get_list(database->index_file);
+    list = index_file_get_list(database->index_file);
     return list;
 }
 
@@ -421,7 +440,7 @@ int database_update_entry(DataBase *database, int id, int colum, Stream_Buf *fie
         return FALSE;
     }
 
-    entry_point = find_entry_point(database->index_file, id);
+    entry_point = index_file_find_entry_point(database->index_file, id);
     if (!entry_point) {
         LOGD("There is nothing to point the EntryPoint\n");
         return FALSE;
@@ -439,7 +458,7 @@ int database_update_entry(DataBase *database, int id, int colum, Stream_Buf *fie
         return FALSE;
     }
 
-    offset = get_data_file_offset(database->data_file);
+    offset = data_file_get_offset(database->data_file);
     if (offset < 0) {
         LOGD("Failed to get data file offset\n");
         return FALSE;
@@ -472,7 +491,7 @@ Stream_Buf* database_get_entry(DataBase *database, int id) {
         return NULL;
     }
 
-    entry_point = find_entry_point(database->index_file, id);
+    entry_point = index_file_find_entry_point(database->index_file, id);
     if (!entry_point) {
         LOGD("There is nothing to point the EntryPoint\n");
         return NULL;
@@ -510,7 +529,7 @@ EntryPoint* database_get_entry_point(DataBase *database, int id) {
         return NULL;
     }
 
-    entry_point = find_entry_point(database->index_file, id);
+    entry_point = index_file_find_entry_point(database->index_file, id);
     if (!entry_point) {
         LOGD("Failed to fined entry point\n");
         return NULL;

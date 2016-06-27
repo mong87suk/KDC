@@ -6,15 +6,15 @@ typedef struct _Message Message;
 Message* new_mesg(long int time, int str_len, char *str);
 void destroy_mesg(Message *mesg);
 
-int set_time(Message *mesg, long int time);
-int set_str_len(Message *mesg, int str_len);
-int set_str(Message *mesg, char *str);
+int message_set_time(Message *mesg, long int time);
+int message_set_str_len(Message *mesg, int str_len);
+int message_set_str(Message *mesg, char *str);
 
-long int get_time(Message *mesg);
-int get_str_len(Message *mesg);
-char* get_str(Message *mesg);
-int get_message_size();
+long int message_get_time(Message *mesg);
+int message_get_str_len(Message *mesg);
+char* message_get_str(Message *mesg);
+int message_get_size();
 
-Message *create_mesg_array(int lne);
-Message* next_mesg(Message* mesgs, int i);
+Message* message_create_array(int lne);
+Message* message_next(Message* mesgs, int i);
 #endif

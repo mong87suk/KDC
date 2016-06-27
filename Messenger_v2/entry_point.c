@@ -52,10 +52,6 @@ void destroy_entry_point(EntryPoint *entry_point) {
     free(entry_point);
 }
 
-int entry_point_get_size() {
-    return ENTRY_POINT_SIZE;
-}
-
 Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
@@ -96,7 +92,7 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
         return NULL;
     }
 
-    n_byte = read_n_byte(fd, &id, sizeof(id));
+    n_byte = utils_read_n_byte(fd, &id, sizeof(id));
     if (n_byte != sizeof(id)) {
         LOGD("Failed to read id\n");
         return NULL;
@@ -123,12 +119,12 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
                     return NULL;
                 }
                 buf_size += sizeof(int);
-                n_byte = read_n_byte(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
+                n_byte = utils_read_n_byte(fd, stream_buf_get_available(stream_buf), stream_buf_get_available_size(stream_buf));
                 if (n_byte != sizeof(int)) {
                     LOGD("Failed to write n byte\n");
                     return NULL;
                 }
-                increase_position(stream_buf, n_byte);
+                stream_buf_increase_position(stream_buf, n_byte);
 
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
                 break;
@@ -140,13 +136,13 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
                     return NULL;
                 }
 
-                n_byte = read_n_byte(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
+                n_byte = utils_read_n_byte(fd, stream_buf_get_available(stream_buf), stream_buf_get_available_size(stream_buf));
                 if (n_byte != sizeof(int)) {
                     LOGD("Failed to write n byte\n");
                     return NULL;
                 }
-                increase_position(stream_buf, n_byte);
-                buf = get_buf(stream_buf);
+                stream_buf_increase_position(stream_buf, n_byte);
+                buf = stream_buf_get_buf(stream_buf);
                 memcpy(&len, buf, n_byte);
                 if (len < 0) {
                     LOGD("len value was wrong\n");
@@ -160,12 +156,12 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
                     return NULL;
                 }
                 buf_size += len;
-                n_byte = read_n_byte(fd, get_available_buf(stream_buf), get_available_size(stream_buf));
+                n_byte = utils_read_n_byte(fd, stream_buf_get_available(stream_buf), stream_buf_get_available_size(stream_buf));
                 if (n_byte != len) {
                     LOGD("Failed to write n byte\n");
                     return FALSE;
                 }
-                increase_position(stream_buf, n_byte);
+                stream_buf_increase_position(stream_buf, n_byte);
 
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
                 break;

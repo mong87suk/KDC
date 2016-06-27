@@ -40,7 +40,7 @@ void destroy_mesg(Message *mesg) {
 
     free(mesg);
 }
-int set_time(Message *mesg, long int time) {
+int message_set_time(Message *mesg, long int time) {
     if (!mesg) {
         LOGD("Failed to set the time\n");
         return FALSE;
@@ -50,7 +50,7 @@ int set_time(Message *mesg, long int time) {
     return TRUE;
 }
 
-int set_str_len(Message *mesg, int str_len) {
+int message_set_str_len(Message *mesg, int str_len) {
     if (!mesg) {
         LOGD("Failed to set the str_len\n");
         return FALSE;
@@ -60,7 +60,7 @@ int set_str_len(Message *mesg, int str_len) {
     return TRUE;
 }
 
-int set_str(Message *mesg, char *str) {
+int message_set_str(Message *mesg, char *str) {
     if (!mesg) {
         LOGD("Failed to set the str\n");
         return FALSE;
@@ -70,7 +70,7 @@ int set_str(Message *mesg, char *str) {
     return TRUE;
 }
 
-long int get_time(Message *mesg) {
+long int message_get_time(Message *mesg) {
     if (!mesg) {
         LOGD("There is nothing to point the mesg\n");
         return -1;
@@ -79,7 +79,7 @@ long int get_time(Message *mesg) {
     return mesg->time;
 }
 
-int get_str_len(Message *mesg) {
+int message_get_str_len(Message *mesg) {
     if (!mesg) {
         LOGD("There is nothing to point the str_len\n");
         return -1;
@@ -88,7 +88,7 @@ int get_str_len(Message *mesg) {
     return mesg->str_len;
 }
 
-char* get_str(Message *mesg) {
+char* message_get_str(Message *mesg) {
     if (!mesg) {
         LOGD("There is nothing to point the mesg\n");
         return NULL;
@@ -97,11 +97,11 @@ char* get_str(Message *mesg) {
     return mesg->str;
 }
 
-int get_message_size() {
+int message_get_size() {
     return sizeof(Message);
 }
 
-Message* create_mesg_array(int len) {
+Message* message_create_array(int len) {
     Message *mesgs;
     if (len == 0) {
         LOGD("Len is zero\n");
@@ -117,7 +117,7 @@ Message* create_mesg_array(int len) {
     return mesgs;
 }
 
-Message* next_mesg(Message *mesgs, int i) {
+Message* message_next(Message *mesgs, int i) {
     if (!mesgs) {
         LOGD("There is nothing to point the message\n");
         return NULL;

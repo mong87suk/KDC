@@ -10,8 +10,8 @@
 
 #define LOGD(fmt, ...) printf("[DEBUG]\t%s:%d %s " fmt, __FILE__, __LINE__, __func__, ## __VA_ARGS__)
 
-void print_mesg(Message *mesg);
-int read_n_byte(int fd, void *buf, int size);
+void utils_print_mesg(Message *mesg);
+int utils_read_n_byte(int fd, void *buf, int size);
 int write_n_byte(int fd, void *buf, int size);
 int utils_get_count_to_move_flag(int field_mask);
 int utils_append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf);

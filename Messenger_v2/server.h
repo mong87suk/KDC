@@ -4,11 +4,6 @@
 #include "looper.h"
 
 typedef enum {
-    ADD_CLIENT_SUCCESS = 1,
-    ADD_CLIENT_FAILURE = -1
-} ADD_CLIENT_RESULT;
-
-typedef enum {
     APPEND_DATA_SUCCESS = 1,
     APPEND_DATA_FAILURE  = -1
 } APPEND_DATA_RESULT;

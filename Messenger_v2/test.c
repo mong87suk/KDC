@@ -33,18 +33,18 @@ int main() {
 
     stream_buf = new_stream_buf(12);
     assert(stream_buf);
-    buf = get_buf(stream_buf);
+    buf = stream_buf_get_buf(stream_buf);
     assert(buf);
     num = 1;
     len = 4;
     str = "aaaa";
-    memcpy(get_available_buf(stream_buf), &num, sizeof(num));
-    increase_position(stream_buf, sizeof(num));
+    memcpy(stream_buf_get_available(stream_buf), &num, sizeof(num));
+    stream_buf_increase_position(stream_buf, sizeof(num));
 
-    memcpy(get_available_buf(stream_buf), &len, sizeof(len));
-    increase_position(stream_buf, sizeof(len));
+    memcpy(stream_buf_get_available(stream_buf), &len, sizeof(len));
+    stream_buf_increase_position(stream_buf, sizeof(len));
 
-    memcpy(get_available_buf(stream_buf), str, len);
+    memcpy(stream_buf_get_available(stream_buf), str, len);
 
     count = database_get_entry_point_count(database);
     database_add_entry(database, stream_buf);
@@ -54,7 +54,7 @@ int main() {
 
     database_add_entry(database, stream_buf);
     entry = database_get_entry(database, 1);
-    buf = get_buf(entry);
+    buf = stream_buf_get_buf(entry);
     assert(buf);
 
     num = 0;
@@ -76,7 +76,7 @@ int main() {
 
     num = 2;
     field_buf = new_stream_buf(4);
-    buf = get_buf(field_buf);
+    buf = stream_buf_get_buf(field_buf);
     memcpy(buf, &num, sizeof(num));
 
     database_update_entry(database, 1, 1, field_buf);
@@ -84,7 +84,7 @@ int main() {
 
     len = 4;
     field_buf = new_stream_buf(8);
-    buf = get_buf(field_buf);
+    buf = stream_buf_get_buf(field_buf);
     memcpy(buf, &len, sizeof(len));
 
     str = "bbbb";
@@ -93,7 +93,7 @@ int main() {
     destroy_stream_buf(field_buf);
 
     entry = database_get_entry(database, 1);
-    buf = get_buf(entry);
+    buf = stream_buf_get_buf(entry);
     assert(buf);
 
     num = 0;

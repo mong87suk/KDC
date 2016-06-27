@@ -8,7 +8,7 @@
 #include "utils.h"
 #include "message.h"
 
-static void print_buf(char *buf, int len) {
+static void converter_print_buf(char *buf, int len) {
     int i;
 
     if (!buf) {
@@ -22,38 +22,9 @@ static void print_buf(char *buf, int len) {
     printf("\n\n");
 }
 
-static void print_payload(char *buf, int len) {
-    int i;
-
-    if (!buf) {
-        LOGD("Can't check the buf\n");
-        return;
-    }
-    printf("\n");
-
-    for (i = 0; i < sizeof(long int); i++) {
-        printf("0x%02X ", (unsigned char) buf[i]);
-    }
-
-    len -= sizeof(long int);
-    buf += sizeof(long int);
-
-    for (i = 0; i < sizeof(int); i++) {
-        printf("0x%02X ", (unsigned char) buf[i]);
-    }
-
-    len -= sizeof(int);
-    buf += sizeof(int);
-
-    for (i = 0; i < len; i++) {
-        printf(" %2C", (unsigned char) buf[i]);
-    }
-    printf("\n\n");
-}
-
-static void print_packet(Packet *packet) {
+static void converter_print_packet(Packet *packet) {
     char sop, eop;
-    short op_code, check_sum;
+    short op_code, checksum;
     long int payload_len;
     char *payload, *pos;
     Header *header;
@@ -61,27 +32,27 @@ static void print_packet(Packet *packet) {
     Tail *tail;
     int i;
 
-    header = get_header(packet);
+    header = packet_get_header(packet);
     if (!header) {
         LOGD("Failed to get header\n");
         return;
     }
 
-    tail = get_tail(packet);
+    tail = packet_get_tail(packet);
     if (!tail) {
         LOGD("Failed to get tail\n");
         return;
     }
 
     LOGD("Print Header\n\n");
-    sop = get_sop(NULL, header);
+    sop = packet_get_sop(NULL, header);
     printf("0x%02X ", (unsigned char) sop);
-    op_code = get_op_code(NULL, header);
+    op_code = packet_get_op_code(NULL, header);
     pos = (char*) &op_code;
     for (i = 0; i < sizeof(op_code); i++) {
         printf("0x%02X ", (unsigned char)*(pos + i));
     }
-    payload_len = get_payload_len(NULL, header);
+    payload_len = packet_get_payload_len(NULL, header);
     pos = (char*) &payload_len;
     for (i = 0; i < sizeof(payload_len); i++) {
         printf("0x%02X ", (unsigned char)*(pos + i));
@@ -90,25 +61,25 @@ static void print_packet(Packet *packet) {
 
     if (payload_len > 0) {
         LOGD("Print Body\n");
-        body = get_body(packet);
+        body = packet_get_body(packet);
         if (!body) {
             LOGD("Failed to get the body\n");
             return;
         }
-        payload = get_payload(NULL, body);
+        payload = packet_get_payload(NULL, body);
 
-        print_buf(payload, payload_len);
+        converter_print_buf(payload, payload_len);
     }
 
     LOGD("Print Tail\n\n");
-    eop = get_eop(NULL, tail);
+    eop = packet_get_eop(NULL, tail);
     pos = (char*) &eop;
     for (i = 0; i < sizeof(eop); i++) {
         printf("0x%02X ", (unsigned char)(*(pos + i)));
     }
-    check_sum = get_check_sum(NULL, tail);
-    pos = (char*) &check_sum;
-    for (i = 0; i < sizeof(check_sum); i++) {
+    checksum = packet_get_checksum(NULL, tail);
+    pos = (char*) &checksum;
+    for (i = 0; i < sizeof(checksum); i++) {
         printf("0x%02X ", (unsigned char)(*(pos + i)));
     }
     printf("\n\n");
@@ -120,7 +91,7 @@ Packet* convert_buf_to_packet(char *buf) {
     Body *body;
     Tail *tail;
     char sop, eop;
-    short op_code, check_sum;
+    short op_code, checksum;
     long int payload_len;
     char *payload;
     short result;
@@ -130,8 +101,8 @@ Packet* convert_buf_to_packet(char *buf) {
         return NULL;
     }
 
-    packet_size = get_packet_size();
-    check_sum = 0;
+    packet_size = packet_get_size();
+    checksum = 0;
     packet = (Packet*) malloc(packet_size);
     if (!packet) {
         LOGD("Failed to make the Packet\n");
@@ -139,28 +110,28 @@ Packet* convert_buf_to_packet(char *buf) {
     }
     memset(packet, 0, packet_size);
 
-    header = new_header(0, 0, 0);
+    header = packet_new_header(0, 0, 0);
     if (!header) {
         LOGD("Faield to make the Header\n");
         destroy_packet(packet);
         return NULL;
     }
 
-    result = set_header(packet, header);
+    result = packet_set_header(packet, header);
     if (result == FALSE) {
         LOGD("Failed to set the header\n");
         destroy_packet(packet);
         return NULL;
     }
 
-    tail = new_tail(0, 0);
+    tail = packet_new_tail(0, 0);
     if (!tail) {
         LOGD("Failed to make the Tail\n");
         destroy_packet(packet);
         return NULL;
     }
 
-    result = set_tail(packet, tail);
+    result = packet_set_tail(packet, tail);
     if (result == FALSE) {
         LOGD("Failed to set the tail\n");
         destroy_packet(packet);
@@ -168,15 +139,15 @@ Packet* convert_buf_to_packet(char *buf) {
     }
 
     sop = buf[0];
-    result = set_sop(packet, sop);
+    result = packet_set_sop(packet, sop);
     buf += sizeof(sop);
 
     memcpy(&op_code, buf, sizeof(op_code));
-    result = set_op_code(packet, op_code);
+    result = packet_set_op_code(packet, op_code);
     buf += sizeof(op_code);
 
     memcpy(&payload_len, buf, sizeof(payload_len));
-    result = set_payload_len(packet, payload_len);
+    result = packet_set_payload_len(packet, payload_len);
     buf += sizeof(payload_len);
 
     LOGD("payload_len:%ld\n", payload_len);
@@ -187,14 +158,14 @@ Packet* convert_buf_to_packet(char *buf) {
             return FALSE;
         }
         memcpy(payload, buf, payload_len);
-        body = new_body(payload);
-        result = set_body(packet, body);
+        body = packet_new_body(payload);
+        result = packet_set_body(packet, body);
         if (result == FALSE) {
             LOGD("Failed to set the Body\n");
             return FALSE;
         }
 
-        result = set_payload(packet, payload);
+        result = packet_set_payload(packet, payload);
         if (result == FALSE) {
             LOGD("Failed to set the payload\n");
             return FALSE;
@@ -203,22 +174,22 @@ Packet* convert_buf_to_packet(char *buf) {
     }
 
     memcpy(&eop, buf, sizeof(eop));
-    result = set_eop(packet, eop);
+    result = packet_set_eop(packet, eop);
     if (result == FALSE) {
         LOGD("Failed to set the eop\n");
         return FALSE;
     }
     buf += sizeof(eop);
 
-    memcpy(&check_sum, buf, sizeof(check_sum));
-    LOGD("chekc_sum:%d\n", check_sum);
-    result = set_check_sum(packet, check_sum);
+    memcpy(&checksum, buf, sizeof(checksum));
+    LOGD("chekc_sum:%d\n", checksum);
+    result = packet_set_checksum(packet, checksum);
     if (result == FALSE) {
         LOGD("Failed to set the check_sum\n");
         return FALSE;
     }
 
-    print_packet(packet);
+    converter_print_packet(packet);
     return packet;
 }
 
@@ -228,56 +199,56 @@ short convert_packet_to_buf(Packet *packet, char *buf) {
     Tail *tail;
     char *payload, *tmp_dest;
     char sop, eop;
-    short op_code, check_sum;
+    short op_code, checksum;
 
     payload_len = 0;
 
     if (!packet || !buf) {
-        printf("%s %s Can't convert packet to buf\n", __FILE__, __func__);
+        LOGD("Can't convert packet to buf\n");
         return FALSE;
     }
     tmp_dest = buf;
-    header = get_header(packet);
-    tail = get_tail(packet);
-    payload_len = get_payload_len(packet, NULL);
+    header = packet_get_header(packet);
+    tail = packet_get_tail(packet);
+    payload_len = packet_get_payload_len(packet, NULL);
     if (!header || !tail) {
-        printf("%s %s Can't convert packet to binary\n", __FILE__, __func__);
+        LOGD("Can't convert packet to binary\n");
         return FALSE;
     }
 
     LOGD("Start to copy Header\n");
-    sop = get_sop(packet, NULL);
+    sop = packet_get_sop(packet, NULL);
     memcpy(tmp_dest, &sop, sizeof(sop));
 
-    op_code = get_op_code(packet, NULL);
+    op_code = packet_get_op_code(packet, NULL);
     tmp_dest += sizeof(sop);
     memcpy(tmp_dest, &op_code, sizeof(op_code));
 
-    payload_len = get_payload_len(packet, NULL);
+    payload_len = packet_get_payload_len(packet, NULL);
     tmp_dest += sizeof(op_code);
     memcpy(tmp_dest, &payload_len, sizeof(payload_len));
-    print_buf(buf, HEADER_SIZE);
+    converter_print_buf(buf, HEADER_SIZE);
     LOGD("Finished to copy Header\n");
     tmp_dest += sizeof(payload_len);
 
     if (payload_len) {
         LOGD("Strart to copy Body\n");
-        payload = get_payload(packet, NULL);
+        payload = packet_get_payload(packet, NULL);
         memcpy(tmp_dest, payload, payload_len);
 
-        print_buf(buf + HEADER_SIZE, payload_len);
+        converter_print_buf(buf + HEADER_SIZE, payload_len);
         tmp_dest += payload_len;
         LOGD("Finished to copy Body\n");
     }
 
     LOGD("Start to copy Tail\n");
-    eop = get_eop(packet, NULL);
+    eop = packet_get_eop(packet, NULL);
     memcpy(tmp_dest, &eop, sizeof(eop));
 
     tmp_dest += sizeof(eop);
-    check_sum = get_check_sum(packet, NULL);
-    memcpy(tmp_dest, &check_sum, sizeof(check_sum));
-    print_buf(buf + HEADER_SIZE + payload_len, TAIL_SIZE);
+    checksum = packet_get_checksum(packet, NULL);
+    memcpy(tmp_dest, &checksum, sizeof(checksum));
+    converter_print_buf(buf + HEADER_SIZE + payload_len, TAIL_SIZE);
     LOGD("Finished to copy Tail\n\n");
     return TRUE;
 }
@@ -300,13 +271,13 @@ Message* convert_payload_to_mesgs(char *payload, int *mesg_num) {
     LOGD("Message number: %d\n", n);
     payload += sizeof(n);
 
-    mesg_size = get_message_size();
+    mesg_size = message_get_size();
     mesgs_size = n * mesg_size;
     mesgs = (Message*) malloc(mesgs_size);
     tmp = mesgs;
 
     for (i = 0; i < n; i++) {
-        mesgs = next_mesg(tmp, i);
+        mesgs = message_next(tmp, i);
         mesg = convert_payload_to_mesg(payload, &mesg_len);
         if (!mesg) {
             continue;
@@ -329,8 +300,8 @@ Message* convert_payload_to_mesg(char *payload, int *mesg_len) {
         LOGD("Can't convert payload to Message\n");
         return NULL;
     }
-    mesg_size = get_message_size();
-    mesg = (Message*) malloc(get_message_size());
+    mesg_size = message_get_size();
+    mesg = (Message*) malloc(message_get_size());
     if (!mesg) {
         LOGD("Failed to make message \n");
         return NULL;
@@ -339,11 +310,11 @@ Message* convert_payload_to_mesg(char *payload, int *mesg_len) {
 
     memcpy(&time, payload, sizeof(time));
     payload += sizeof(time);
-    set_time(mesg, time);
+    message_set_time(mesg, time);
 
     memcpy(&len, payload, sizeof(len));
     payload += sizeof(len);
-    set_str_len(mesg, len);
+    message_set_str_len(mesg, len);
 
     str = (char*) malloc(len);
     if (!str) {
@@ -351,7 +322,7 @@ Message* convert_payload_to_mesg(char *payload, int *mesg_len) {
         return NULL;
     }
     memcpy(str, payload, len);
-    set_str(mesg, str);
+    message_set_str(mesg, str);
 
     if (mesg_len) {
         *mesg_len = sizeof(time) + sizeof(len) + len;
@@ -373,11 +344,11 @@ int convert_mesgs_to_payload(Message *mesgs, char *payload, int len) {
     str_len = 0;
     tmp = payload;
     memcpy(tmp, &len, sizeof(len));
-    print_buf(tmp, sizeof(len));
+    converter_print_buf(tmp, sizeof(len));
     tmp += sizeof(len);
 
     for (i = 0; i < len; i++) {
-        mesg = next_mesg(mesgs, i);
+        mesg = message_next(mesgs, i);
         if (!mesg) {
             LOGD("There is nothing to point the mesg\n");
             return FALSE;
@@ -387,31 +358,31 @@ int convert_mesgs_to_payload(Message *mesgs, char *payload, int len) {
             tmp += str_len;
         }
 
-        time = get_time(mesg);
+        time = message_get_time(mesg);
         if (time == -1) {
             LOGD("Failed to get the time\n");
             return FALSE;
         }
         memcpy(tmp, &time, sizeof(time));
-        print_buf(tmp, sizeof(time));
+        converter_print_buf(tmp, sizeof(time));
         tmp += sizeof(time);
 
-        str_len = get_str_len(mesg);
+        str_len = message_get_str_len(mesg);
         if (str_len == -1) {
             LOGD("Failed to get the str_len\n");
             return FALSE;
         }
         memcpy(tmp, &str_len, sizeof(str_len));
-        print_buf(tmp, sizeof(str_len));
+        converter_print_buf(tmp, sizeof(str_len));
         tmp += sizeof(str_len);
 
-        str = get_str(mesg);
+        str = message_get_str(mesg);
         if (!str) {
             LOGD("Faield to get the str\n");
             return FALSE;
         }
         memcpy(tmp, str, str_len);
-        print_buf(tmp, str_len);
+        converter_print_buf(tmp, str_len);
     }
 
     return TRUE;

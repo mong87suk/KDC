@@ -9,7 +9,7 @@ int main() {
     looper = new_looper();
     client = new_client(looper);
 
-    state = run(looper);
+    state = looper_run(looper);
 
     destroy_client(client);
     destroy_looper(looper);

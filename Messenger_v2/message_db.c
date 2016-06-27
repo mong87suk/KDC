@@ -16,7 +16,7 @@ struct _MessageDB {
     DataBase *database;
 };
 
-static int comp_field_mask(int field_mask1, int field_mask2) {
+static int message_db_comp_field_mask(int field_mask1, int field_mask2) {
     if (field_mask1 < 0 || field_mask2 < 0) {
         LOGD("the Field mask was wrong\n");
         return FALSE;
@@ -29,7 +29,7 @@ static int comp_field_mask(int field_mask1, int field_mask2) {
     return FALSE;
 }
 
-static Stream_Buf* convert_message_to_entry(Message *mesg, int field_mask) {
+static Stream_Buf* message_db_convert_message_to_entry(Message *mesg, int field_mask) {
     int mesg_time;
     int len;
     int colum, count, buf_size;
@@ -60,19 +60,19 @@ static Stream_Buf* convert_message_to_entry(Message *mesg, int field_mask) {
                 LOGD("Failed to make the StreamBuf\n");
                 return NULL;
             }
-            mesg_time = (int) get_time(mesg);
+            mesg_time = (int) message_get_time(mesg);
             if (mesg_time < 0) {
                 LOGD("Failed to get the mesg time\n");
                 return NULL;
             }
             buf_size += sizeof(int);
-            memcpy(get_available_buf(stream_buf), &mesg_time, sizeof(int));
-            increase_position(stream_buf, sizeof(int));
+            memcpy(stream_buf_get_available(stream_buf), &mesg_time, sizeof(int));
+            stream_buf_increase_position(stream_buf, sizeof(int));
             stream_buf_list = d_list_append(stream_buf_list, stream_buf);
             break;
 
         case STRING_FIELD:
-            len = get_str_len(mesg);
+            len = message_get_str_len(mesg);
             if (len < 0) {
                 LOGD("Failed to get the str len\n");
                 return NULL;
@@ -83,11 +83,11 @@ static Stream_Buf* convert_message_to_entry(Message *mesg, int field_mask) {
                 return NULL;
             }
             buf_size += sizeof(int);
-            memcpy(get_available_buf(stream_buf), &len, sizeof(int));
-            increase_position(stream_buf, sizeof(int));
+            memcpy(stream_buf_get_available(stream_buf), &len, sizeof(int));
+            stream_buf_increase_position(stream_buf, sizeof(int));
             stream_buf_list = d_list_append(stream_buf_list, stream_buf);
 
-            str = get_str(mesg);
+            str = message_get_str(mesg);
             if (!str) {
                 LOGD("Failed to get the str\n");
                 return NULL;
@@ -98,8 +98,8 @@ static Stream_Buf* convert_message_to_entry(Message *mesg, int field_mask) {
                 return NULL;
             }
             buf_size += len;
-            memcpy(get_available_buf(stream_buf), str, len);
-            increase_position(stream_buf, len);
+            memcpy(stream_buf_get_available(stream_buf), str, len);
+            stream_buf_increase_position(stream_buf, len);
             stream_buf_list = d_list_append(stream_buf_list, stream_buf);
 
             break;
@@ -121,7 +121,7 @@ static Stream_Buf* convert_message_to_entry(Message *mesg, int field_mask) {
     return stream_buf;
 }
 
-Message* convert_entry_to_message(Stream_Buf *entry, int field_mask) {
+Message* message_db_convert_entry_to_message(Stream_Buf *entry, int field_mask) {
     char *buf, *str;
     int colum, count;
     int len, mesg_time;
@@ -132,7 +132,7 @@ Message* convert_entry_to_message(Stream_Buf *entry, int field_mask) {
         return NULL;
     }
 
-    buf = get_buf(entry);
+    buf = stream_buf_get_buf(entry);
     if (!buf) {
         LOGD("Failed to get the buf\n");
         return NULL;
@@ -219,18 +219,29 @@ MessageDB* new_message_db(char *data_format) {
     return message_db;
 }
 
-void destroy_message_db(MessageDB* message_db) {
-    if(!message_db) {
+void destroy_message_db(MessageDB* mesg_db) {
+    if(!mesg_db) {
         LOGD("There is nothing to point the MessageDB\n");
         return;
     }
 
-    free(message_db->data_format);
-    free(message_db);
+    destroy_database(mesg_db->database);
+    free(mesg_db->data_format);
+    free(mesg_db);
 }
 
+void message_db_delete_all(MessageDB *mesg_db) {
+    if (!mesg_db) {
+        LOGD("There is nothing to point the MessageDB\n");
+        return;
+    }
 
-int add_message(MessageDB *mesg_db, Message *mesg) {
+    database_delete_all(mesg_db->database);
+    free(mesg_db->data_format);
+    free(mesg_db);
+}
+
+int message_db_add_message(MessageDB *mesg_db, Message *mesg) {
     int field_mask;
     Stream_Buf *entry;
     int id;
@@ -242,15 +253,13 @@ int add_message(MessageDB *mesg_db, Message *mesg) {
     }
     
     field_mask = database_convert_data_format_to_field_mask(mesg_db->data_format);
-    result = comp_field_mask(field_mask, database_get_field_mask(mesg_db->database));
+    result = message_db_comp_field_mask(field_mask, database_get_field_mask(mesg_db->database));
     if (!result) {
         LOGD("Filed mask is not matched\n");
         return -1;
     }
 
-    LOGD("convert_message_to_entry\n");
-    entry = convert_message_to_entry(mesg, field_mask);
-    LOGD("convert_message_to_entry\n");
+    entry = message_db_convert_message_to_entry(mesg, field_mask);
     if (!entry) {
         LOGD("Failed to convert messaget to entry\n");
         return -1;
@@ -265,7 +274,7 @@ int add_message(MessageDB *mesg_db, Message *mesg) {
     return id;
 }
 
-DList* get_messages(MessageDB *mesg_db, int pos, int count) {
+DList* message_db_get_messages(MessageDB *mesg_db, int pos, int count) {
     int i;
     int field_mask, result;
     DList *mesg_list;
@@ -284,7 +293,7 @@ DList* get_messages(MessageDB *mesg_db, int pos, int count) {
     }
 
     field_mask = database_convert_data_format_to_field_mask(mesg_db->data_format);
-    result = comp_field_mask(field_mask, database_get_field_mask(mesg_db->database));
+    result = message_db_comp_field_mask(field_mask, database_get_field_mask(mesg_db->database));
     if (!result) {
         LOGD("Filed mask is not matched\n");
         return NULL;
@@ -300,7 +309,7 @@ DList* get_messages(MessageDB *mesg_db, int pos, int count) {
             continue;
         }
         entry = entry_point_get_value(entry_point);
-        mesg = convert_entry_to_message(entry, field_mask);
+        mesg = message_db_convert_entry_to_message(entry, field_mask);
         if (!mesg) {
             LOGD("Failed to convert\n");
             return NULL;
@@ -329,3 +338,5 @@ int message_db_get_message_count(MessageDB *mesg_db) {
 
     return count;
 }
+
+

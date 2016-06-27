@@ -44,7 +44,7 @@ void destroy_stream_buf(Stream_Buf *stream_buf) {
     free(stream_buf);
 }
 
-char* get_available_buf(Stream_Buf *stream_buf) {
+char* stream_buf_get_available(Stream_Buf *stream_buf) {
     if (!stream_buf && !stream_buf->buf) {
         LOGD("There is nothing to point Stream_Buf\n");
         return NULL;
@@ -52,7 +52,7 @@ char* get_available_buf(Stream_Buf *stream_buf) {
     return stream_buf->buf + stream_buf->position;
 }
 
-int get_position(Stream_Buf *stream_buf) {
+int stream_buf_get_position(Stream_Buf *stream_buf) {
     if (!stream_buf) {
         LOGD("There is nothing to point the Stream_Buf\n");
         return 0;
@@ -60,7 +60,7 @@ int get_position(Stream_Buf *stream_buf) {
     return stream_buf->position;
 }
 
-int get_available_size(Stream_Buf *stream_buf) {
+int stream_buf_get_available_size(Stream_Buf *stream_buf) {
     if (!stream_buf) {
         LOGD("There is nothing to point the Stream_Buf\n");
         return 0;
@@ -69,7 +69,7 @@ int get_available_size(Stream_Buf *stream_buf) {
     return stream_buf->len - stream_buf->position;
 }
 
-short increase_position(Stream_Buf *stream_buf, int n_byte) {
+short stream_buf_increase_position(Stream_Buf *stream_buf, int n_byte) {
     if (!stream_buf) {
         LOGD("There is nothing to point the Stream_Buf\n");
         return FALSE;
@@ -78,7 +78,7 @@ short increase_position(Stream_Buf *stream_buf, int n_byte) {
     return TRUE;
 }
 
-char* get_buf(Stream_Buf *stream_buf) {
+char* stream_buf_get_buf(Stream_Buf *stream_buf) {
     if (!stream_buf && !stream_buf->buf) {
         LOGD("There is nothing to point the Stream_Buf\n");
         return NULL;

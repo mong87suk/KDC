@@ -55,7 +55,7 @@ void data_file_close(DataFile *data_file) {
     }
 
     if (close(data_file->fd) < 0) {
-        LOGD("Faield to unlink\n");
+        LOGD("Faield to close\n");
         return;
     }
     
@@ -64,7 +64,28 @@ void data_file_close(DataFile *data_file) {
     return;
 }
 
-int get_data_file_offset(DataFile *data_file) {
+void data_file_delete(DataFile *data_file) {
+    if (!data_file) {
+        LOGD("There is nothing to point the Data_File\n");
+        return;
+    }
+
+    if (close(data_file->fd) < 0) {
+        LOGD("Faield to close\n");
+        return;
+    }
+
+    if (unlink(data_file->path) < 0) {
+        LOGD("Failed to unlink\n");
+        return;
+    }
+
+    free(data_file->path);
+    free(data_file);
+    return;
+}
+ 
+int data_file_get_offset(DataFile *data_file) {
     int offset;
     if (!data_file) {
         LOGD("There is nothing to point the Data_File\n");

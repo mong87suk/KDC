@@ -1,6 +1,7 @@
 #ifndef __ENTRY_POINT_H__
 #define __ENTRY_POINT_H__
 
+#include "mesg_type.h"
 #include "stream_buf.h"
 #include "database.h"
 
@@ -11,7 +12,6 @@
 
 EntryPoint* new_entry_point(int id, int offset, DataBase *database);
 void destroy_entry_point(EntryPoint *entry_point);
-int entry_point_get_size();
 int entry_point_get_id(EntryPoint *entry_point);
 Stream_Buf* entry_point_get_value(EntryPoint *entry_point);
 int entry_point_set_offset(EntryPoint *entry_point, int offset);
