@@ -75,7 +75,7 @@ static void client_append_data(void *data, void *user_data) {
     copy_n = stream_buf_get_position(data_stream_buf);
 
     memcpy(dest, src, copy_n);
-    stream_buf_increase_position(user_data_stream_buf, copy_n);
+    stream_buf_increase_pos(user_data_stream_buf, copy_n);
 }
 
 static void client_destroy_stream_buf(void *data) {
@@ -252,7 +252,7 @@ static void client_handle_res_events(Client *client, int fd) {
             return;
         }
 
-        result = stream_buf_increase_position(stream_buf, n_byte);
+        result = stream_buf_increase_pos(stream_buf, n_byte);
         if (result == FALSE) {
             LOGD("Failed to set the position\n");
             client_destroy_stream_buf_list(client);
@@ -352,7 +352,7 @@ static void client_handle_res_events(Client *client, int fd) {
             return;
         }
 
-        result = stream_buf_increase_position(stream_buf, n_byte);
+        result = stream_buf_increase_pos(stream_buf, n_byte);
         if (result == FALSE) {
             LOGD("Failed to set the position\n");
             client_destroy_stream_buf_list(client);
@@ -721,7 +721,7 @@ static void client_handle_stdin_event(Client *client, int fd) {
         return;
     }
 
-    result = stream_buf_increase_position(stream_buf, n_byte);
+    result = stream_buf_increase_pos(stream_buf, n_byte);
     if (result == FALSE) {
         LOGD("Failed to set the position\n");
         client_destroy_stdin_stream_buf_list(client);

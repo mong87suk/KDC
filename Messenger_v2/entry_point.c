@@ -124,7 +124,7 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
                     LOGD("Failed to write n byte\n");
                     return NULL;
                 }
-                stream_buf_increase_position(stream_buf, n_byte);
+                stream_buf_increase_pos(stream_buf, n_byte);
 
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
                 break;
@@ -141,7 +141,7 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
                     LOGD("Failed to write n byte\n");
                     return NULL;
                 }
-                stream_buf_increase_position(stream_buf, n_byte);
+                stream_buf_increase_pos(stream_buf, n_byte);
                 buf = stream_buf_get_buf(stream_buf);
                 memcpy(&len, buf, n_byte);
                 if (len < 0) {
@@ -161,7 +161,7 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
                     LOGD("Failed to write n byte\n");
                     return FALSE;
                 }
-                stream_buf_increase_position(stream_buf, n_byte);
+                stream_buf_increase_pos(stream_buf, n_byte);
 
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
                 break;

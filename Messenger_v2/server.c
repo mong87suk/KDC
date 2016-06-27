@@ -182,7 +182,7 @@ static void server_append_data(void *data, void *user_data) {
     copy_n = stream_buf_get_position(data_stream_buf);
 
     memcpy(dest, src, copy_n);
-    stream_buf_increase_position(user_data_stream_buf, copy_n);
+    stream_buf_increase_pos(user_data_stream_buf, copy_n);
 }
 
 static int server_append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf) {
@@ -418,7 +418,7 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
             return NULL;
         }
 
-        result = message_db_add_message(server->mesg_db, mesg);
+        result = message_db_add_mesg(server->mesg_db, mesg);
         if (!result) {
             LOGD("Failed to add the Message\n");
             return NULL;
@@ -868,7 +868,7 @@ static void server_handle_req_event(Server *server, int fd) {
             return;
         }
 
-        result = stream_buf_increase_position(stream_buf, n_byte);
+        result = stream_buf_increase_pos(stream_buf, n_byte);
         if (result == FALSE) {
             LOGD("Failed to set the position\n");
             server_destroy_client_stream_buf_list(client);
@@ -964,7 +964,7 @@ static void server_handle_req_event(Server *server, int fd) {
             return;
         }
 
-        result = stream_buf_increase_position(stream_buf, n_byte);
+        result = stream_buf_increase_pos(stream_buf, n_byte);
         if (result == FALSE) {
             LOGD("Failed to set the position\n");
             server_destroy_client_stream_buf_list(client);

@@ -39,10 +39,10 @@ int main() {
     len = 4;
     str = "aaaa";
     memcpy(stream_buf_get_available(stream_buf), &num, sizeof(num));
-    stream_buf_increase_position(stream_buf, sizeof(num));
+    stream_buf_increase_pos(stream_buf, sizeof(num));
 
     memcpy(stream_buf_get_available(stream_buf), &len, sizeof(len));
-    stream_buf_increase_position(stream_buf, sizeof(len));
+    stream_buf_increase_pos(stream_buf, sizeof(len));
 
     memcpy(stream_buf_get_available(stream_buf), str, len);
 

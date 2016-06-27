@@ -159,7 +159,7 @@ static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int whe
                     entry_buf += sizeof(int);
                 }
 
-                stream_buf_increase_position(stream_buf, sizeof(int));
+                stream_buf_increase_pos(stream_buf, sizeof(int));
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
                 break;
 
@@ -181,7 +181,7 @@ static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int whe
                     entry_buf += sizeof(int);
                 }
                 
-                stream_buf_increase_position(stream_buf, sizeof(int));
+                stream_buf_increase_pos(stream_buf, sizeof(int));
                 memcpy(&len, buf, sizeof(int));
                 if (len < 0) {
                     LOGD("len value was wrong\n");
@@ -203,7 +203,7 @@ static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int whe
                     memcpy(stream_buf_get_available(stream_buf), entry_buf, stream_buf_get_available_size(stream_buf));
                     entry_buf += len;
                 }
-                stream_buf_increase_position(stream_buf, len);
+                stream_buf_increase_pos(stream_buf, len);
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
                 break;
 

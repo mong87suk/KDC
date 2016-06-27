@@ -36,7 +36,7 @@ static void utils_append_data(void *data, void *user_data) {
 
     copy_n = stream_buf_get_position(data_stream_buf);
     memcpy(dest, src, copy_n);
-    stream_buf_increase_position(user_data_stream_buf, copy_n);
+    stream_buf_increase_pos(user_data_stream_buf, copy_n);
 }
 
 static char* utils_create_full_name(char *name, char *file_name) {

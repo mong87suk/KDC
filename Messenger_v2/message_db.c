@@ -67,7 +67,7 @@ static Stream_Buf* message_db_convert_message_to_entry(Message *mesg, int field_
             }
             buf_size += sizeof(int);
             memcpy(stream_buf_get_available(stream_buf), &mesg_time, sizeof(int));
-            stream_buf_increase_position(stream_buf, sizeof(int));
+            stream_buf_increase_pos(stream_buf, sizeof(int));
             stream_buf_list = d_list_append(stream_buf_list, stream_buf);
             break;
 
@@ -84,7 +84,7 @@ static Stream_Buf* message_db_convert_message_to_entry(Message *mesg, int field_
             }
             buf_size += sizeof(int);
             memcpy(stream_buf_get_available(stream_buf), &len, sizeof(int));
-            stream_buf_increase_position(stream_buf, sizeof(int));
+            stream_buf_increase_pos(stream_buf, sizeof(int));
             stream_buf_list = d_list_append(stream_buf_list, stream_buf);
 
             str = message_get_str(mesg);
@@ -99,7 +99,7 @@ static Stream_Buf* message_db_convert_message_to_entry(Message *mesg, int field_
             }
             buf_size += len;
             memcpy(stream_buf_get_available(stream_buf), str, len);
-            stream_buf_increase_position(stream_buf, len);
+            stream_buf_increase_pos(stream_buf, len);
             stream_buf_list = d_list_append(stream_buf_list, stream_buf);
 
             break;
@@ -241,7 +241,7 @@ void message_db_delete_all(MessageDB *mesg_db) {
     free(mesg_db);
 }
 
-int message_db_add_message(MessageDB *mesg_db, Message *mesg) {
+int message_db_add_mesg(MessageDB *mesg_db, Message *mesg) {
     int field_mask;
     Stream_Buf *entry;
     int id;
@@ -251,7 +251,7 @@ int message_db_add_message(MessageDB *mesg_db, Message *mesg) {
         LOGD("Can't add the message\n");
         return -1;
     }
-    
+
     field_mask = database_convert_data_format_to_field_mask(mesg_db->data_format);
     result = message_db_comp_field_mask(field_mask, database_get_field_mask(mesg_db->database));
     if (!result) {
