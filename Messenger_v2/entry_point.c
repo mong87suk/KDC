@@ -103,11 +103,12 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
         return NULL;
     }
 
-    count = utils_get_count_to_move_flag(field_mask);
-    if (count < 0) {
-        LOGD("field mask was wrong\n");
+    count = utils_get_colum_count(field_mask);
+    if (count <= 0) {
+        LOGD("Failed to get colum count\n");
         return NULL;
     }
+    count -= 1;
 
     do {
         colum = (field_mask >> (FIELD_SIZE * count)) & FIELD_TYPE_FLAG;

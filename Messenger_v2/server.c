@@ -35,6 +35,28 @@ struct _Client {
     int packet_len;
 };
 
+static void server_free_message(void *data) {
+    Message *mesg;
+
+    mesg = (Message *) data;
+
+    if (!mesg) {
+        LOGD("There is nothing to point the Message\n");
+        return;
+    }
+
+    destroy_mesg(mesg);
+}
+
+static void server_destroy_mesg_list(DList *mesg_list) {
+    if (!mesg_list) {
+        LOGD("There is nothing to the mesg list\n");
+        return;
+    }
+
+    d_list_free(mesg_list, server_free_message);
+}
+
 static void server_destroy_client(void *client) {
     Client *remove_client;
 
@@ -327,6 +349,8 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
         return NULL;
     }
 
+    mesg = NULL;
+
     op_code = packet_get_op_code(req_packet, NULL);
     sop = SOP;
     eop = EOP;
@@ -354,33 +378,43 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
         mesgs_size = server_get_all_mesgs_size(mesg_list);
         if (!mesgs_size) {
             LOGD("There is no message\n");
+            server_destroy_mesg_list(mesg_list);
             return NULL;
         }
         payload_len =  sizeof(int) + mesgs_size + (count * (sizeof(long int) + sizeof(int)));
         if (payload_len <= 0) {
             LOGD("payload_len was wrong\n");
+            server_destroy_mesg_list(mesg_list);
             return NULL;
         }
 
         payload = (char*) malloc(payload_len);
         if (!payload) {
             LOGD("Failed to make buf\n");
+            server_destroy_mesg_list(mesg_list);
             return NULL;
         }
 
         mesgs = message_create_array(count);
         if (!mesgs) {
             LOGD("Failed to create mesg array\n");
+            free(payload);
+            server_destroy_mesg_list(mesg_list);
             return NULL;
         }
 
         result = server_copy_mesgs(mesg_list, mesgs, count);
+        server_destroy_mesg_list(mesg_list);
         if (result == FALSE) {
+            destroy_mesg(mesgs);
+            free(payload);
             LOGD("Failed to copy the mesg list\n");
             return NULL;
         }
         result = convert_mesgs_to_payload(mesgs, payload, count);
+        destroy_mesg(mesgs);
         if (result == FALSE) {
+            free(payload);
             LOGD("Failed to convert mesg to payload\n");
             return NULL;
         }
@@ -419,6 +453,7 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
         }
 
         result = message_db_add_mesg(server->mesg_db, mesg);
+        destroy_mesg(mesg);
         if (!result) {
             LOGD("Failed to add the Message\n");
             return NULL;
@@ -482,6 +517,7 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
         mesg_len = d_list_length(mesg_list);
         LOGD("mesg_len:%d\n", mesg_len);
         if (!mesg_len) {
+            server_destroy_mesg_list(mesg_list);
             LOGD("There is no message\n");
             return NULL;
         }
@@ -491,38 +527,48 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
         mesgs_size = server_get_all_mesgs_size(mesg_list);
         if (!mesgs_size) {
             LOGD("There is no message\n");
+            server_destroy_mesg_list(mesg_list);
             return NULL;
         }
         payload_len =  sizeof(int) + mesgs_size + (mesg_len * (sizeof(long int) + sizeof(int)));
         if (payload_len <= 0) {
             LOGD("payload_len was wrong\n");
+            server_destroy_mesg_list(mesg_list);
             return NULL;
         }
 
         payload = (char*) malloc(payload_len);
         if (!payload) {
             LOGD("Failed to make buf\n");
+            server_destroy_mesg_list(mesg_list);
             return NULL;
         }
 
         mesgs = message_create_array(mesg_len);
         if (!mesgs) {
             LOGD("Failed to create mesg array\n");
+            free(payload);
+            server_destroy_mesg_list(mesg_list);
             return NULL;
         }
 
         result = server_copy_mesgs(mesg_list, mesgs, mesg_len);
+        server_destroy_mesg_list(mesg_list);
         if (result == FALSE) {
+            free(payload);
             LOGD("Failed to copy the mesg list\n");
             return NULL;
         }
         result = convert_mesgs_to_payload(mesgs, payload, mesg_len);
+        destroy_mesg(mesgs);
         if (result == FALSE) {
+            free(payload);
             LOGD("Failed to convert mesg to payload\n");
             return NULL;
         }
 
         op_code = RCV_FIRST_OR_LAST_MSG; 
+
         break;
 
     default:
@@ -1122,22 +1168,15 @@ Server* new_server(Looper *looper) {
         return NULL;
     }
 
-    server = (Server*) malloc(sizeof(Server));
-
-    if (!server) {
-        printf("%s %s Failed to make Server\n", __FILE__, __func__);
-        return NULL;
-    }
-
     if (access(SOCKET_PATH, F_OK) == 0) {
         if (unlink(SOCKET_PATH) < 0) {
-            printf("%s %s Failed to unlink\n", __FILE__, __func__);
+            LOGD("Failed to unlink\n");
             return NULL;
         }
     }
 
     if ((server_fd = socket(AF_UNIX, SOCK_STREAM,0)) == -1) {
-        printf("%s %s socket error", __FILE__, __func__);
+        LOGD("socket error\n");
         return NULL;
     }
 
@@ -1146,13 +1185,13 @@ Server* new_server(Looper *looper) {
     strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path)-1);
 
     if (bind(server_fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-        printf("%s %s bind error", __FILE__, __func__);
+        LOGD("bind error\n");
         close(server_fd);
         return NULL;
     }
 
     if (listen(server_fd, 0) == -1) {
-        printf("%s %s listen error", __FILE__, __func__);
+        LOGD("listen error\n");
         close(server_fd);
         return NULL;
     }
@@ -1160,14 +1199,24 @@ Server* new_server(Looper *looper) {
     data_format = (char*) malloc(2);
     if (!data_format) {
         LOGD("Failed to make data_format\n");
+        close(server_fd);
         return NULL;
     }
 
     str = "is";
     memcpy(data_format, str, strlen(str));
     mesg_db = message_db_open(data_format);
+
+    free(data_format);
     if (!mesg_db) {
         LOGD("Failed to make the MessageDB\n");
+        return NULL;
+    }
+
+    server = (Server*) malloc(sizeof(Server));
+
+    if (!server) {
+        LOGD("Failed to make Server\n");
         return NULL;
     }
 
@@ -1185,14 +1234,14 @@ void destroy_server(Server *server) {
     DList *list;
 
     if (!server) {
-        printf("%s %s There is no pointer to Server\n", __FILE__, __func__);
+        LOGD("There is no pointer to Server\n");
         return;
     }
 
     looper_stop(server->looper);
 
     if (close(server->fd) < 0) {
-        printf("%s %s Failed to close server\n", __FILE__, __func__);
+        LOGD("Failed to close server\n");
         return;
     }
 

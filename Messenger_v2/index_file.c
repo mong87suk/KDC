@@ -242,26 +242,16 @@ void index_file_close(IndexFile *index_file) {
     return;
 }
 
-void index_file_delete(IndexFile *index_file) {
+void index_file_delete_all(IndexFile *index_file) {
     if (!index_file) {
         LOGD("There is nothing to point the Index_File\n");
         return;
     }
 
-    if (close(index_file->fd) < 0) {
-        LOGD("Failed to close\n");
-        return;
-    }
-
     d_list_free(index_file->entry_list, index_file_free_entry_point);
-
-    if (unlink(index_file->path) < 0) {
-        LOGD("Failed to unlink\n");
-        return;
-    }
-
-    free(index_file->path);
-    free(index_file);
+    index_file->entry_list = NULL;
+    index_file->last_id = 0;
+    index_file->entry_count = 0;
     return;
 }
 
@@ -387,7 +377,7 @@ void index_file_delete_entry_point(IndexFile *index_file, EntryPoint *entry_poin
     }
 
     index_file->entry_list = d_list_remove_with_data(index_file->entry_list, entry_point, index_file_free_entry_point);
-    
+
     if (id == index_file->last_id) {
         list = d_list_last(index_file->entry_list);
         last = (EntryPoint*) d_list_get_data(list);

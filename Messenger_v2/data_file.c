@@ -65,7 +65,9 @@ void data_file_close(DataFile *data_file) {
     return;
 }
 
-void data_file_delete(DataFile *data_file) {
+void data_file_delete_all(DataFile *data_file) {
+    int fd;
+
     if (!data_file) {
         LOGD("There is nothing to point the Data_File\n");
         return;
@@ -81,8 +83,14 @@ void data_file_delete(DataFile *data_file) {
         return;
     }
 
-    free(data_file->path);
-    free(data_file);
+    fd = open(data_file->path, O_RDWR | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
+    if (fd < 0) {
+        LOGD("Failed to open the file\n");
+        return;
+    }
+
+    data_file->fd = fd;
+
     return;
 }
  
@@ -114,6 +122,7 @@ int data_file_get_fd(DataFile *data_file) {
 int data_file_write_entry(DataFile *data_file, int id, Stream_Buf *entry) {
     int n_byte;
     int len;
+    char *buf;
 
     if (!data_file) {
         LOGD("There is nothing to point the DataFile\n");
@@ -132,7 +141,14 @@ int data_file_write_entry(DataFile *data_file, int id, Stream_Buf *entry) {
         return FALSE;
     }
 
-    n_byte = write_n_byte(data_file->fd, &id, len);
+    buf = stream_buf_get_buf(entry);
+
+    if (!buf) {
+        LOGD("Failed to get the buf\n");
+        return FALSE;
+    }
+
+    n_byte = write_n_byte(data_file->fd, stream_buf_get_buf(entry), len);
     if (n_byte != len) {
         LOGD("Failed to write n byte\n");
         return FALSE;

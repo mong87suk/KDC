@@ -149,10 +149,6 @@ int write_n_byte(int fd, void *buf, int size) {
 
     tmp = size;
 
-    if (!buf) {
-        LOGD("Can't read n byte\n");
-    }
-
     if (fd < 0) {
         LOGD("Can't read n byte\n");
     }
@@ -169,7 +165,7 @@ int write_n_byte(int fd, void *buf, int size) {
     return size;
 }
 
-int utils_get_count_to_move_flag(int field_mask) {
+int utils_get_colum_count(int field_mask) {
     int state;
     int i = 0;
 
@@ -185,8 +181,8 @@ int utils_get_count_to_move_flag(int field_mask) {
         }
         i++;
     }
-    LOGD("count to move flag:%d\n", i);
-    return (i - 1);
+    LOGD("colum count:%d\n", i);
+    return i;
 }
 
 int utils_append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf) {

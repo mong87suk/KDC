@@ -8,7 +8,7 @@
 
 IndexFile* index_file_open(char *name, int field_mask, DataBase *database);
 void index_file_close(IndexFile *index_file);
-void index_file_delete(IndexFile *index_file);
+void index_file_delete_all(IndexFile *index_file);
 int index_file_get_last_id(IndexFile *index_file);
 int index_file_set_last_id(IndexFile *index_file, int last_id);
 int index_file_add_entry_point(IndexFile *index_file, EntryPoint *entry_point);
