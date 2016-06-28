@@ -1,6 +1,8 @@
 #ifndef __DATA_FILE_H__
 #define __DATA_FILE_H__
 
+#include "stream_buf.h"
+
 #define DATAFILE "data_file"
 
 typedef struct _DataFile DataFile;
@@ -10,5 +12,5 @@ void data_file_close(DataFile *data_file);
 void data_file_delete(DataFile *data_file);
 int data_file_get_offset(DataFile *data_file);
 int data_file_get_fd(DataFile *data_file);
-
+int data_file_write_entry(DataFile *data_file, int id, Stream_Buf *entry);
 #endif

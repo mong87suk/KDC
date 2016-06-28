@@ -16,19 +16,6 @@ struct _MessageDB {
     DataBase *database;
 };
 
-static int message_db_comp_field_mask(int field_mask1, int field_mask2) {
-    if (field_mask1 < 0 || field_mask2 < 0) {
-        LOGD("the Field mask was wrong\n");
-        return FALSE;
-    }
-
-    if (field_mask1 == field_mask2) {
-        return TRUE;
-    }
-
-    return FALSE;
-}
-
 static Stream_Buf* message_db_convert_message_to_entry(Message *mesg, int field_mask) {
     int mesg_time;
     int len;
@@ -192,7 +179,7 @@ Message* message_db_convert_entry_to_message(Stream_Buf *entry, int field_mask) 
     return mesg;
 }
 
-MessageDB* new_message_db(char *data_format) {
+MessageDB* message_db_open(char *data_format) {
     MessageDB *message_db;
     DataBase *database;
 
@@ -206,7 +193,7 @@ MessageDB* new_message_db(char *data_format) {
         LOGD("Failed to make the MessageDB\n");
         return NULL;
     }
-    database = new_database(MEESAGE_DB, data_format);
+    database = database_open(MEESAGE_DB, data_format);
     if (!database) {
         LOGD("Failed to make the DataBase\n");
         return NULL;
@@ -219,7 +206,7 @@ MessageDB* new_message_db(char *data_format) {
     return message_db;
 }
 
-void destroy_message_db(MessageDB* mesg_db) {
+void message_db_close(MessageDB* mesg_db) {
     if(!mesg_db) {
         LOGD("There is nothing to point the MessageDB\n");
         return;
@@ -245,17 +232,15 @@ int message_db_add_mesg(MessageDB *mesg_db, Message *mesg) {
     int field_mask;
     Stream_Buf *entry;
     int id;
-    int result;
 
     if (!mesg_db || !mesg) {
         LOGD("Can't add the message\n");
         return -1;
     }
 
-    field_mask = database_convert_data_format_to_field_mask(mesg_db->data_format);
-    result = message_db_comp_field_mask(field_mask, database_get_field_mask(mesg_db->database));
-    if (!result) {
-        LOGD("Filed mask is not matched\n");
+    field_mask = database_get_field_mask(mesg_db->database);
+    if (field_mask == 0) {
+        LOGD("Field mask was wrong\n");
         return -1;
     }
 
@@ -276,7 +261,7 @@ int message_db_add_mesg(MessageDB *mesg_db, Message *mesg) {
 
 DList* message_db_get_messages(MessageDB *mesg_db, int pos, int count) {
     int i;
-    int field_mask, result;
+    int field_mask;
     DList *mesg_list;
     EntryPoint *entry_point;
     Stream_Buf *entry;
@@ -292,10 +277,9 @@ DList* message_db_get_messages(MessageDB *mesg_db, int pos, int count) {
         return NULL;
     }
 
-    field_mask = database_convert_data_format_to_field_mask(mesg_db->data_format);
-    result = message_db_comp_field_mask(field_mask, database_get_field_mask(mesg_db->database));
-    if (!result) {
-        LOGD("Filed mask is not matched\n");
+    field_mask = database_get_field_mask(mesg_db->database);
+    if (field_mask == 0) {
+        LOGD("Field mask was wrong\n");
         return NULL;
     }
 

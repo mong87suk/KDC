@@ -25,9 +25,8 @@ int main() {
     int count;
     int id;
     EntryPoint *entry_point;
-    MessageDB *mesg_db;
 
-    database = new_database(file_name, data_format);
+    database = database_open(file_name, data_format);
     assert(database);
     assert(database_get_field_mask(database) == 0x12);
 
@@ -116,7 +115,7 @@ int main() {
     assert(id == entry_point_get_id(entry_point));
     delete_entry(database, 1);
 
-    assert(database_convert_data_format_to_field_mask("is") == 0x12);
+    assert(database_get_field_mask(database) == 0x12);
     database_add_entry(database, stream_buf);
     assert(database_get_entry_point_list(database));
     destroy_database(database);

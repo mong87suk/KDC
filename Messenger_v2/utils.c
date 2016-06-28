@@ -153,7 +153,7 @@ int write_n_byte(int fd, void *buf, int size) {
         LOGD("Can't read n byte\n");
     }
 
-    if (size < 0 || fd < 0) {
+    if (fd < 0) {
         LOGD("Can't read n byte\n");
     }
 

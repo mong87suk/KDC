@@ -265,15 +265,6 @@ void index_file_delete(IndexFile *index_file) {
     return;
 }
 
-int index_file_create_entry_point_id(IndexFile *index_file) {
-    if (!index_file) {
-        LOGD("There is nothing to point the Index_File\n");
-        return -1;
-    }
-
-    return (index_file->last_id + 1);
-}
-
 int index_file_get_last_id(IndexFile *index_file) {
     if (!index_file) {
         LOGD("There is nohting to point the Index_File\n");

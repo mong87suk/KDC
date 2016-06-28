@@ -16,94 +16,29 @@ struct _DataBase {
     int field_mask;
 };
 
-static int database_set_value(EntryPoint *entry_point, Stream_Buf *entry, int field_mask, int fd) {
-    char colum;
-    int len, n_byte;
-    int id;
-    int count = 0;
-    char *buf;
+static int database_convert_data_format_to_field_mask(char *data_format) {
+    int len;
+    int field_mask;
+    int i, j;
+    char field;
+    field_mask = 0;
 
-    if (!entry_point) {
-        LOGD("There is nothing to point the EntryPoint\n");
-        return FALSE;
-    }
+    len = strlen(data_format);
+    j = 0;
+    for (i = len - 1; i >= 0; i--) {
+        field = data_format[j];
 
-    if (fd < 0 || field_mask < 0) {
-        LOGD("Can't set value\n");
-        return FALSE;
-    }
-
-    if (!entry) {
-        LOGD("There is nothing to point the Entry\n");
-        return FALSE;
-    }
-
-    buf = stream_buf_get_buf(entry);
-    if (!buf) {
-        LOGD("Failed to get entry buf\n");
-        return FALSE;
-    }
-
-    len = 0;
-    id = entry_point_get_id(entry_point);
-    if (id == -1) {
-        LOGD("Failed to get id\n");
-        return FALSE;
-    }
-
-    n_byte = write_n_byte(fd, &id, sizeof(id));
-    if (n_byte != sizeof(id)) {
-        LOGD("Failed to write n byte\n");
-        return FALSE;
-    }
-    count = utils_get_count_to_move_flag(field_mask);
-
-    do {
-        colum = (field_mask >> (FIELD_SIZE * count)) & FIELD_TYPE_FLAG;
-        LOGD("colum:%d\n", colum);
-        switch (colum) {
-            case 1:
-                n_byte = write_n_byte(fd, buf, sizeof(int));
-                if (n_byte != sizeof(int)) {
-                    LOGD("Failed to write n byte\n");
-                    return FALSE;
-                }
-                buf += sizeof(int);
-                break;
-
-            case 2:
-                memcpy(&len, buf, sizeof(int));
-                LOGD("len:%d\n", len);
-                if (len < 0) {
-                    LOGD("len value was wrong\n");
-                    return FALSE;
-                }
-                n_byte = write_n_byte(fd, buf, sizeof(int));
-                if (n_byte != sizeof(int)) {
-                    LOGD("Failed to write n byte\n");
-                    return FALSE;
-                }
-                buf += sizeof(int);
-
-                n_byte = write_n_byte(fd, buf, len);
-                if (n_byte != len) {
-                    LOGD("Failed to write n byte\n");
-                    return FALSE;
-                }
-                buf += len;
-                break;
-
-            case 0:
-                break;
-
-            default:
-                LOGD("field mask was wrong\n");
-                return FALSE;
+        if (field == 'i') {
+            field_mask = field_mask | ((INTEGER_FIELD) << (FIELD_SIZE * i));
         }
-        count--;
-    } while (colum && count >= 0);
 
-    return TRUE;
+        if (field == 's') {
+            field_mask = field_mask | ((STRING_FIELD) << (FIELD_SIZE * i));
+        }
+        j++;
+    }
+    LOGD("field_mask: 0x%02X\n", field_mask);
+    return field_mask;
 }
 
 static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int where, Stream_Buf *field, Stream_Buf *entry, int offset, int field_mask) {
@@ -226,32 +161,7 @@ static Stream_Buf* database_create_update_entry(EntryPoint *entry_point, int whe
     return stream_buf;
 }
 
-int database_convert_data_format_to_field_mask(char *data_format) {
-    int len;
-    int field_mask;
-    int i, j;
-    char field;
-    field_mask = 0;
-
-    len = strlen(data_format);
-    j = 0;
-    for (i = len - 1; i >= 0; i--) {
-        field = data_format[j];
-
-        if (field == 'i') {
-            field_mask = field_mask | ((INTEGER_FIELD) << (FIELD_SIZE * i));
-        }
-
-        if (field == 's') {
-            field_mask = field_mask | ((STRING_FIELD) << (FIELD_SIZE * i));
-        }
-        j++;
-    }
-    LOGD("field_mask: 0x%02X\n", field_mask);
-    return field_mask;
-}
-
-DataBase* new_database(char *name, char *data_format) {
+DataBase* database_open(char *name, char *data_format) {
     DataBase *database;
     IndexFile *index_file;
     DataFile *data_file;
@@ -335,12 +245,14 @@ int database_add_entry(DataBase *database, Stream_Buf *entry) {
         return -1;
     }
 
-    id = index_file_create_entry_point_id(database->index_file);
+    id = index_file_get_last_id(database->index_file);
     if (id < 0) {
         LOGD("Failed to create the entry point id\n");
         return -1;
     }
     LOGD("id:%d\n", id);
+
+    id += 1;
 
     entry_point = new_entry_point(id, offset, database);
     if (!entry_point) {
@@ -348,7 +260,8 @@ int database_add_entry(DataBase *database, Stream_Buf *entry) {
         return -1;
     }
 
-    result = database_set_value(entry_point, entry, database->field_mask, fd);
+    result = data_file_write_entry(database->data_file, id, entry);
+    destroy_stream_buf(entry);
     if (!result) {
         LOGD("Failed to set value\n");
         return -1;
@@ -471,7 +384,7 @@ int database_update_entry(DataBase *database, int id, int colum, Stream_Buf *fie
         LOGD("Failed to update field\n");
         return FALSE;
     }
-    result = database_set_value(entry_point, updated_entry, database->field_mask, fd);
+    result = data_file_write_entry(database->data_file, id, entry);
     destroy_stream_buf(updated_entry);
     if (!result) {
         LOGD("Failed to set value\n");
@@ -515,7 +428,7 @@ Stream_Buf* database_get_entry(DataBase *database, int id) {
 int database_get_field_mask(DataBase *database) {
     if (!database) {
         LOGD("There is nothing to point the DataBase\n");
-        return -1;
+        return 0;
     }
 
     return database->field_mask;

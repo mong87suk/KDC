@@ -89,7 +89,7 @@ static int server_add_client(Server *server, int fd) {
     }
 
     client->fd = fd;
-    client->last_read_pos = 0;
+    client->last_read_pos = 1;
     client->read_state = READY_TO_READ_REQ;
     client->stream_buf_list = NULL;
     client->packet_len = 0;
@@ -305,7 +305,7 @@ static int server_copy_mesgs(DList *mesg_list, Message *mesgs, int len) {
     return TRUE;
 }
 
-static Packet* server_create_res_packet(Server *server, Packet *req_packet, Client *client, int *last_read_pos) {
+static Packet* server_create_res_packet(Server *server, Packet *req_packet, Client *client, int *read_pos) {
     short op_code, check_sum;
     char *payload, *packet_buf, *tmp, *req_payload;
     Packet *res_packet;
@@ -385,7 +385,7 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
             return NULL;
         }
 
-        *last_read_pos = count;
+        *read_pos = count;
         op_code = RES_ALL_MSG;
 
         break;
@@ -429,7 +429,7 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
 
     case REQ_FIRST_OR_LAST_MSG:
         LOGD("REQ_FIRST_OR_LAST_MSG\n");
-        if (!last_read_pos) {
+        if (!read_pos) {
             LOGD("Can't set last read pos\n");
             return NULL;
         }
@@ -486,7 +486,7 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
             return NULL;
         }
 
-        *last_read_pos = mesg_len;
+        *read_pos = pos + mesg_len - 1;
 
         mesgs_size = server_get_all_mesgs_size(mesg_list);
         if (!mesgs_size) {
@@ -667,7 +667,7 @@ static int server_send_packet_to_all_clients(Server *server, Client *comp_client
     return TRUE;
 }
 
-static int server_send_packet_to_client(Packet *packet, Client *client, int last_read_pos) {
+static int server_send_packet_to_client(Packet *packet, Client *client, int read_pos) {
     int len, result;
     char *buf;
 
@@ -704,7 +704,7 @@ static int server_send_packet_to_client(Packet *packet, Client *client, int last
         return FALSE;
     }
 
-    client->last_read_pos = last_read_pos;
+    client->last_read_pos = read_pos;
 
     return TRUE;
 }
@@ -760,7 +760,7 @@ static int server_check_overread(Stream_Buf *r_stream_buf, int packet_len) {
 static void server_handle_req_packet(Server *server, Client *client, Packet *req_packet) {
     short op_code;
     int count;
-    int last_read_pos;
+    int read_pos;
     Packet *res_packet;
 
     if (!req_packet || !server || !client) {
@@ -772,7 +772,7 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
         LOGD("Failed to get the op_code\n");
         return;
     }
-    last_read_pos = 0;
+    read_pos = 0;
     count = message_db_get_message_count(server->mesg_db);
     LOGD("count:%d\n", count);
 
@@ -782,12 +782,12 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
             LOGD("There is no message\n");
             return;
         }
-        res_packet = server_create_res_packet(server, req_packet, client, &last_read_pos);
+        res_packet = server_create_res_packet(server, req_packet, client, &read_pos);
         if (!res_packet) {
             LOGD("Failed to create the res packet\n");
             return;
         }
-        server_send_packet_to_client(res_packet, client, last_read_pos);
+        server_send_packet_to_client(res_packet, client, read_pos);
         break;
 
     case SND_MSG:
@@ -804,12 +804,12 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
             LOGD("There is no message\n");
             return;
         }
-        res_packet = server_create_res_packet(server, req_packet, client, &last_read_pos);
+        res_packet = server_create_res_packet(server, req_packet, client, &read_pos);
         if (!res_packet) {
             LOGD("Failed to create the res packet\n");
             return;
         }
-        server_send_packet_to_client(res_packet, client, last_read_pos);
+        server_send_packet_to_client(res_packet, client, read_pos);
 
         break;
 
@@ -1165,7 +1165,7 @@ Server* new_server(Looper *looper) {
 
     str = "is";
     memcpy(data_format, str, strlen(str));
-    mesg_db = new_message_db(data_format);
+    mesg_db = message_db_open(data_format);
     if (!mesg_db) {
         LOGD("Failed to make the MessageDB\n");
         return NULL;

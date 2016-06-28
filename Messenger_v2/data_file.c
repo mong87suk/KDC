@@ -9,6 +9,7 @@
 #include "data_file.h"
 #include "m_boolean.h"
 #include "utils.h"
+#include "stream_buf.h"
 
 struct _DataFile {
     int fd;
@@ -108,4 +109,34 @@ int data_file_get_fd(DataFile *data_file) {
     }
 
     return data_file->fd;
+}
+
+int data_file_write_entry(DataFile *data_file, int id, Stream_Buf *entry) {
+    int n_byte;
+    int len;
+
+    if (!data_file) {
+        LOGD("There is nothing to point the DataFile\n");
+        return FALSE;
+    }
+
+    n_byte = write_n_byte(data_file->fd, &id, sizeof(id));
+    if (n_byte != sizeof(id)) {
+        LOGD("Failed to write n byte\n");
+        return FALSE;
+    }
+
+    len = stream_buf_get_position(entry);
+    if (len < 0) {
+        LOGD("Failed to get position\n");
+        return FALSE;
+    }
+
+    n_byte = write_n_byte(data_file->fd, &id, len);
+    if (n_byte != len) {
+        LOGD("Failed to write n byte\n");
+        return FALSE;
+    }
+
+    return TRUE;
 }
