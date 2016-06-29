@@ -47,13 +47,13 @@ int main() {
     memcpy(stream_buf_get_available(stream_buf), str, len);
     stream_buf_increase_pos(stream_buf, len);
 
-    count = database_get_entry_point_count(database);
+    count = database_get_entry_count(database);
     database_add_entry(database, stream_buf);
 
-    assert(database_get_entry_point_count(database) == (count + 1));
+    assert(database_get_entry_count(database) == (count + 1));
 
     delete_entry(database, 1);
-    assert(database_get_entry_point_count(database) == count);
+    assert(database_get_entry_count(database) == count);
 
     database_add_entry(database, stream_buf);
 

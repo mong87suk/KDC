@@ -241,20 +241,3 @@ char* utils_create_path(char *name, char *file_name) {
     strncpy(path + home_pathlen + 1, full_name, full_namelen);
     return path;
 }
-
-int utils_open(char *path) {
-    int fd;
-
-    if (!path) {
-        LOGD("There is nothing to point the path\n");
-        return -1;
-    }
-
-    fd = open(path, O_RDWR | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
-    if (fd < 0) {
-        LOGD("Failed to open the file\n");
-        return -1;
-    }
-
-    return fd;
-}

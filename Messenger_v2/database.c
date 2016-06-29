@@ -16,7 +16,7 @@ struct _DataBase {
     int field_mask;
 };
 
-static int database_convert_data_format_to_field_mask(char *data_format) {
+static int database_new_field_mask(char *data_format) {
     int len;
     int field_mask;
     int i, j;
@@ -57,8 +57,8 @@ DataBase* database_open(char *name, char *data_format) {
         return NULL;
     }
 
-    field_mask = database_convert_data_format_to_field_mask(data_format);
-    if (field_mask < 0) {
+    field_mask = database_new_field_mask(data_format);
+    if (field_mask == 0) {
         LOGD("Failed to convert field_mask\n");
         return NULL;
     }
@@ -70,10 +70,17 @@ DataBase* database_open(char *name, char *data_format) {
     }
 
     index_file = index_file_open(name, field_mask, database);
-    data_file = data_file_open(name);
+    if (!index_file) {
+        free(database);
+        LOGD("Failed to open index file\n");
+        return NULL;
+    }
 
-    if (!index_file || !data_file) {
-        LOGD("Failed to make the new DataBase\n");
+    data_file = data_file_open(name);
+    if (!data_file) {
+        index_file_close(index_file);
+        free(database);
+        LOGD("Failed to open data file\n");
         return NULL;
     }
 
@@ -128,7 +135,6 @@ int database_add_entry(DataBase *database, Stream_Buf *entry) {
         LOGD("Failed to create the entry point id\n");
         return -1;
     }
-    LOGD("id:%d\n", id);
 
     id += 1;
 
@@ -141,31 +147,35 @@ int database_add_entry(DataBase *database, Stream_Buf *entry) {
     result = data_file_write_entry(database->data_file, id, entry);
     if (!result) {
         LOGD("Failed to set value\n");
+        destroy_entry_point(entry_point);
         return -1;
     }
 
     result = index_file_set_last_id(database->index_file, id);
     if (!result) {
         LOGD("Failed to set last id\n");
+        destroy_entry_point(entry_point);
         return -1;
     }
 
-    result = index_file_add_entry_point(database->index_file, entry_point);
+    result = index_file_add_entry(database->index_file, entry_point);
     if (!result) {
         LOGD("Failed to add EntryPoint\n");
+        destroy_entry_point(entry_point);
         return -1;
     }
 
     result = index_file_update(database->index_file);
     if (!result) {
         LOGD("Failed to update indexfile\n");
+        destroy_entry_point(entry_point);
         return -1;
     }
 
     return id;
 }
 
-int database_get_entry_point_count(DataBase *database) {
+int database_get_entry_count(DataBase *database) {
     int count;
     if(!database) {
         LOGD("There is nothing to point the DataBase\n");
@@ -180,7 +190,7 @@ int database_get_entry_point_count(DataBase *database) {
     return count;
 }
 
-int delete_entry(DataBase *database, int entry_point_id) {
+int delete_entry(DataBase *database, int id) {
     EntryPoint *entry_point;
     int result;
 
@@ -189,13 +199,13 @@ int delete_entry(DataBase *database, int entry_point_id) {
         return FALSE;
     }
 
-    entry_point = index_file_find_entry_point(database->index_file, entry_point_id);
+    entry_point = index_file_find_entry(database->index_file, id);
     if (!entry_point) {
         LOGD("There is nothing to point the EntryPoint\n");
         return FALSE;
     }
 
-    index_file_delete_entry_point(database->index_file, entry_point);
+    index_file_delete_entry(database->index_file, entry_point);
     result = index_file_update(database->index_file);
 
     if (!result) {
@@ -206,7 +216,7 @@ int delete_entry(DataBase *database, int entry_point_id) {
     return TRUE;
 }
 
-DList* database_get_entry_point_list(DataBase *database) {
+DList* database_get_entry_list(DataBase *database) {
     DList *list;
 
     if (!database) {
@@ -238,7 +248,6 @@ int database_update_entry(DataBase *database, EntryPoint *entry_point, Stream_Bu
         return FALSE;
     }
 
-
     result = data_file_write_entry(database->data_file, id, entry);
     if (!result) {
         LOGD("Failed to set value\n");
@@ -264,7 +273,7 @@ Stream_Buf* database_get_entry(DataBase *database, int id) {
         return NULL;
     }
 
-    entry_point = index_file_find_entry_point(database->index_file, id);
+    entry_point = index_file_find_entry(database->index_file, id);
     if (!entry_point) {
         LOGD("There is nothing to point the EntryPoint\n");
         return NULL;
@@ -302,7 +311,7 @@ EntryPoint* database_get_entry_point(DataBase *database, int id) {
         return NULL;
     }
 
-    entry_point = index_file_find_entry_point(database->index_file, id);
+    entry_point = index_file_find_entry(database->index_file, id);
     if (!entry_point) {
         LOGD("Failed to fined entry point\n");
         return NULL;

@@ -61,6 +61,7 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
     char *buf;
     int len, fd;
     int count = 0;
+    int i;
 
     if (!entry_point) {
         LOGD("Thre is nothing to point the EntryPoint\n");
@@ -110,8 +111,8 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
     }
     count -= 1;
 
-    do {
-        colum = (field_mask >> (FIELD_SIZE * count)) & FIELD_TYPE_FLAG;
+    for (i = count; i >= 0; i--) {
+        colum = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;
         switch (colum) {
             case INTEGER_FIELD:
                 stream_buf = new_stream_buf(sizeof(int));
@@ -174,8 +175,7 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
                 LOGD("field mask was wrong\n");
                 return NULL;
         }
-        count--;
-    } while (colum && count >= 0);
+    }
 
     stream_buf = new_stream_buf(buf_size);
     utils_append_data_to_buf(stream_buf_list, stream_buf);

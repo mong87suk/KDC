@@ -311,7 +311,7 @@ int message_db_get_message_count(MessageDB *mesg_db) {
         return -1;
     }
     
-    count = database_get_entry_point_count(mesg_db->database);
+    count = database_get_entry_count(mesg_db->database);
 
     if (count < 0) {
         LOGD("Failed to get entry point\n");

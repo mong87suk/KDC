@@ -32,15 +32,27 @@ DataFile *data_file_open(char *name) {
         return NULL;
     }
 
-    fd = utils_open(path);
+    fd = open(path, O_RDWR | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
     if (fd < 0) {
         LOGD("Failed to make open the index file\n");
+        free(path);
         return NULL;
     }
 
     data_file = (DataFile*) malloc(sizeof(DataFile));
     if (!data_file) {
         LOGD("Faield to make the Index File\n");
+        if (close(fd) < 0) {
+            LOGD("Failed to close\n");
+            return NULL;
+        }
+
+        if (unlink(path) < 0) {
+            LOGD("Failed to unlink\n");
+            return NULL;
+        }
+
+        free(path);
         return NULL;
     }
 
