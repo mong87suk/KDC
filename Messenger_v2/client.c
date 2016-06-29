@@ -579,6 +579,10 @@ static Packet* client_create_req_packet(char *input_str, short op_code, int inpu
                 return NULL;
             }
             break;
+            
+        case REQ_INTERVAL_MSG:
+            if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
+            }
 
         default:
             LOGD("Request number is 0x%02X Please recommand\n", op_code);

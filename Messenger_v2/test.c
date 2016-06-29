@@ -59,7 +59,7 @@ int main() {
 
     entry_point = database_get_entry_point(database, 1);
     assert(entry_point);
-    // Create update stream buf
+
     update_stream_buf = new_stream_buf(12);
     assert(stream_buf);
     buf = stream_buf_get_buf(update_stream_buf);
@@ -79,5 +79,14 @@ int main() {
 
     database_update_entry(database, entry_point, update_stream_buf, 1);
     assert(result);
+
+    count = database_get_entry_count(database);
+    database_add_entry(database, stream_buf);
+    database_add_entry(database, stream_buf);
+    database_add_entry(database, update_stream_buf);
+    assert(database_get_entry_count(database) == (count + 3));
+
+    database_delete_all(database);
+    assert(database_get_entry_count(database) == 0);
     return 0;
 }

@@ -144,7 +144,7 @@ int looper_run(Looper *looper) {
         struct pollfd fds[n_watcher];
         looper_get_fds(looper->watcher_list, fds);
 
-        nfds = poll(fds, n_watcher, 10000);
+        nfds = poll(fds, n_watcher, -1);
 
         if (nfds > 0) {
             for (i = 0; i < n_watcher; i++) {
