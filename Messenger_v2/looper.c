@@ -1,7 +1,8 @@
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/time.h>
+#include <time.h>
+#include <math.h>
 
 #include "DBLinkedList.h"
 #include "looper.h"
@@ -26,6 +27,17 @@ struct _Timer {
     unsigned int interval;
     unsigned int ms;
 };
+
+static long get_current_time()
+{
+    long            ms; 
+    struct timespec spec;
+
+    clock_gettime(CLOCK_MONOTONIC, &spec);
+    ms = (long) (spec.tv_nsec / 1.0e6); 
+
+    return ms;
+}
 
 static int looper_match_timer(void *data1, void *data2) {
     Timer *timer1;
@@ -61,12 +73,11 @@ static void looper_callback(Looper *looper, int nfds, unsigned int interval) {
     DList *next;
     DList *list;
     Timer *timer;
-    struct timeval cur_time;
     unsigned int df_ms;
     unsigned int cur_ms;
 
     list = looper->timer_list;
-    LOGD("interval:%u\n", interval);
+    LOGD("interval:%d\n", interval);
     if (!nfds) {
         LOGD("nfds:%d\n", nfds);
         list = d_list_last(list);
@@ -80,20 +91,19 @@ static void looper_callback(Looper *looper, int nfds, unsigned int interval) {
             timer->callback(timer->user_data);
         }
     } else {
-        gettimeofday(&cur_time, NULL); 
-        cur_ms = (unsigned int) cur_time.tv_usec;
+        cur_ms = (unsigned int) get_current_time();
 
         while(list) {
             next = d_list_next(list);
             timer  = (Timer*) d_list_get_data(list);
-            df_ms = timer->ms - cur_ms;
+            df_ms = cur_ms - timer->ms;
             LOGD("cur_ms:%u ms:%u df_ms:%u\n", cur_ms, timer->ms, df_ms);
-            if (df_ms <= interval) {
+            if (df_ms >= interval) {
                 timer->callback(timer->user_data);
             } else {
                 LOGD("interval: %u\n", interval);
                 LOGD("before: timer->ms:%u\n", timer->ms);
-                timer->interval = (unsigned int) (interval - (unsigned int) df_ms);
+                timer->interval = (unsigned int) (interval - df_ms);
                 LOGD("After: timer->ms:%u\n", timer->ms);
             }
             list = next;
@@ -236,8 +246,8 @@ int looper_run(Looper *looper) {
     }
 
     looper->state = 1;
-    time_out = -1;
 
+    interval = -1;
     while (looper->state) {
         n_watcher = d_list_length(looper->watcher_list);
         if (n_watcher <= 0) {
@@ -249,6 +259,7 @@ int looper_run(Looper *looper) {
         looper_get_fds(looper->watcher_list, fds);
 
         nfds = poll(fds, n_watcher, interval);
+        LOGD("nfds: %d\n", nfds);
 
         if (nfds > 0) {
             for (i = 0; i < n_watcher; i++) {
@@ -281,6 +292,7 @@ int looper_run(Looper *looper) {
 
         time_out = looper_get_time(looper->timer_list);
         LOGD("time_out:%u\n", time_out);
+
         if (time_out == 0) {
             interval = -1;
         } else {
@@ -288,7 +300,6 @@ int looper_run(Looper *looper) {
         }
 
         LOGD("interval:%d\n", interval);
-
 
         looper_callback(looper, nfds, interval);
 
@@ -332,7 +343,6 @@ void looper_add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, vo
 
 void looper_add_timer(Looper* looper, unsigned int interval, void (*callback)(void *user_data), void *user_data) {
     Timer *timer;
-    struct timeval cur_time;
     unsigned int cur_ms;
 
     timer = (Timer*) malloc(sizeof(Timer));
@@ -341,8 +351,8 @@ void looper_add_timer(Looper* looper, unsigned int interval, void (*callback)(vo
         return;
     }
 
-    gettimeofday(&cur_time, NULL);
-    cur_ms = (unsigned int) cur_time.tv_usec;
+
+    cur_ms = (unsigned int) get_current_time();
     LOGD("cur_ms:%u\n", cur_ms);
     LOGD("interval:%u\n", interval);
 
