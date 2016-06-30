@@ -477,48 +477,104 @@ static void client_handle_disconnect(Client *client, int fd) {
 
 }
 
-static char* client_create_payload(char *input_str, int input_strlen, long int *payload_len) {
+static Stream_Buf* client_new_payload(short op_code, char *input_str, int input_strlen) {
     int str_len;
     int body_len;
-    char *payload, *tmp_dest;
     time_t current_time;
+    Stream_Buf *stream_buf;
+    DList *stream_buf_list;
+    int i, ms, num, result;
+
+    i = 0;
+    ms = 0;
+    body_len = 0;
+    input_str += REQ_STR_MIN_LEN;
+    LOGD("input_str:%s\n", input_str);
+    input_strlen -= (REQ_STR_MIN_LEN);
+    stream_buf_list = NULL;
+
+    if (op_code == REQ_INTERVAL_MSG) {
+        stream_buf = new_stream_buf(MICOSEC_SIZE);
+        if (!stream_buf) {
+            LOGD("Failed to new stream buf\n");
+            return NULL;
+        }
+        while(1) {
+            num = input_str[i];
+            if (num == ' ') {
+                break;
+            }
+            ms = (ms) * 10 + (num -'0');
+            i++;
+        }
+        memcpy(stream_buf_get_available(stream_buf), &ms, MICOSEC_SIZE);
+        stream_buf_increase_pos(stream_buf, MICOSEC_SIZE);
+        stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+
+        body_len += MICOSEC_SIZE;
+        input_str += (i + 1);
+        input_strlen -= (i + 1);
+    }
 
     current_time = time(NULL);
 
     if (current_time == ((time_t) - 1)) {
         LOGD("Failed to obtain the current time.\n");
-        return 0;
-    }   
-
-    if (!input_str) {
-        LOGD("There is nothing to point the input_str\n");
         return NULL;
     }
 
-    str_len = input_strlen - REQ_STR_MIN_LEN - 1;
-    body_len = sizeof(long int) + sizeof(int) + str_len;
-    *payload_len = body_len;
-    payload = (char*) malloc(body_len);
-
-    if (!payload) {
-        LOGD("Failed to make payload buf\n");
+    stream_buf = new_stream_buf(TIME_SIZE);
+    if (!stream_buf) {
+        LOGD("Failed to new stream buf\n");
         return NULL;
     }
-    tmp_dest = payload;
-    memset(payload, 0, body_len);
 
-    memcpy(tmp_dest, &current_time, sizeof(current_time));
-    tmp_dest += sizeof(current_time);
+    memcpy(stream_buf_get_available(stream_buf), &current_time, TIME_SIZE);
+    stream_buf_increase_pos(stream_buf, TIME_SIZE);
+    stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+    body_len += TIME_SIZE;
+    str_len = input_strlen - 1;
 
-    memcpy(tmp_dest, &str_len, sizeof(str_len));
-    tmp_dest += sizeof(str_len);
+    stream_buf = new_stream_buf(STR_LEN_SIZE);
+    if (!stream_buf) {
+        LOGD("Failed to new stream buf\n");
+        return NULL;
+    }
+    memcpy(stream_buf_get_available(stream_buf), &str_len, STR_LEN_SIZE);
+    stream_buf_increase_pos(stream_buf, STR_LEN_SIZE);
+    stream_buf_list = d_list_append(stream_buf_list, stream_buf);
 
-    memcpy(tmp_dest, input_str + REQ_STR_MIN_LEN, str_len);
-    return payload;
+    LOGD("str_len:%d\n", str_len);
+    stream_buf = new_stream_buf(str_len);
+    if (!stream_buf) {
+        LOGD("Failed to new stream buf\n");
+        return NULL;
+    }
+
+    memcpy(stream_buf_get_available(stream_buf), input_str, str_len);
+    stream_buf_increase_pos(stream_buf, str_len);
+    stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+    body_len += str_len;
+
+    stream_buf = new_stream_buf(body_len);
+    if (!stream_buf) {
+        LOGD("Failed to new stream buf\n");
+        return NULL;
+    }
+
+    result = utils_append_data_to_buf(stream_buf_list, stream_buf);
+    utils_destroy_stream_buf_list(stream_buf_list);
+    if (!result) {
+        LOGD("Append data to buf\n");
+        return NULL;
+    }
+
+    return stream_buf;
 }
 
 static Packet* client_create_req_packet(char *input_str, short op_code, int input_strlen) {
     Packet *req_packet;
+    Stream_Buf *payload_buf;
     char *payload, *packet_buf, *tmp;
     long int payload_len;
     short checksum;
@@ -530,6 +586,7 @@ static Packet* client_create_req_packet(char *input_str, short op_code, int inpu
 
     payload_len = 0;
     payload = NULL;
+    payload_buf = NULL;
 
     if (!input_str) {
         LOGD("There is nothing to point input_str\n");
@@ -546,11 +603,13 @@ static Packet* client_create_req_packet(char *input_str, short op_code, int inpu
 
         case SND_MSG:
             if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
-                payload = client_create_payload(input_str, input_strlen, &payload_len);
-                if (!payload) {
-                    LOGD("Failed to make the Body\n");
+                payload_buf = client_new_payload(op_code, input_str, input_strlen);
+                if (!payload_buf) {
+                    LOGD("Failed to new the payload\n");
                     return NULL;
                 }
+                payload = stream_buf_get_buf(payload_buf);
+                payload_len = stream_buf_get_position(payload_buf);
             } else {
                 LOGD("Request was wrong. Please recommand\n");
                 return NULL;
@@ -582,7 +641,18 @@ static Packet* client_create_req_packet(char *input_str, short op_code, int inpu
             
         case REQ_INTERVAL_MSG:
             if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
+                payload_buf = client_new_payload(op_code, input_str, input_strlen);
+                if (!payload_buf) {
+                    LOGD("Failed to new the payload\n");
+                    return NULL;
+                }
+                payload = stream_buf_get_buf(payload_buf);
+                payload_len = stream_buf_get_position(payload_buf);
+            } else {
+                LOGD("Request was wrong. Please recommand\n");
+                return NULL;
             }
+            break;
 
         default:
             LOGD("Request number is 0x%02X Please recommand\n", op_code);
@@ -594,7 +664,7 @@ static Packet* client_create_req_packet(char *input_str, short op_code, int inpu
     packet_buf = (char*) malloc(packet_len);
     if (!packet_buf) {
         LOGD("Failed to make the buf for packet\n");
-        free(payload);
+        destroy_stream_buf(payload_buf);
         return NULL;
     }
 
@@ -614,6 +684,8 @@ static Packet* client_create_req_packet(char *input_str, short op_code, int inpu
         tmp += payload_len;
     }
 
+    destroy_stream_buf(payload_buf);
+
     memcpy(tmp, &eop, sizeof(eop));
     tmp += sizeof(eop);
 
@@ -621,17 +693,16 @@ static Packet* client_create_req_packet(char *input_str, short op_code, int inpu
     if (checksum == -1) {
         LOGD("Failed to do check_sum\n");
         free(packet_buf);
-        free(payload);
         return NULL;
     }
     memcpy(tmp, &checksum, sizeof(checksum));
 
     req_packet = new_packet(packet_buf);
+    free(packet_buf);
+ 
     if (!req_packet) {
         LOGD("Failed to make the Packet\n");
         return NULL;
-        free(packet_buf);
-        free(payload);
     }
 
     return req_packet;

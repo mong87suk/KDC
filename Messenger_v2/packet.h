@@ -12,6 +12,10 @@
 #define SOP                    (char) 0xAA
 #define EOP                    (char) 0xFF
 
+#define MICOSEC_SIZE            4
+#define TIME_SIZE               8
+#define STR_LEN_SIZE            4
+
 #define HEADER_SIZE            11
 #define TAIL_SIZE              3
 

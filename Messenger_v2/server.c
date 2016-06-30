@@ -568,7 +568,12 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
         }
 
         op_code = RCV_FIRST_OR_LAST_MSG; 
+        break;
 
+    case REQ_INTERVAL_MSG:
+        LOGD("REQ_INTERVAL_MSG\n");
+        payload_len = packet_get_payload_len(req_packet, NULL);
+        LOGD("payload_len:%ld\n", payload_len);
         break;
 
     default:
@@ -856,7 +861,14 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
             return;
         }
         server_send_packet_to_client(res_packet, client, read_pos);
+        break;
 
+    case REQ_INTERVAL_MSG:
+        res_packet = server_create_res_packet(server, req_packet, NULL, NULL);
+        if (!res_packet) {
+            LOGD("Failed to create the res packet\n");
+            return;
+        }
         break;
 
     default:
