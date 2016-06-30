@@ -35,6 +35,14 @@ struct _Client {
     int packet_len;
 };
 
+struct _UserData {
+    Server *server;
+    Client *client;
+    Packet *packet;
+};
+
+
+
 static void server_free_message(void *data) {
     Message *mesg;
 
@@ -327,7 +335,7 @@ static int server_copy_mesgs(DList *mesg_list, Message *mesgs, int len) {
     return TRUE;
 }
 
-static Packet* server_create_res_packet(Server *server, Packet *req_packet, Client *client, int *read_pos) {
+static Packet* server_create_res_packet(Server *server, Packet *req_packet, Client *client, int *read_pos, unsigned int *interval) {
     short op_code, check_sum;
     char *payload, *packet_buf, *tmp, *req_payload;
     Packet *res_packet;
@@ -341,6 +349,7 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
     int pos;
     int read_count;
     char more;
+    unsigned int micro_sec;
 
     LOGD("Start server_create_res_packet()\n");
 
@@ -354,6 +363,9 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
     op_code = packet_get_op_code(req_packet, NULL);
     sop = SOP;
     eop = EOP;
+    payload = NULL;
+    payload_len = 0;
+    micro_sec = 0;
 
     switch(op_code) {
     case REQ_ALL_MSG:
@@ -574,6 +586,46 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
         LOGD("REQ_INTERVAL_MSG\n");
         payload_len = packet_get_payload_len(req_packet, NULL);
         LOGD("payload_len:%ld\n", payload_len);
+        if (payload_len == -1) {
+            LOGD("Failed to get the payload_len\n");
+            return NULL;
+        }
+
+        req_payload = packet_get_payload(req_packet, NULL);
+        if (!req_payload) {
+            LOGD("Failed to get the payload\n");
+            return NULL;
+        }
+
+        memcpy(&micro_sec, req_payload, INTERVAL_SIZE);
+        LOGD("micro_sec:%d\n", micro_sec);
+        *interval = micro_sec;
+
+        payload_len -= INTERVAL_SIZE;
+        req_payload += INTERVAL_SIZE;
+
+        payload = (char*) malloc(payload_len);
+        if (!payload) {
+            LOGD("Failed to make buf for payload\n");
+            return NULL;
+        }
+
+        memcpy(payload, req_payload, payload_len);
+
+        mesg = convert_payload_to_mesg(payload, NULL);
+        if (!mesg) {
+            LOGD("Failed to convert payload to the Message\n");
+            return NULL;
+        }
+
+        result = message_db_add_mesg(server->mesg_db, mesg);
+        destroy_mesg(mesg);
+        if (!result) {
+            LOGD("Failed to add the Message\n");
+            return NULL;
+        }
+
+        op_code = RCV_MSG;
         break;
 
     default:
@@ -585,6 +637,11 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
     packet_buf = (char*) malloc(packet_len);
     if (!packet_buf) {
         LOGD("Failed to maked the packet_buf\n");
+        return NULL;
+    }
+
+    if (!payload || !payload_len) {
+        LOGD("There is noting to point payload\n");
         return NULL;
     }
 
@@ -622,7 +679,7 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
     free(packet_buf);
     free(payload);
 
-    LOGD("Finished server_create_res_packet()\n"); 
+    LOGD("Finished server_create_res_packet()\n");
     return res_packet;
 }
 
@@ -675,6 +732,7 @@ static int server_send_packet_to_all_clients(Server *server, Client *comp_client
     }
 
     len = packet_get_len(packet);
+    LOGD("len:%d\n", len);
     if (len == -1) {
         LOGD("Failed to get the packet len\n");
         return FALSE;
@@ -691,7 +749,7 @@ static int server_send_packet_to_all_clients(Server *server, Client *comp_client
         LOGD("Failed to convert the Packet to buf\n");
         return FALSE;
     }
-  
+
     list = server->client_list;
 
     while(list) {
@@ -760,6 +818,29 @@ static int server_send_packet_to_client(Packet *packet, Client *client, int read
     return TRUE;
 }
 
+static void server_interval_send_packet(void *user_data) {
+    UserData *c_data;
+    Server *server;
+
+    LOGD("server_interval_send_packet\n");
+
+    if (!user_data) {
+        LOGD("There is nothing to point the user_data\n");
+        return;
+    }
+
+    c_data = (UserData*) user_data;
+    server = c_data->server;
+
+    LOGD("server_send_packet_to_all_clients\n");
+    server_send_packet_to_all_clients(server, c_data->client, c_data->packet);
+    LOGD("looper_remove_timer\n");
+    looper_remove_timer(server->looper, user_data);
+    LOGD("destroy_packet\n");
+    destroy_packet(c_data->packet);
+    free(user_data);
+}
+
 static void server_handle_disconnect_event(Server *server, int fd) {
     if (fd != server->fd) {
         server_remove_client(server, fd);
@@ -812,7 +893,9 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
     short op_code;
     int count;
     int read_pos;
+    unsigned int interval;
     Packet *res_packet;
+    UserData *user_data;
 
     if (!req_packet || !server || !client) {
         LOGD("There is nothing to point the Packet\n");
@@ -824,6 +907,7 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
         return;
     }
     read_pos = 0;
+    interval = 0;
     count = message_db_get_message_count(server->mesg_db);
     LOGD("count:%d\n", count);
 
@@ -833,21 +917,23 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
             LOGD("There is no message\n");
             return;
         }
-        res_packet = server_create_res_packet(server, req_packet, client, &read_pos);
+        res_packet = server_create_res_packet(server, req_packet, client, &read_pos, NULL);
         if (!res_packet) {
             LOGD("Failed to create the res packet\n");
             return;
         }
         server_send_packet_to_client(res_packet, client, read_pos);
+        destroy_packet(res_packet);
         break;
 
     case SND_MSG:
-        res_packet = server_create_res_packet(server, req_packet, NULL, NULL);
+        res_packet = server_create_res_packet(server, req_packet, NULL, NULL, NULL);
         if (!res_packet) {
             LOGD("Failed to create the res packet\n");
             return;
         }
         server_send_packet_to_all_clients(server, client, res_packet);
+        destroy_packet(res_packet); 
         break;
 
     case REQ_FIRST_OR_LAST_MSG:
@@ -855,19 +941,38 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
             LOGD("There is no message\n");
             return;
         }
-        res_packet = server_create_res_packet(server, req_packet, client, &read_pos);
+        res_packet = server_create_res_packet(server, req_packet, client, &read_pos, NULL);
         if (!res_packet) {
             LOGD("Failed to create the res packet\n");
             return;
         }
         server_send_packet_to_client(res_packet, client, read_pos);
+        destroy_packet(res_packet); 
         break;
 
     case REQ_INTERVAL_MSG:
-        res_packet = server_create_res_packet(server, req_packet, NULL, NULL);
+        res_packet = server_create_res_packet(server, req_packet, NULL, NULL, &interval);
         if (!res_packet) {
             LOGD("Failed to create the res packet\n");
             return;
+        }
+
+        if (interval == 0) {
+            server_send_packet_to_all_clients(server, client, res_packet);
+            destroy_packet(res_packet);
+        } else {
+            user_data = (UserData*) malloc(sizeof(UserData));
+            if (!user_data) {
+                LOGD("Failed to create the user data\n");
+                return;
+            }
+
+            user_data->server = server;
+            user_data->client = client;
+            user_data->packet = res_packet;
+
+            looper_add_timer(server->looper, interval, server_interval_send_packet, user_data);
+            LOGD("interval:%d\n", interval);
         }
         break;
 
@@ -875,7 +980,6 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
         LOGD("OPCODE is wrong\n");
         return;
     }
-    destroy_packet(res_packet);
 }
 
 static void server_handle_req_event(Server *server, int fd) {

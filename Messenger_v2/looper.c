@@ -1,24 +1,124 @@
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/time.h>
 
 #include "DBLinkedList.h"
 #include "looper.h"
 #include "utils.h"
 
-struct _Looper
-{
+struct _Looper {
     DList *watcher_list;
+    DList *timer_list;
     int state;
 };
 
-struct _Watcher
-{
+struct _Watcher {
     int fd;
     void *user_data;
     void (*handle_events)(int fd, void *user_data, int revents);
     short events;
 };
+
+struct _Timer {
+    void *user_data;
+    void (*callback)(void *user_data);
+    unsigned int interval;
+    unsigned int ms;
+};
+
+static int looper_match_timer(void *data1, void *data2) {
+    Timer *timer1;
+
+    timer1 = (Timer*) data1;
+
+    if (timer1->user_data == data2) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+static void looper_destroy_timer(Timer *timer) {
+    if (!timer) {
+        LOGD("There is nothing to point timer\n");
+        return;
+    }
+    free(timer);
+}
+
+static void looper_free_timer(void *data) {
+    if (!data) {
+        LOGD("There is nothing to point data\n");
+        return;
+    }
+
+    looper_destroy_timer((Timer*) data);
+}
+
+
+static void looper_callback(Looper *looper, int nfds, unsigned int interval) {
+    DList *next;
+    DList *list;
+    Timer *timer;
+    struct timeval cur_time;
+    unsigned int df_ms;
+    unsigned int cur_ms;
+
+    list = looper->timer_list;
+    LOGD("interval:%u\n", interval);
+    if (!nfds) {
+        LOGD("nfds:%d\n", nfds);
+        list = d_list_last(list);
+        if (!list) {
+            LOGD("There is noting to point Timer\n");
+            return;
+        }
+        timer = (Timer*) d_list_get_data(list);
+        if (interval == timer->interval) {
+            LOGD("interval:%u timer->interval:%u\n", interval, timer->interval);
+            timer->callback(timer->user_data);
+        }
+    } else {
+        gettimeofday(&cur_time, NULL); 
+        cur_ms = (unsigned int) cur_time.tv_usec;
+
+        while(list) {
+            next = d_list_next(list);
+            timer  = (Timer*) d_list_get_data(list);
+            df_ms = timer->ms - cur_ms;
+            LOGD("cur_ms:%u ms:%u df_ms:%u\n", cur_ms, timer->ms, df_ms);
+            if (df_ms <= interval) {
+                timer->callback(timer->user_data);
+            } else {
+                LOGD("interval: %u\n", interval);
+                LOGD("before: timer->ms:%u\n", timer->ms);
+                timer->interval = (unsigned int) (interval - (unsigned int) df_ms);
+                LOGD("After: timer->ms:%u\n", timer->ms);
+            }
+            list = next;
+        }
+    }
+}
+
+static unsigned int looper_get_time(DList *timer_list) {
+    int n_timer;
+    Timer *timer;
+    DList *list;
+
+    n_timer = d_list_length(timer_list);
+    LOGD("n_timer:%d\n", n_timer);
+    if (n_timer > 0) {
+        list = d_list_last(timer_list);
+        timer = (Timer*) d_list_get_data(list);
+        if (!timer) {
+            LOGD("Failed to get data\n");
+            return 0;
+        }
+        return timer->interval;
+    }
+    return 0;
+}
 
 /**
   * set_fd_event:
@@ -116,6 +216,8 @@ int looper_run(Looper *looper) {
     int fd, nfds;
     int i;
     int n_watcher;
+    unsigned int time_out;
+    int interval;
     DList *list;
     Watcher *watcher;
 
@@ -128,12 +230,13 @@ int looper_run(Looper *looper) {
 
     list = looper->watcher_list;
 
-   if (!(d_list_length(list))) {
-       LOGD("There is no Watcher\n");
-       return 0;
-   }
+    if (!(d_list_length(list))) {
+        LOGD("There is no Watcher\n");
+        return 0;
+    }
 
-   looper->state = 1;
+    looper->state = 1;
+    time_out = -1;
 
     while (looper->state) {
         n_watcher = d_list_length(looper->watcher_list);
@@ -141,10 +244,11 @@ int looper_run(Looper *looper) {
             LOGD("There is no Watcher\n");
             return 0;
         }
+
         struct pollfd fds[n_watcher];
         looper_get_fds(looper->watcher_list, fds);
 
-        nfds = poll(fds, n_watcher, -1);
+        nfds = poll(fds, n_watcher, interval);
 
         if (nfds > 0) {
             for (i = 0; i < n_watcher; i++) {
@@ -174,6 +278,20 @@ int looper_run(Looper *looper) {
                 }
             }
         }
+
+        time_out = looper_get_time(looper->timer_list);
+        LOGD("time_out:%u\n", time_out);
+        if (time_out == 0) {
+            interval = -1;
+        } else {
+            interval = time_out;
+        }
+
+        LOGD("interval:%d\n", interval);
+
+
+        looper_callback(looper, nfds, interval);
+
     }
     return looper->state;
 }
@@ -186,7 +304,7 @@ void looper_add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, vo
     watcher = (Watcher*) malloc(sizeof(Watcher));
     events = 0;
     if (!watcher) {
-        printf("%s %s Failed to make Watcher\n", __FILE__, __func__);
+        printf("Failed to make Watcher\n");
         return;
     }
 
@@ -210,6 +328,30 @@ void looper_add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, vo
 
     list = looper->watcher_list;
     looper->watcher_list = d_list_append(list, watcher);
+}
+
+void looper_add_timer(Looper* looper, unsigned int interval, void (*callback)(void *user_data), void *user_data) {
+    Timer *timer;
+    struct timeval cur_time;
+    unsigned int cur_ms;
+
+    timer = (Timer*) malloc(sizeof(Timer));
+    if (!timer) {
+        LOGD("Failed to make Timer\n");
+        return;
+    }
+
+    gettimeofday(&cur_time, NULL);
+    cur_ms = (unsigned int) cur_time.tv_usec;
+    LOGD("cur_ms:%u\n", cur_ms);
+    LOGD("interval:%u\n", interval);
+
+    timer->user_data = user_data;
+    timer->callback = callback;
+    timer->interval = interval;
+    timer->ms = cur_ms;
+
+    looper->timer_list = d_list_append(looper->timer_list, timer);
 }
 
 void looper_remove_all_watchers(Looper *looper) {
@@ -237,4 +379,12 @@ void destroy_looper(Looper *looper) {
     }
     looper_remove_all_watchers(looper);
     free(looper);
+}
+
+void looper_remove_timer(Looper *looper, void *user_data) {
+    DList *list;
+
+    list = looper->timer_list;
+
+    looper->timer_list = d_list_remove_with_user_data(list, user_data, looper_match_timer, looper_free_timer);
 }

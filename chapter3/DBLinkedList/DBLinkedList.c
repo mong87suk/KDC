@@ -359,7 +359,7 @@ DList* d_list_prepend_node(DList* sorted_node, DList* insert_node, DList* list) 
 }
 
 void* d_list_find_data(DList *list, int(*find_data)(void *data1, void *data2), void *data) {
-    while(list) {
+    while (list) {
         if (find_data(list->data, data)) {
             return list->data;
         }

@@ -50,7 +50,6 @@ void destroy_packet(Packet *packet) {
         return;
     }
 
-    LOGD("handle_req_packet\n");
     packet_destroy_header(packet->header);
     packet_destroy_body(packet->body);
     packet_destroy_tail(packet->tail);

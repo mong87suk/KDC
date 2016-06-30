@@ -483,10 +483,11 @@ static Stream_Buf* client_new_payload(short op_code, char *input_str, int input_
     time_t current_time;
     Stream_Buf *stream_buf;
     DList *stream_buf_list;
-    int i, ms, num, result;
+    int i, num, result;
+    unsigned int interval;
 
     i = 0;
-    ms = 0;
+    interval = 0;
     body_len = 0;
     input_str += REQ_STR_MIN_LEN;
     LOGD("input_str:%s\n", input_str);
@@ -494,7 +495,7 @@ static Stream_Buf* client_new_payload(short op_code, char *input_str, int input_
     stream_buf_list = NULL;
 
     if (op_code == REQ_INTERVAL_MSG) {
-        stream_buf = new_stream_buf(MICOSEC_SIZE);
+        stream_buf = new_stream_buf(INTERVAL_SIZE);
         if (!stream_buf) {
             LOGD("Failed to new stream buf\n");
             return NULL;
@@ -504,14 +505,14 @@ static Stream_Buf* client_new_payload(short op_code, char *input_str, int input_
             if (num == ' ') {
                 break;
             }
-            ms = (ms) * 10 + (num -'0');
+            interval = (interval) * 10 + (num -'0');
             i++;
         }
-        memcpy(stream_buf_get_available(stream_buf), &ms, MICOSEC_SIZE);
-        stream_buf_increase_pos(stream_buf, MICOSEC_SIZE);
+        memcpy(stream_buf_get_available(stream_buf), &interval, INTERVAL_SIZE);
+        stream_buf_increase_pos(stream_buf, INTERVAL_SIZE);
         stream_buf_list = d_list_append(stream_buf_list, stream_buf);
 
-        body_len += MICOSEC_SIZE;
+        body_len += INTERVAL_SIZE;
         input_str += (i + 1);
         input_strlen -= (i + 1);
     }
