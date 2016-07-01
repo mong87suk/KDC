@@ -41,8 +41,6 @@ struct _UserData {
     Packet *packet;
 };
 
-
-
 static void server_free_message(void *data) {
     Message *mesg;
 
