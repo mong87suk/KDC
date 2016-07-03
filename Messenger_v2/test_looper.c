@@ -11,14 +11,14 @@ struct _UserData {
 
 typedef struct _UserData UserData;
 
-static void print_data(void *user_data) {
+static int print_data(void *user_data) {
     UserData *data;
 
     assert(user_data);
 
     data = (UserData*) user_data;
     LOGD("num:%d\n", data->num);
-    looper_remove_timer(data->looper, user_data);
+    return 0;
 }
 
 int main() {
