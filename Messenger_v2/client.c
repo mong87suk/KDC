@@ -90,9 +90,9 @@ static void client_destroy_stream_buf(void *data) {
     destroy_stream_buf(stream_buf);
 }
 
-static int client_append_n_data_to_buf(Stream_Buf *stream_buf, char *buf, int n) {
+static BOOLEAN client_append_n_data_to_buf(Stream_Buf *stream_buf, char *buf, int n) {
     char *src;
-    
+
     if (!stream_buf || !buf) {
         LOGD("Can't append n_data to buf\n");
         return FALSE;
@@ -108,7 +108,7 @@ static int client_append_n_data_to_buf(Stream_Buf *stream_buf, char *buf, int n)
     return TRUE;
 }
 
-static short  client_append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf) {
+static BOOLEAN client_append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf) {
     if (!stream_buf_list || !stream_buf) {
         LOGD("There is no a pointer to Stream_Buf\n");
         return FALSE;
@@ -136,7 +136,7 @@ static void client_destroy_stdin_stream_buf_list(Client *client) {
     client->stdin_stream_buf_list = NULL;
 }
 
-static short client_copy_payload_len(Stream_Buf *stream_buf, long int *payload_len) {
+static BOOLEAN client_copy_payload_len(Stream_Buf *stream_buf, long int *payload_len) {
     char *buf;
     if (!stream_buf) {
         LOGD("There is nothing to point the stream buf\n");
@@ -154,7 +154,7 @@ static short client_copy_payload_len(Stream_Buf *stream_buf, long int *payload_l
     return TRUE;
 }
 
-static int client_is_checksum_true(short check_sum, char *buf, int packet_len) {
+static BOOLEAN client_is_checksum_true(short check_sum, char *buf, int packet_len) {
     short comp_check_sum;
 
     if (!buf) {
@@ -174,7 +174,7 @@ static int client_is_checksum_true(short check_sum, char *buf, int packet_len) {
     return TRUE;
 }
 
-static int client_copy_overread_buf(Stream_Buf *c_stream_buf, Stream_Buf *r_stream_buf, int packet_len, int len) {
+static BOOLEAN client_copy_overread_buf(Stream_Buf *c_stream_buf, Stream_Buf *r_stream_buf, int packet_len, int len) {
     char *copy_buf, *buf;
 
     if (!r_stream_buf || !c_stream_buf) {
@@ -217,7 +217,8 @@ static int client_check_overread(Stream_Buf *r_stream_buf, int packet_len) {
 static void client_handle_res_events(Client *client, int fd) {
     char *buf, *payload;
     Stream_Buf *stream_buf, *r_stream_buf, *c_stream_buf;
-    int result, read_len, n_byte, packet_len, len, buf_size, n_mesg, mesg_len;
+    int read_len, n_byte, packet_len, len, buf_size, n_mesg, mesg_len;
+    BOOLEAN result;
     int i;
     long int payload_len;
     Packet *packet;
@@ -282,10 +283,10 @@ static void client_handle_res_events(Client *client, int fd) {
         if (result == FALSE) {
             LOGD("Failed to  copy payload_len\n");
             return;
-        }
+       }
 
         packet_len = HEADER_SIZE + payload_len + TAIL_SIZE;
-        client->packet_len = packet_len; 
+        client->packet_len = packet_len;
 
         if (read_len >= packet_len) {
             client->read_state = FINISH_TO_READ_RES;
@@ -325,7 +326,7 @@ static void client_handle_res_events(Client *client, int fd) {
             client_destroy_stream_buf_list(client);
             return;
         }
-    } 
+    }
 
     if (client->read_state == START_TO_READ_RES) {
         LOGD("START_TO_READ_RES\n");
@@ -431,7 +432,10 @@ static void client_handle_res_events(Client *client, int fd) {
                 LOGD("Failed to make the Stream_Buf\n");
                 return;
             }
-            client_copy_overread_buf(c_stream_buf, r_stream_buf, packet_len, len);
+            result = client_copy_overread_buf(c_stream_buf, r_stream_buf, packet_len, len);
+            if (result == FALSE) {
+                LOGD("Failed to copy overread buf\n");
+            }
             client->stream_buf_list = d_list_append(client->stream_buf_list, c_stream_buf);
         }
 
@@ -483,7 +487,8 @@ static Stream_Buf* client_new_payload(short op_code, char *input_str, int input_
     time_t current_time;
     Stream_Buf *stream_buf;
     DList *stream_buf_list;
-    int i, num, result;
+    int i, num;
+    BOOLEAN result;
     unsigned int interval;
 
     i = 0;
@@ -709,7 +714,7 @@ static Packet* client_create_req_packet(char *input_str, short op_code, int inpu
     return req_packet;
 }
 
-static short send_packet_to_server(Client *client, Packet *packet) {
+static BOOLEAN send_packet_to_server(Client *client, Packet *packet) {
     int len;
     char *buf;
     short result;
@@ -746,7 +751,7 @@ static short send_packet_to_server(Client *client, Packet *packet) {
 
 static void handle_req_input_str(Client *client, char *input_str, int input_strlen) {
     Packet *req_packet;
-    int result;
+    BOOLEAN result;
     short op_code;
 
     if (input_strlen >= REQ_STR_MIN_LEN && (strncasecmp(input_str, REQ_STR, strlen(REQ_STR))) == 0) {
@@ -756,7 +761,7 @@ static void handle_req_input_str(Client *client, char *input_str, int input_strl
         LOGD("Request was wrong. Please recommand\n");
         return;
     }
- 
+
     if (!input_str) {
         LOGD("Can't handle req input str\n");
         return;
@@ -779,7 +784,7 @@ static void client_handle_stdin_event(Client *client, int fd) {
     int n_byte, input_size, position, input_strlen;
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
-    short result;
+    BOOLEAN result;
 
     stream_buf_list = NULL;
 

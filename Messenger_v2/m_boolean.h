@@ -1,7 +1,9 @@
 #ifndef __M_BOOLEAN_H__
 #define __M_BOOLEAN_H__
 
-#define TRUE    1
-#define FALSE   0
+typedef enum {
+    TRUE = 1,
+    FALSE = 0
+} BOOLEAN;
 
 #endif

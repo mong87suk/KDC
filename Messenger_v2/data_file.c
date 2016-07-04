@@ -131,7 +131,7 @@ int data_file_get_fd(DataFile *data_file) {
     return data_file->fd;
 }
 
-int data_file_write_entry(DataFile *data_file, int id, Stream_Buf *entry) {
+BOOLEAN data_file_write_entry(DataFile *data_file, int id, Stream_Buf *entry) {
     int n_byte;
     int len;
     char *buf;

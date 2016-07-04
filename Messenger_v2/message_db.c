@@ -23,6 +23,7 @@ static Stream_Buf* message_db_new_entry(Message *mesg, int field_mask) {
     char *str;
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
+    BOOLEAN result;
 
     if (!mesg) {
         LOGD("There is nothing to point the mesg\n");
@@ -101,8 +102,12 @@ static Stream_Buf* message_db_new_entry(Message *mesg, int field_mask) {
     }
 
     stream_buf = new_stream_buf(buf_size);
-    utils_append_data_to_buf(stream_buf_list, stream_buf);
+    result = utils_append_data_to_buf(stream_buf_list, stream_buf);
     utils_destroy_stream_buf_list(stream_buf_list);
+    if (result == FALSE) {
+        LOGD("Failed to append data\n");
+        return NULL;
+    }
 
     return stream_buf;
 }
@@ -310,7 +315,7 @@ int message_db_get_message_count(MessageDB *mesg_db) {
         LOGD("There is nothing to point the mesg_db\n");
         return -1;
     }
-    
+
     count = database_get_entry_count(mesg_db->database);
 
     if (count < 0) {
@@ -327,7 +332,7 @@ int message_db_update_str(MessageDB *mesg_db, int id, char *new_str, int str_len
     Stream_Buf *entry;
     int field_mask;
     char *old_str;
-    int result;
+    BOOLEAN result;
 
     if (!mesg_db) {
         LOGD("There is nothing to point the MessageDB\n");
@@ -380,5 +385,5 @@ int message_db_update_str(MessageDB *mesg_db, int id, char *new_str, int str_len
         return FALSE;
     }
 
-    return FALSE;
+    return TRUE;
 }

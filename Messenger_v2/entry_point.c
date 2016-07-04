@@ -62,6 +62,7 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
     int len, fd;
     int count = 0;
     int i;
+    BOOLEAN result;
 
     if (!entry_point) {
         LOGD("Thre is nothing to point the EntryPoint\n");
@@ -178,8 +179,13 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
     }
 
     stream_buf = new_stream_buf(buf_size);
-    utils_append_data_to_buf(stream_buf_list, stream_buf);
+    result = utils_append_data_to_buf(stream_buf_list, stream_buf);
     utils_destroy_stream_buf_list(stream_buf_list);
+
+    if (result == FALSE) {
+        LOGD("Failed to append data\n");
+        return NULL;
+    }
 
     return stream_buf;
 }
@@ -193,7 +199,7 @@ int entry_point_get_id(EntryPoint *entry_point) {
     return entry_point->id;
 }
 
-int entry_point_set_offset(EntryPoint *entry_point, int offset) {
+BOOLEAN entry_point_set_offset(EntryPoint *entry_point, int offset) {
     if (!entry_point) {
         LOGD("There is nothing to point the EntryPoint\n");
         return FALSE;

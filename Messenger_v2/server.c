@@ -213,7 +213,7 @@ static void server_append_data(void *data, void *user_data) {
     stream_buf_increase_pos(user_data_stream_buf, copy_n);
 }
 
-static int server_append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf) {
+static BOOLEAN server_append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf) {
     if (!stream_buf_list || !stream_buf) {
         LOGD("Can't append data to Stream_Buf\n");
         return FALSE;
@@ -222,7 +222,7 @@ static int server_append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_
     return TRUE;
 }
 
-static int server_append_n_data_to_buf(Stream_Buf *stream_buf, char *buf, int n) {
+static BOOLEAN server_append_n_data_to_buf(Stream_Buf *stream_buf, char *buf, int n) {
     char *src;
     if (!stream_buf || !buf) {
         LOGD("Can't append n_data to buf\n");
@@ -266,11 +266,12 @@ static int server_get_all_mesgs_size(DList *mesg_list) {
     return size;
 }
 
-static int server_copy_mesgs(DList *mesg_list, Message *mesgs, int len) {
-    int i, str_len, result;
-    long int time; 
+static BOOLEAN server_copy_mesgs(DList *mesg_list, Message *mesgs, int len) {
+    int i, str_len;
+    long int time;
     Message *mesg1, *mesg2;
     char *buf, *str;
+    BOOLEAN result;
 
     if (!mesg_list || !mesgs) {
         LOGD("Can't copy the mesgs\n");
@@ -337,7 +338,7 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
     short op_code, check_sum;
     char *payload, *packet_buf, *tmp, *req_payload;
     Packet *res_packet;
-    int result;
+    BOOLEAN result;
     long int payload_len;
     int mesgs_size, count;
     int packet_len, mesg_len;
@@ -681,7 +682,7 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
     return res_packet;
 }
 
-static int server_copy_payload_len(Stream_Buf *stream_buf, long int *payload_len) {
+static BOOLEAN server_copy_payload_len(Stream_Buf *stream_buf, long int *payload_len) {
     char *buf;
     if (!stream_buf) {
         LOGD("There is nothing to point the stream buf\n");
@@ -699,7 +700,7 @@ static int server_copy_payload_len(Stream_Buf *stream_buf, long int *payload_len
     return TRUE;
 }
 
-static int server_is_checksum_true(short check_sum, char *buf, int packet_len) {
+static BOOLEAN server_is_checksum_true(short check_sum, char *buf, int packet_len) {
     short comp_check_sum;
 
     if (!buf) {
@@ -718,10 +719,11 @@ static int server_is_checksum_true(short check_sum, char *buf, int packet_len) {
     return TRUE;
 }
 
-static int server_send_packet_to_all_clients(Server *server, Client *comp_client, Packet *packet) {
+static BOOLEAN server_send_packet_to_all_clients(Server *server, Client *comp_client, Packet *packet) {
     DList *list;
     Client *client;
-    int fd, result, len;
+    int fd, len;
+    BOOLEAN result;
     char *buf;
 
     if (!server || !comp_client || !packet) {
@@ -774,7 +776,7 @@ static int server_send_packet_to_all_clients(Server *server, Client *comp_client
     return TRUE;
 }
 
-static int server_send_packet_to_client(Packet *packet, Client *client, int read_pos) {
+static BOOLEAN server_send_packet_to_client(Packet *packet, Client *client, int read_pos) {
     int len, result;
     char *buf;
 
@@ -816,27 +818,31 @@ static int server_send_packet_to_client(Packet *packet, Client *client, int read
     return TRUE;
 }
 
-static void server_interval_send_packet(void *user_data) {
+static BOOLEAN server_interval_send_packet(void *user_data) {
     UserData *c_data;
     Server *server;
+    int result;
 
     LOGD("server_interval_send_packet\n");
 
     if (!user_data) {
         LOGD("There is nothing to point the user_data\n");
-        return;
+        return FALSE;
     }
 
     c_data = (UserData*) user_data;
     server = c_data->server;
 
     LOGD("server_send_packet_to_all_clients\n");
-    server_send_packet_to_all_clients(server, c_data->client, c_data->packet);
-    LOGD("looper_remove_timer\n");
-    looper_remove_timer(server->looper, user_data);
-    LOGD("destroy_packet\n");
-    destroy_packet(c_data->packet);
-    free(user_data);
+    result = server_send_packet_to_all_clients(server, c_data->client, c_data->packet);
+
+    if (result == TRUE) {
+        destroy_packet(c_data->packet);
+        free(user_data);
+
+        return FALSE;
+    }
+    return TRUE;
 }
 
 static void server_handle_disconnect_event(Server *server, int fd) {
@@ -847,7 +853,7 @@ static void server_handle_disconnect_event(Server *server, int fd) {
     LOGD("disconnected:%d\n", fd);
 }
 
-static int server_copy_overread_buf(Stream_Buf *c_stream_buf, Stream_Buf *r_stream_buf, int packet_len, int len) {
+static BOOLEAN server_copy_overread_buf(Stream_Buf *c_stream_buf, Stream_Buf *r_stream_buf, int packet_len, int len) {
     char *copy_buf, *buf;
 
     if (!r_stream_buf || !c_stream_buf) {
@@ -931,7 +937,7 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
             return;
         }
         server_send_packet_to_all_clients(server, client, res_packet);
-        destroy_packet(res_packet); 
+        destroy_packet(res_packet);
         break;
 
     case REQ_FIRST_OR_LAST_MSG:
@@ -945,7 +951,7 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
             return;
         }
         server_send_packet_to_client(res_packet, client, read_pos);
-        destroy_packet(res_packet); 
+        destroy_packet(res_packet);
         break;
 
     case REQ_INTERVAL_MSG:
@@ -985,7 +991,8 @@ static void server_handle_req_event(Server *server, int fd) {
     Client *client;
     short check_sum;
     Stream_Buf *stream_buf, *r_stream_buf, *c_stream_buf;
-    int n_byte, read_len, packet_len, result, len, buf_size;
+    int n_byte, read_len, packet_len, len, buf_size;
+    BOOLEAN result;
     long int payload_len;
     Packet *packet;
 

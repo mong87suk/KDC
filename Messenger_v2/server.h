@@ -4,11 +4,6 @@
 #include "looper.h"
 
 typedef enum {
-    APPEND_DATA_SUCCESS = 1,
-    APPEND_DATA_FAILURE  = -1
-} APPEND_DATA_RESULT;
-
-typedef enum {
     READY_TO_READ_REQ = 0,
     START_TO_READ_REQ = 1,
     FINISH_TO_READ_REQ = 2

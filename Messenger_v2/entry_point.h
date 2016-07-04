@@ -4,6 +4,7 @@
 #include "mesg_type.h"
 #include "stream_buf.h"
 #include "database.h"
+#include "m_boolean.h"
 
 #define MAX_MOVE         15
 #define FIELD_TYPE_FLAG  0xf
@@ -14,7 +15,7 @@ EntryPoint* new_entry_point(int id, int offset, DataBase *database);
 void destroy_entry_point(EntryPoint *entry_point);
 int entry_point_get_id(EntryPoint *entry_point);
 Stream_Buf* entry_point_get_value(EntryPoint *entry_point);
-int entry_point_set_offset(EntryPoint *entry_point, int offset);
+BOOLEAN entry_point_set_offset(EntryPoint *entry_point, int offset);
 int entry_point_get_offset(EntryPoint *entry_point);
 
 #endif

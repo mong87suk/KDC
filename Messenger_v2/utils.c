@@ -185,11 +185,11 @@ int utils_get_colum_count(int field_mask) {
     return i;
 }
 
-int utils_append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf) {
+BOOLEAN utils_append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf) {
     if (!stream_buf_list || !stream_buf) {
         LOGD("Can't append data to Stream_Buf\n");
         return FALSE;
-    }   
+    }
     d_list_foreach(stream_buf_list, utils_append_data, stream_buf);
     return TRUE;
 }

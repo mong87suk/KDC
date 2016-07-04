@@ -94,7 +94,7 @@ Packet* convert_buf_to_packet(char *buf) {
     short op_code, checksum;
     long int payload_len;
     char *payload;
-    short result;
+    BOOLEAN result;
     int packet_size;
     if (!buf) {
         LOGD("Can't convert the buf to the packet\n");
@@ -193,7 +193,7 @@ Packet* convert_buf_to_packet(char *buf) {
     return packet;
 }
 
-short convert_packet_to_buf(Packet *packet, char *buf) {
+BOOLEAN convert_packet_to_buf(Packet *packet, char *buf) {
     long int payload_len;
     Header *header;
     Tail *tail;
@@ -331,7 +331,7 @@ Message* convert_payload_to_mesg(char *payload, int *mesg_len) {
     return mesg;
 }
 
-int convert_mesgs_to_payload(Message *mesgs, char *payload, int len) {
+BOOLEAN convert_mesgs_to_payload(Message *mesgs, char *payload, int len) {
     long int time;
     int str_len, i;
     char *str, *tmp;

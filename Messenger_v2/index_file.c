@@ -39,7 +39,7 @@ static int index_file_match_entry(void *data1, void *data2) {
 
     if (!data1 || !data2) {
         LOGD("Can't to match entry point\n");
-        return FALSE;
+        return 0;
     }
 
     entry_point = (EntryPoint*) data1;
@@ -48,9 +48,9 @@ static int index_file_match_entry(void *data1, void *data2) {
     id = entry_point_get_id(entry_point);
 
     if (id == entry_id) {
-        return TRUE;
+        return 1;
     } else {
-        return FALSE;
+        return 0;
     }
 }
 
@@ -94,7 +94,7 @@ static void index_file_write_entry_point(void *data, void *user_data) {
     }
 }
 
-static int index_file_load(IndexFile *index_file, DataBase *database) {
+static BOOLEAN index_file_load(IndexFile *index_file, DataBase *database) {
     int field_mask, last_id, entry_count;
     int n_byte, fd;
     int id, offset;
@@ -180,7 +180,7 @@ IndexFile* index_file_open(char *name, int field_mask, DataBase *database) {
     IndexFile *index_file;
     char *path;
     int fd, size;
-    int result;
+    BOOLEAN result;
 
     if (!name || strlen(name) < 0) {
         LOGD("Can't open\n");
@@ -279,7 +279,7 @@ void index_file_close(IndexFile *index_file) {
     return;
 }
 
-int index_file_update(IndexFile *index_file) {
+BOOLEAN index_file_update(IndexFile *index_file) {
     int fd, last_id, entry_count, field_mask;
     int n_byte;
 
@@ -359,7 +359,7 @@ int index_file_get_last_id(IndexFile *index_file) {
     return index_file->last_id;
 }
 
-int index_file_set_last_id(IndexFile *index_file, int last_id) {
+BOOLEAN index_file_set_last_id(IndexFile *index_file, int last_id) {
     if (!index_file) {
         LOGD("There is nothing to point the Index_File\n");
         return FALSE;
@@ -369,7 +369,7 @@ int index_file_set_last_id(IndexFile *index_file, int last_id) {
     return TRUE;
 }
 
-int index_file_add_entry(IndexFile *index_file, EntryPoint *entry_point) {
+BOOLEAN index_file_add_entry(IndexFile *index_file, EntryPoint *entry_point) {
     if (!index_file || !entry_point) {
         LOGD("Can't add the EntryPoint\n");
         return FALSE;

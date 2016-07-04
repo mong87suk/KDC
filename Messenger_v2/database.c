@@ -117,7 +117,7 @@ void database_delete_all(DataBase *database) {
 int database_add_entry(DataBase *database, Stream_Buf *entry) {
     EntryPoint *entry_point;
     int offset, id;
-    int result;
+    BOOLEAN result;
 
     if (!database || !entry) {
         LOGD("Failed to add entry\n");
@@ -190,7 +190,7 @@ int database_get_entry_count(DataBase *database) {
     return count;
 }
 
-int delete_entry(DataBase *database, int id) {
+BOOLEAN delete_entry(DataBase *database, int id) {
     EntryPoint *entry_point;
     int result;
 

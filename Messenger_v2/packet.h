@@ -20,6 +20,7 @@
 #define TAIL_SIZE              3
 
 #include "stream_buf.h"
+#include "m_boolean.h"
 
 typedef struct _Header Header;
 typedef struct _Body Body;
@@ -47,14 +48,14 @@ long int packet_get_payload_len(Packet *packet, Header *header);
 char* packet_get_payload(Packet *packet, Body *body);
 int packet_get_size();
 
-short packet_set_sop(Packet *packet, char sop);
-short packet_set_eop(Packet *packet, char eop);
-short packet_set_op_code(Packet *packet, short op_code);
-short packet_set_payload_len(Packet *packet, long int payload_len);
-short packet_set_checksum(Packet *packet, short checksum);
-short packet_set_body(Packet *packet, Body *body);
-short packet_set_payload(Packet *packet, char *payload);
-short packet_set_header(Packet *packet, Header *header);
-short packet_set_tail(Packet *packet, Tail* tail);
+BOOLEAN packet_set_sop(Packet *packet, char sop);
+BOOLEAN packet_set_eop(Packet *packet, char eop);
+BOOLEAN packet_set_op_code(Packet *packet, short op_code);
+BOOLEAN packet_set_payload_len(Packet *packet, long int payload_len);
+BOOLEAN packet_set_checksum(Packet *packet, short checksum);
+BOOLEAN packet_set_body(Packet *packet, Body *body);
+BOOLEAN packet_set_payload(Packet *packet, char *payload);
+BOOLEAN packet_set_header(Packet *packet, Header *header);
+BOOLEAN packet_set_tail(Packet *packet, Tail* tail);
 
 #endif

@@ -40,7 +40,8 @@ void destroy_mesg(Message *mesg) {
 
     free(mesg);
 }
-int message_set_time(Message *mesg, long int time) {
+
+BOOLEAN message_set_time(Message *mesg, long int time) {
     if (!mesg) {
         LOGD("Failed to set the time\n");
         return FALSE;
@@ -50,7 +51,7 @@ int message_set_time(Message *mesg, long int time) {
     return TRUE;
 }
 
-int message_set_str_len(Message *mesg, int str_len) {
+BOOLEAN message_set_str_len(Message *mesg, int str_len) {
     if (!mesg) {
         LOGD("Failed to set the str_len\n");
         return FALSE;
@@ -60,7 +61,7 @@ int message_set_str_len(Message *mesg, int str_len) {
     return TRUE;
 }
 
-int message_set_str(Message *mesg, char *str) {
+BOOLEAN message_set_str(Message *mesg, char *str) {
     if (!mesg) {
         LOGD("Failed to set the str\n");
         return FALSE;

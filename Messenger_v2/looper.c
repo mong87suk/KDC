@@ -22,9 +22,10 @@ struct _Watcher {
 
 struct _Timer {
     void *user_data;
-    int (*callback)(void *user_data);
+    BOOLEAN (*callback)(void *user_data);
     unsigned int interval;
     unsigned int expired;
+    unsigned int callback_count;
     struct timespec called_t;
 };
 
@@ -42,15 +43,18 @@ static int looper_set_sort_rule(void *data1, void *data2) {
 
     if (timer1->expired < timer2->expired) {
         return 1;
-    } else {
-        return 0;
+    } else if (timer1->expired == timer2->expired) {
+        if (timer1->callback_count < TRUE && timer2->callback_count) {
+            return 1;
+        }
     }
+    return 0;
 }
 
 static struct timespec looper_time_diff(struct timespec cur_t, struct timespec called_t) {
     struct timespec temp;
 
-    if ((cur_t.tv_nsec - called_t.tv_nsec)<0) {
+    if ((cur_t.tv_nsec - called_t.tv_nsec) < 0) {
         temp.tv_sec = cur_t.tv_sec - called_t.tv_sec - 1;
         temp.tv_nsec = 1000000000 + cur_t.tv_nsec - called_t.tv_nsec;
     } else {
@@ -60,7 +64,7 @@ static struct timespec looper_time_diff(struct timespec cur_t, struct timespec c
     return temp;
 }
 
-static struct timespec get_current_time()
+static struct timespec looper_get_current_time()
 {
     struct timespec tv;
 
@@ -71,7 +75,7 @@ static struct timespec get_current_time()
     return tv;
 }
 
-static void looper_destroy_timer(Timer *timer) {
+static void looper_destroy_timer(void *timer) {
     if (!timer) {
         LOGD("There is nothing to point timer\n");
         return;
@@ -79,25 +83,15 @@ static void looper_destroy_timer(Timer *timer) {
     free(timer);
 }
 
-static void looper_free_timer(void *data) {
-    if (!data) {
-        LOGD("There is nothing to point data\n");
-        return;
-    }
-
-    looper_destroy_timer((Timer*) data);
-}
-
-void static looper_remove_timer(Looper *looper, Tiemr *timer) {
+void static looper_remove_timer(Looper *looper, Timer *timer) {
     DList *list;
 
     list = looper->timer_list;
 
-    looper->timer_list =  d_list_remove_with_data(list, timer, looper_free_timer);
+    looper->timer_list =  d_list_remove_with_data(list, timer, looper_destroy_timer);
 }
 
 static void looper_callback(Looper *looper, int nfds, unsigned int interval, int n_timer) {
-    DList *next;
     DList *list;
     Timer *timer;
     struct timespec cur_t;
@@ -106,7 +100,7 @@ static void looper_callback(Looper *looper, int nfds, unsigned int interval, int
     int result;
     int i;
 
-    cur_t = get_current_time();
+    cur_t = looper_get_current_time();
     list = looper->timer_list;
     LOGD("interval:%d\n", interval);
 
@@ -114,71 +108,43 @@ static void looper_callback(Looper *looper, int nfds, unsigned int interval, int
         for (i = 0; i < n_timer; i++) {
             timer  = (Timer*) d_list_get_data(list);
             df_t = looper_time_diff(cur_t, timer->called_t);
-            df_ms = df_t.tv_sec * 1000;
+            df_ms = df_t.tv_sec * 1000 + df_t.tv_nsec / 1000000;
+            timer->called_t = cur_t;
 
             if (i == n_timer - 1) {
                 if (interval == timer->expired || df_ms >= timer->expired) {
                     result = timer->callback(timer->user_data);
+                    timer->callback_count += 1;
                     if (result == 0) {
-
+                        looper_remove_timer(looper, timer);
+                    } else {
+                        timer->expired = timer->interval;
                     }
-
+                    return;
                 }
             }
             timer->expired -= df_ms;
             list = d_list_next(list);
         }
-
     } else {
         timer = (Timer*) d_list_get_data(list);
         df_t = looper_time_diff(cur_t, timer->called_t);
         df_ms = df_t.tv_sec * 1000;
+        timer->called_t = cur_t;
+
         if (interval == timer->expired || df_ms >= timer->expired) {
             LOGD("interval:%u timer->interval:%u\n", interval, timer->interval);
             result = timer->callback(timer->user_data);
+            timer->callback_count += 1;
+            if (result == 0) {
+                looper_remove_timer(looper, timer);
+            } else {
+                timer->expired = timer->interval;
+            }
         } else {
             timer->expired = (unsigned int) (interval - df_ms);
         }
     }
-
-    /*
-    if (!nfds) {
-        LOGD("nfds:%d\n", nfds);
-        list = d_list_last(list);
-        if (!list) {
-            LOGD("There is noting to point Timer\n");
-            return -1;
-        }
-        timer = (Timer*) d_list_get_data(list);
-        if (interval == timer->interval) {
-            LOGD("interval:%u timer->interval:%u\n", interval, timer->interval);
-            timer->callback(timer->user_data);
-            return -1;
-        }
-    } else {
-        cur_t = get_current_time();
-        while(list) {
-            next = d_list_next(list);
-            timer  = (Timer*) d_list_get_data(list);
-            df_t = time_diff(cur_t, timer->called_t);
-            df_ms = df_t.tv_sec * 1000;
-            LOGD("df_ms:%ld\n", df_ms);
-            timer->called_t = cur_t;
-            if (df_ms >= interval) {
-                timer->callback(timer->user_data);
-            } else {
-                LOGD("interval: %u\n", interval);
-                timer->interval = (unsigned int) (interval - df_ms);
-                LOGD("timer->interval: %u\n", timer->interval);
-            }
-
-            timer->timer->interval = (unsigned int) (interval - df_ms);
-            list = next;
-        }
-        return timer->interval;
-    }
-    return timer->interval;
-    */
 }
 
 static unsigned int looper_get_time(Looper *looper) {
@@ -187,7 +153,6 @@ static unsigned int looper_get_time(Looper *looper) {
     DList *list;
 
     n_timer = d_list_length(looper->timer_list);
-    LOGD("n_timer:%d\n", n_timer);
     if (n_timer > 0) {
         looper->timer_list = d_list_insert_sort(looper->timer_list, looper_set_sort_rule);
         list = d_list_last(looper->timer_list);
@@ -324,12 +289,10 @@ int looper_run(Looper *looper) {
 
         interval = looper_get_time(looper);
 
-        LOGD("interval:%d\n", interval);
         struct pollfd fds[n_watcher];
         looper_get_fds(looper->watcher_list, fds);
 
         nfds = poll(fds, n_watcher, interval);
-        LOGD("nfds: %d\n", nfds);
 
         if (nfds > 0) {
             for (i = 0; i < n_watcher; i++) {
@@ -361,7 +324,7 @@ int looper_run(Looper *looper) {
         }
 
         if (n_timer) {
-            interval = looper_callback(looper, nfds, interval);
+            looper_callback(looper, nfds, interval, n_timer);
         }
     }
     return looper->state;
@@ -401,7 +364,7 @@ void looper_add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, vo
     looper->watcher_list = d_list_append(list, watcher);
 }
 
-void looper_add_timer(Looper* looper, unsigned int interval, int (*callback)(void *user_data), void *user_data) {
+void looper_add_timer(Looper* looper, unsigned int interval, BOOLEAN (*callback)(void *user_data), void *user_data) {
     Timer *timer;
     struct timespec called_t;
 
@@ -411,13 +374,14 @@ void looper_add_timer(Looper* looper, unsigned int interval, int (*callback)(voi
         return;
     }
 
-    called_t = get_current_time();
+    called_t = looper_get_current_time();
     LOGD("interval:%u\n", interval);
 
     timer->user_data = user_data;
     timer->callback = callback;
+    timer->callback_count = 0;
     timer->interval = interval;
-    imter->expired = interval;
+    timer->expired = interval;
     timer->called_t = called_t;
 
     looper->timer_list = d_list_append(looper->timer_list, timer);

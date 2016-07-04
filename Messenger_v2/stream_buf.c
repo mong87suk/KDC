@@ -69,7 +69,7 @@ int stream_buf_get_available_size(Stream_Buf *stream_buf) {
     return stream_buf->len - stream_buf->position;
 }
 
-short stream_buf_increase_pos(Stream_Buf *stream_buf, int n_byte) {
+BOOLEAN stream_buf_increase_pos(Stream_Buf *stream_buf, int n_byte) {
     if (!stream_buf) {
         LOGD("There is nothing to point the Stream_Buf\n");
         return FALSE;

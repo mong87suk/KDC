@@ -133,7 +133,7 @@ void packet_destroy_tail(Tail *tail) {
     free(tail);
 }
 
-short packet_set_sop(Packet *packet, char sop) {
+BOOLEAN packet_set_sop(Packet *packet, char sop) {
     Header *header;
     if (!packet || !packet->header) {
         LOGD("Can't set op_code");
@@ -146,7 +146,7 @@ short packet_set_sop(Packet *packet, char sop) {
     return TRUE;
 }
 
-short packet_set_eop(Packet *packet, char eop) {
+BOOLEAN packet_set_eop(Packet *packet, char eop) {
     Tail *tail;
     if (!packet || !packet->tail) {
         LOGD("Can't set op_code");
@@ -159,7 +159,7 @@ short packet_set_eop(Packet *packet, char eop) {
     return TRUE;
 }
 
-short packet_set_op_code(Packet *packet, short op_code) {
+BOOLEAN packet_set_op_code(Packet *packet, short op_code) {
     Header *header;
     if (!packet || !packet->header) {
         LOGD("Can't set op_code");
@@ -224,7 +224,7 @@ int packet_get_size() {
     return sizeof(Packet);
 }
 
-short packet_set_payload_len(Packet *packet, long int payload_len) {
+BOOLEAN packet_set_payload_len(Packet *packet, long int payload_len) {
     Header *header;
 
     if (!packet || !packet->header) {
@@ -251,7 +251,7 @@ long int packet_get_payload_len(Packet *packet, Header *header) {
     return header->payload_len;
 }
 
-short packet_set_payload(Packet *packet, char *payload) {
+BOOLEAN packet_set_payload(Packet *packet, char *payload) {
     Body *body;
 
     if(!packet || !packet->body) {
@@ -314,7 +314,7 @@ short packet_create_checksum(Packet *packet, char *buf, int len) {
     return checksum;
 }
 
-short packet_set_checksum(Packet *packet, short checksum) {
+BOOLEAN packet_set_checksum(Packet *packet, short checksum) {
     Tail *tail;
 
     if (!packet) {
@@ -329,7 +329,7 @@ short packet_set_checksum(Packet *packet, short checksum) {
     return TRUE;
 }
 
-short packet_set_body(Packet *packet, Body *body) {
+BOOLEAN packet_set_body(Packet *packet, Body *body) {
     if (!packet || !body) {
         LOGD("Can't set the Body");
         return FALSE;
@@ -339,7 +339,7 @@ short packet_set_body(Packet *packet, Body *body) {
     return TRUE;
 }
 
-short packet_set_header(Packet *packet, Header *header) {
+BOOLEAN packet_set_header(Packet *packet, Header *header) {
     if (!packet || !header) {
         LOGD("Can't set the Body");
         return FALSE;
@@ -349,7 +349,7 @@ short packet_set_header(Packet *packet, Header *header) {
     return TRUE;
 }
 
-short packet_set_tail(Packet *packet, Tail *tail) {
+BOOLEAN packet_set_tail(Packet *packet, Tail *tail) {
     if (!packet || !tail) {
         LOGD("Can't set the Tail");
         return FALSE;
