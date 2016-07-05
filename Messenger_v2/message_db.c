@@ -247,7 +247,7 @@ int message_db_add_mesg(MessageDB *mesg_db, Message *mesg) {
 
     entry = message_db_new_entry(mesg, field_mask);
     if (!entry) {
-        LOGD("Failed to convert messaget to entry\n");
+        LOGD("Failed to new entry\n");
         return -1;
     }
 

@@ -5,8 +5,7 @@
 #include "utils.h"
 #include "m_boolean.h"
 
-struct _Message
-{
+struct _Message {
     long int time;
     int str_len;
     char *str;

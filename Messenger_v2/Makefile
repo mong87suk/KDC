@@ -10,6 +10,8 @@ TEST = test
 
 TEST_LOOPER = test_looper
 
+TEST_ACCOUNT_DB = test_account_db
+
 DBLINKED_LIST_SOURCE = ../chapter3/DBLinkedList/DBLinkedList.c
 
 INC = -I../chapter3/DBLinkedList/
@@ -57,6 +59,18 @@ TEST_LOOPER_OBJECT = \
 			test_looper.o\
 			looper.o\
 
+TEST_ACCOUNT_DB_OBJECT = \
+				test_account_db.o\
+				database.o\
+				index_file.o\
+				data_file.o\
+				entry_point.o\
+				stream_buf.o\
+				utils.o\
+				message.o\
+				account_db.o\
+				account.o\
+
 SHARED_LIBRARY = lib$(DBLINKED_LIST).so
 
 CFLAGS += -Wall -g $(INC)
@@ -64,7 +78,7 @@ CFLAGS += -Wall -g $(INC)
 .c.o:
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-all: $(SERVER_MAIN) $(CLIENT_MAIN) $(TEST) $(TEST_LOOPER)
+all: $(SERVER_MAIN) $(CLIENT_MAIN) $(TEST) $(TEST_LOOPER) $(TEST_ACCOUNT_DB)
 
 $(SERVER_MAIN) : $(SERVER_MAIN_OBJECT) $(SHARED_LIBRARY)
 	$(CC) -o $(SERVER_MAIN) $(SERVER_MAIN_OBJECT) -L. -l$(DBLINKED_LIST)
@@ -77,6 +91,9 @@ $(TEST) : $(TEST_OBJECT)
 
 $(TEST_LOOPER) : $(TEST_LOOPER_OBJECT)
 	$(CC) -o $(TEST_LOOPER) $(TEST_LOOPER_OBJECT) -L. -l$(DBLINKED_LIST)
+
+$(TEST_ACCOUNT_DB) : $(TEST_ACCOUNT_DB_OBJECT)
+	$(CC) -o $(TEST_ACCOUNT_DB) $(TEST_ACCOUNT_DB_OBJECT) -L. -l$(DBLINKED_LIST)
 
 $(SHARED_LIBRARY):$(DBLINKED_LIST_OBJECT)
 	$(CC) -shared -o $@ $^
