@@ -57,7 +57,7 @@ int main() {
 
     database_add_entry(database, stream_buf);
 
-    entry_point = database_get_entry_point(database, 1);
+    entry_point = database_find_entry_point(database, 1);
     assert(entry_point);
 
     update_stream_buf = new_stream_buf(12);

@@ -24,7 +24,7 @@ Account* new_account(char *id, char *pw, char *email, char *confirm, char *mobil
     Account *account;
 
     account = (Account*) malloc(sizeof(Account));
-    printf("ACCOUNT ADDRESS %x\n", account);
+    LOGD("ACCOUNT ADDRESS %x\n", account);
     LOGD("account size:%d\n", sizeof(Account));
     if (!account) {
         LOGD("Failed to make the Account\n");
@@ -32,13 +32,14 @@ Account* new_account(char *id, char *pw, char *email, char *confirm, char *mobil
     }
 
     str_len = strlen(id);
+    LOGD("id:%d\n", str_len);   
     if (str_len < ID_MIN_SIZE || str_len > ID_MAX_SIZE) {
         LOGD("Failed to make the Account\n");
         free(account);
         return NULL;
     }
     memset(account->id, 0, sizeof(account->id));
-    memcpy(account->id,id,str_len);
+    strncpy(account->id,id,str_len);
     account->id_len=str_len;
     /*
     malloc
@@ -47,51 +48,54 @@ Account* new_account(char *id, char *pw, char *email, char *confirm, char *mobil
     */
 
     str_len = strlen(pw);
-
+    LOGD("pw:%d\n", str_len);   
     if (str_len < PW_MIN_SIZE || str_len > PW_MAX_SIZE) {
         LOGD("Failed to make the Account\n");
         free(account);
         return NULL;
     }
-
     account->pw_len = str_len;
-
     memset(account->pw, 0, 40);
-    memcpy(account->pw, pw, str_len);
+    strncpy(account->pw, pw, str_len);
 
     str_len = strlen(email);
+    LOGD("email:%d\n", str_len);    
     if (str_len <= 0) {
         LOGD("Failed to make the Account\n");
         free(account);
         return NULL;
     }
     account->email_len = str_len;
-
     memset(account->email, 0, sizeof(account->email));
-    memcpy(account->email, email, str_len);
+    strncpy(account->email, email, str_len);
 
     str_len = strlen(confirm);
+    LOGD("confirm:%d\n", str_len);
     if (str_len < CONFIRM_MIN_SIZE || str_len > CONFIRM_MAX_SIZE) {
         LOGD("Failed to make the Account\n");
         free(account);
         return NULL;
     }
     account->confirm_len = str_len;
-
     memset(account->confirm, 0, sizeof(account->confirm));
-    memcpy(account->confirm, confirm, str_len);
+    strncpy(account->confirm, confirm, str_len);
 
     str_len = strlen(mobile);
+    LOGD("mobile:%d\n", str_len);
     if (str_len <= 0) {
         LOGD("Failed to make the Account\n");
         free(account);
         return NULL;
     }
     account->mobile_len = str_len;
-
     memset(account->mobile, 0, sizeof(account->mobile));
-    memcpy(account->mobile, mobile, str_len);
+    strncpy(account->mobile, mobile, str_len);
 
+    LOGD("account id:%s\n", account->id);
+    LOGD("account pw:%s\n", account->pw);
+    LOGD("account email:%s\n", account->email);
+    LOGD("account confirm:%s\n", account->confirm);
+    LOGD("account mobile:%s\n", account->mobile);
     return account;
 }
 

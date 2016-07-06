@@ -162,7 +162,6 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
     Account* account;
 
     account = NULL;
-
     if (!entry) {
         LOGD("There is nothing to point the entry\n");
         return NULL;
@@ -189,6 +188,7 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
             switch(index) {
             case ID:
                 memcpy(&len, buf, sizeof(int));
+                LOGD("ID\n");
                 if (len < 0) {
                     LOGD("Failed to get len\n");
                     return NULL;
@@ -201,7 +201,7 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
                     return NULL;
                 }
                 memset(id, 0, len + 1);
-                memcpy(id, buf, len);
+                strncpy(id, buf, len);
                 buf += len;
                 break;
 
@@ -219,7 +219,7 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
                     return NULL;
                 }
                 memset(pw, 0, len + 1);
-                memcpy(pw, buf, len);
+                strncpy(pw, buf, len);
                 buf += len;
                 break;
 
@@ -237,7 +237,7 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
                     return NULL;
                 }
                 memset(email, 0, len + 1);
-                memcpy(email, buf, len);
+                strncpy(email, buf, len);
                 buf += len;
                 break;
 
@@ -255,7 +255,7 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
                     return NULL;
                 }
                 memset(confirm, 0, len + 1);
-                memcpy(confirm, buf, len);
+                strncpy(confirm, buf, len);
                 buf += len;
                 break;
 
@@ -273,7 +273,7 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
                     return NULL;
                 }
                 memset(mobile, 0, len + 1);
-                memcpy(mobile, buf, len);
+                strncpy(mobile, buf, len);
                 buf += len;
                 break;
 
@@ -282,19 +282,20 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
             }
         }
     }
-
+    LOGD("id:%s\n", id);
     account = new_account(id, pw, email, confirm, mobile);
+    LOGD("id:%s pw:%s email:%s confirm:%s mobile:%s \n", account_get_id(account), account_get_pw(account), account_get_email(account), account_get_confirm(account), account_get_mobile(account));
+    free(id);
+    free(pw);
+    free(email);
+    free(confirm);
+    free(mobile); 
+
     LOGD("account ad:%x\n", account);
     if (!account) {
         LOGD("Failed to make the Account\n");
         return NULL;
     }
-
-    free(id);
-    free(pw);
-    free(email);
-    free(confirm);
-    free(mobile);
 
     return account;
 }
@@ -400,7 +401,7 @@ DList* account_db_get_accounts(AccountDB *account_db) {
         LOGD("Can't get entry\n");
         return NULL;
     }
-    LOGD("DELETE START\n");
+
     for (i = 1; i <= count; i++) {
         entry_point = database_nth_entry_point(account_db->database, i);
         if (!entry_point) {
@@ -409,7 +410,6 @@ DList* account_db_get_accounts(AccountDB *account_db) {
         }
         entry = entry_point_get_value(entry_point);
         account = account_db_new_account(entry, field_mask);
-        LOGD("DELETE ACCOUNT ADDRESS %x\n", account);
         destroy_stream_buf(entry);
         if (!account) {
             LOGD("Failed to convert\n");
@@ -427,7 +427,12 @@ int account_db_delete_account(AccountDB *account_db, char *id, char *pw) {
     int entry_id;
     int field_mask;
     int count;
-    int result;
+    BOOLEAN result;
+    
+    char *cmp_id;
+    char *cmp_pw;
+    int pw_len;
+    int id_len;
 
     EntryPoint *entry_point;
     Stream_Buf *entry;
@@ -454,6 +459,7 @@ int account_db_delete_account(AccountDB *account_db, char *id, char *pw) {
     LOGD("count:%d\n", count);
     LOGD("DELETE START\n");
     for (i = 0; i <= count; i++) {
+        LOGD("i:%d\n", i);
         entry_point = database_nth_entry_point(account_db->database, i);
         if (!entry_point) {
             LOGD("There is no the entry point matched id\n");
@@ -469,20 +475,23 @@ int account_db_delete_account(AccountDB *account_db, char *id, char *pw) {
             LOGD("Failed to convert\n");
             continue;
         }
+        cmp_id = account_get_id(account);
+        id_len = account_get_id_len(account);
+        cmp_pw = account_get_pw(account);
+        pw_len = account_get_pw_len(account);
+        LOGD("delete id:%s\n", account_get_id(account));
+        destroy_account(account);
 
-        if ((strncmp(id, account_get_id(account), account_get_id_len(account)) == 0) &&
-            (strncmp(pw, account_get_pw(account), account_get_pw_len(account)) == 0)) {
+        if ((strncmp(id, cmp_id, id_len) == 0) && (strncmp(pw, cmp_pw, pw_len) == 0)) {
             LOGD("delete entry\n");
             result = delete_entry(account_db->database, entry_id);
-            if (!result) {
+            if (result == FALSE) {
                 LOGD("Failed to delete the entry\n");
             } else {
                 entry_id = -1;
             }
+            break;
         }
-        LOGD("delete account\n");
-        LOGD("delete id:%s\n", account_get_id(account));
-        destroy_account(account);
     }
 
     return entry_id;
