@@ -151,6 +151,114 @@ static Stream_Buf* account_db_new_entry(Account *account, int field_mask) {
     return stream_buf;
 }
 
+static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
+    int len;
+    int i;
+    int index;
+    int colum, count;
+    char *buf;
+    BOOLEAN result;
+
+    if (!account) {
+        LOGD("There is nothing to point the mesg\n");
+        return NULL;
+    }
+
+    count = utils_get_colum_count(field_mask);
+    if (count <= 0) {
+        LOGD("Failed to get colum count\n");
+        return NULL;
+    }
+    count -= 1;
+    index = 0;
+
+    buf = stream_buf_get_buf(entry);
+    if (!buf) {
+        LOGD("Failed to get the buf\n");
+        return NULL;
+    }
+
+    for (i = count; i >= 0; i--) {
+        index += 1;
+        colum = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;
+        if (colum == STRING_FIELD) {
+            switch(index) {
+            case ID:
+                len = account_get_id_len(account);
+                str = account_get_id(account);
+                stream_buf_list = account_db_add_info_buf(stream_buf_list, str, len);
+                if (!stream_buf_list) {
+                    LOGD("Failed to add info buf\n");
+                    return NULL;
+                }
+                buf_size += sizeof(int);
+                buf_size += len;
+                break;
+
+            case PW:
+                len = account_get_pw_len(account);
+                str = account_get_pw(account);
+                stream_buf_list = account_db_add_info_buf(stream_buf_list, str, len);
+                if (!stream_buf_list) {
+                    LOGD("Failed to add info buf\n");
+                    return NULL;
+                }
+                buf_size += sizeof(int);
+                buf_size += len;
+                break;
+
+            case EMAIL:
+                len = account_get_email_len(account);
+                str = account_get_email(account);
+                stream_buf_list = account_db_add_info_buf(stream_buf_list, str, len);
+                if (!stream_buf_list) {
+                    LOGD("Failed to add info buf\n");
+                    return NULL;
+                }
+                buf_size += sizeof(int);
+                buf_size += len;
+                break;
+
+            case CONFIRM:
+                len = account_get_confirm_len(account);
+                str = account_get_confirm(account);
+                stream_buf_list = account_db_add_info_buf(stream_buf_list, str, len);
+                if (!stream_buf_list) {
+                    LOGD("Failed to add info buf\n");
+                    return NULL;
+                }
+                buf_size += sizeof(int);
+                buf_size += len;
+                break;
+
+            case MOBILE:
+                len = account_get_mobile_len(account);
+                str = account_get_mobile(account);
+                stream_buf_list = account_db_add_info_buf(stream_buf_list, str, len);
+                if (!stream_buf_list) {
+                    LOGD("Failed to add info buf\n");
+                    return NULL;
+                }
+                buf_size += sizeof(int);
+                buf_size += len;
+                break;
+
+            default:
+                break;
+            }
+        }
+    }
+
+    stream_buf = new_stream_buf(buf_size);
+    result = utils_append_data_to_buf(stream_buf_list, stream_buf);
+    utils_destroy_stream_buf_list(stream_buf_list);
+    if (result == FALSE) {
+        LOGD("Failed to append data\n");
+        return NULL;
+    }
+    return stream_buf;
+}
+
 AccountDB* account_db_open(char *data_format) {
     AccountDB *account_db;
     DataBase *database;
@@ -224,4 +332,51 @@ int account_db_add_account(AccountDB *account_db, Account *account) {
     }
 
     return id;
+}
+
+DList* account_db_get_accounts(AccountDB *account_db) {
+    int i;
+    int field_mask;
+    int count;
+    DList *account_list;
+    EntryPoint *entry_point;
+    Stream_Buf *entry;
+    Account *account;
+
+    if (!account_db) {
+        LOGD("There is nothing to point the MessageDB\n");
+        return NULL;
+    }
+
+    field_mask = database_get_field_mask(mesg_db->database);
+    if (field_mask == 0) {
+        LOGD("Field mask was wrong\n");
+        return NULL;
+    }
+
+    account_list = NULL;
+    count = database_get_entry_count(account_db->database);
+    if (count <= 0) {
+        LOGD("Can't get entry\n");
+        return NULL;
+    }
+
+    for (i = 1; i <= count; i++) {
+        entry_point = database_get_entry_point(mesg_db->database, i);
+        if (!entry_point) {
+            LOGD("There is no the entry point matched id\n");
+            continue;
+        }
+        entry = entry_point_get_value(entry_point);
+        account = account_db_new_account(entry, field_mask);
+        destroy_stream_buf(entry);
+        if (!account) {
+            LOGD("Failed to convert\n");
+            continue;
+        }
+
+        account_list = d_list_append(account_list, account);
+    }
+
+    return account_list;
 }

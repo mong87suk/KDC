@@ -306,7 +306,7 @@ int database_get_field_mask(DataBase *database) {
 EntryPoint* database_get_entry_point(DataBase *database, int id) {
     EntryPoint *entry_point;
 
-    if (!database || id < 0) {
+    if (!database || id <= 0) {
         LOGD("Can't get entry point\n");
         return NULL;
     }
