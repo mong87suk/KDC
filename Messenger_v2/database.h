@@ -20,7 +20,8 @@ BOOLEAN delete_entry(DataBase *database, int id);
 DList* database_get_entry_list(DataBase *database);
 int database_update_entry(DataBase *database, EntryPoint *entry_point, Stream_Buf *entry, int id);
 int database_get_field_mask(DataBase *database);
-EntryPoint* database_get_entry_point(DataBase *database, int id);
+EntryPoint* database_find_entry_point(DataBase *database, int id);
 int database_get_data_file_fd(DataBase *database);
+EntryPoint* database_nth_entry_point(DataBase *database, int nth);
 
 #endif

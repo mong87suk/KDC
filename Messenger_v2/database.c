@@ -303,7 +303,7 @@ int database_get_field_mask(DataBase *database) {
     return database->field_mask;
 }
 
-EntryPoint* database_get_entry_point(DataBase *database, int id) {
+EntryPoint* database_find_entry_point(DataBase *database, int id) {
     EntryPoint *entry_point;
 
     if (!database || id <= 0) {
@@ -318,6 +318,22 @@ EntryPoint* database_get_entry_point(DataBase *database, int id) {
     }
 
     return entry_point;
+}
+
+EntryPoint* database_nth_entry_point(DataBase *database, int nth) {
+    EntryPoint* entry;
+
+    if (!database) {
+        LOGD("Can't get entry point\n");
+        return NULL;
+    }
+
+    entry = index_file_nth_entry(database->index_file, nth);
+    if (!entry) {
+        LOGD("Failed to get nth entry\n");
+        return NULL;
+    }
+    return entry;
 }
 
 int database_get_data_file_fd(DataBase *database) {

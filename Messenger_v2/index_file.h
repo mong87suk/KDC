@@ -17,4 +17,6 @@ int index_file_get_count(IndexFile *index_file);
 EntryPoint* index_file_find_entry(IndexFile *index_file, int id);
 void index_file_delete_entry(IndexFile *index_file, EntryPoint *entry_point);
 DList* index_file_get_list(IndexFile *index_file);
+EntryPoint* index_file_nth_entry(IndexFile *index_file, int nth);
+
 #endif

@@ -450,3 +450,23 @@ DList* index_file_get_list(IndexFile *index_file) {
 
     return index_file->entry_list;
 }
+
+EntryPoint* index_file_nth_entry(IndexFile *index_file, int nth) {
+    DList *list;
+    EntryPoint* entry;
+
+    if (!index_file) {
+        LOGD("There is noting to point the IndexFile\n");
+        return NULL;
+    }
+
+    list = d_list_nth_for(index_file->entry_list, nth);
+    entry = (EntryPoint*) d_list_get_data(list);
+
+    if (!entry) {
+        LOGD("Can't get nth entry\n");
+        return NULL;
+    }
+
+    return entry;
+}

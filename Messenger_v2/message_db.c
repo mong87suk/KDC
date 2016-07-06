@@ -289,7 +289,7 @@ DList* message_db_get_messages(MessageDB *mesg_db, int pos, int count) {
     LOGD("pos :%d count:%d\n", pos, count);
 
     for (i = pos; i < (pos +count); i++) {
-        entry_point = database_get_entry_point(mesg_db->database, i);
+        entry_point = database_find_entry_point(mesg_db->database, i);
         if (!entry_point) {
             LOGD("There is no the entry point matched id\n");
             continue;
@@ -319,7 +319,7 @@ int message_db_get_message_count(MessageDB *mesg_db) {
     count = database_get_entry_count(mesg_db->database);
 
     if (count < 0) {
-        LOGD("Failed to get entry point\n");
+        LOGD("Failed to get entry point count\n");
         return -1;
     }
 
@@ -339,7 +339,7 @@ int message_db_update_str(MessageDB *mesg_db, int id, char *new_str, int str_len
         return FALSE;
     }
 
-    entry_point = database_get_entry_point(mesg_db->database, id);
+    entry_point = database_find_entry_point(mesg_db->database, id);
     if (!entry_point) {
         LOGD("There is nothing to point the EntryPoint\n");
         return FALSE;

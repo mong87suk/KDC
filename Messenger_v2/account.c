@@ -7,7 +7,7 @@
 
 struct _Account {
     char id[20];
-    char pw[20];
+    char pw[40];
     char email[40];
     char confirm[20];
     char mobile[20];
@@ -24,6 +24,8 @@ Account* new_account(char *id, char *pw, char *email, char *confirm, char *mobil
     Account *account;
 
     account = (Account*) malloc(sizeof(Account));
+    printf("ACCOUNT ADDRESS %x\n", account);
+    LOGD("account size:%d\n", sizeof(Account));
     if (!account) {
         LOGD("Failed to make the Account\n");
         return NULL;
@@ -35,16 +37,26 @@ Account* new_account(char *id, char *pw, char *email, char *confirm, char *mobil
         free(account);
         return NULL;
     }
-    account->id_len = str_len;
-    memcpy(account->id, id, str_len);
+    memset(account->id, 0, sizeof(account->id));
+    memcpy(account->id,id,str_len);
+    account->id_len=str_len;
+    /*
+    malloc
+    strcmp(account->id, id, str_len);
+
+    */
 
     str_len = strlen(pw);
+
     if (str_len < PW_MIN_SIZE || str_len > PW_MAX_SIZE) {
         LOGD("Failed to make the Account\n");
         free(account);
         return NULL;
     }
+
     account->pw_len = str_len;
+
+    memset(account->pw, 0, 40);
     memcpy(account->pw, pw, str_len);
 
     str_len = strlen(email);
@@ -54,6 +66,8 @@ Account* new_account(char *id, char *pw, char *email, char *confirm, char *mobil
         return NULL;
     }
     account->email_len = str_len;
+
+    memset(account->email, 0, sizeof(account->email));
     memcpy(account->email, email, str_len);
 
     str_len = strlen(confirm);
@@ -63,6 +77,8 @@ Account* new_account(char *id, char *pw, char *email, char *confirm, char *mobil
         return NULL;
     }
     account->confirm_len = str_len;
+
+    memset(account->confirm, 0, sizeof(account->confirm));
     memcpy(account->confirm, confirm, str_len);
 
     str_len = strlen(mobile);
@@ -72,6 +88,8 @@ Account* new_account(char *id, char *pw, char *email, char *confirm, char *mobil
         return NULL;
     }
     account->mobile_len = str_len;
+
+    memset(account->mobile, 0, sizeof(account->mobile));
     memcpy(account->mobile, mobile, str_len);
 
     return account;
@@ -83,7 +101,24 @@ void destroy_account(Account *account) {
         return;
     }
 
+    LOGD("account:%0x\n", account);
+    LOGD("id:%s pw:%s email:%s confirm:%s mobile:%s \n", account_get_id(account), account_get_pw(account), account_get_email(account), account_get_confirm(account), account_get_mobile(account));
+    LOGD("id size:%ld\n", sizeof(account->id));
+    LOGD("pw size:%ld\n", sizeof(account->pw));
+    LOGD("email size:%ld\n", sizeof(account->email));
+    LOGD("confirm size:%ld\n", sizeof(account->confirm));
+    LOGD("mobile size:%ld\n", sizeof(account->mobile));
+    LOGD("id_len:%ld\n", sizeof(account->id_len));
+    LOGD("pw_len:%ld\n", sizeof(account->pw_len));
+    LOGD("email_len:%ld\n", sizeof(account->email_len));
+    LOGD("confirm_len:%ld\n", sizeof(account->confirm_len));
+    LOGD("account_len:%ld\n", sizeof(account->mobile_len));
+
+
+    LOGD("before destroy_account\n");
+    LOGD("size:%d\n", sizeof(Account));
     free(account);
+    LOGD("after destroy_account\n");
 }
 
 char* account_get_id(Account *account) {
@@ -110,7 +145,7 @@ char* account_get_email(Account *account) {
         return NULL;
     }
 
-    return account->email;
+   return account->email;
 }
 
 char* account_get_confirm(Account *account) {
