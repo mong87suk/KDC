@@ -14,36 +14,34 @@ struct _AccountDB {
     DataBase *database;
 };
 
-static DList* account_db_add_info_buf(DList *stream_buf_list, char *info, int info_len) {
+static Stream_Buf* account_db_new_account_info_buf(char *info, int len) {
     Stream_Buf *stream_buf;
 
-    stream_buf = NULL;
-
-    if (info_len < 0 || !info) {
-        LOGD("Failed to get str len\n");
+    if (!info) {
+        LOGD("Can't new account info buf\n");
         return NULL;
     }
 
-    stream_buf = new_stream_buf(sizeof(int));
+    if (len <= 0) {
+        LOGD("Can't new account info buf\n");
+        return NULL;
+    }
+
+    stream_buf = new_stream_buf(sizeof(int) + len);
     if (!stream_buf) {
         LOGD("Failed to make the StreamBuf\n");
         return NULL;
     }
-    memcpy(stream_buf_get_available(stream_buf), &info_len, sizeof(int));
+
+    memcpy(stream_buf_get_available(stream_buf), &len, sizeof(int));
     stream_buf_increase_pos(stream_buf, sizeof(int));
-    stream_buf_list = d_list_append(stream_buf_list, stream_buf);
 
-    stream_buf = new_stream_buf(info_len);
-    if (!stream_buf) {
-        LOGD("Failed to make the StreamBuf\n");
-        return NULL;
-    }
-    memcpy(stream_buf_get_available(stream_buf), info, info_len);
-    stream_buf_increase_pos(stream_buf, info_len);
-    stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+    memcpy(stream_buf_get_available(stream_buf), info, len);
+    stream_buf_increase_pos(stream_buf, len);
 
-    return stream_buf_list;
+    return stream_buf;
 }
+
 
 static Stream_Buf* account_db_new_entry(Account *account, int field_mask) {
     int len;
@@ -77,11 +75,12 @@ static Stream_Buf* account_db_new_entry(Account *account, int field_mask) {
         if (colum == STRING_FIELD) {
             switch(index) {
             case ID:
-                len = account_get_id_len(account);
                 str = account_get_id(account);
-                stream_buf_list = account_db_add_info_buf(stream_buf_list, str, len);
-                if (!stream_buf_list) {
-                    LOGD("Failed to add info buf\n");
+                len = strlen(str);
+                stream_buf = account_db_new_account_info_buf(str, len);
+                stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+                if (!stream_buf || !stream_buf_list) {
+                    LOGD("Failed new entry\n");
                     return NULL;
                 }
                 buf_size += sizeof(int);
@@ -89,11 +88,12 @@ static Stream_Buf* account_db_new_entry(Account *account, int field_mask) {
                 break;
 
             case PW:
-                len = account_get_pw_len(account);
                 str = account_get_pw(account);
-                stream_buf_list = account_db_add_info_buf(stream_buf_list, str, len);
-                if (!stream_buf_list) {
-                    LOGD("Failed to add info buf\n");
+                len = strlen(str);
+                stream_buf = account_db_new_account_info_buf(str, len);
+                stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+                if (!stream_buf || !stream_buf_list) {
+                    LOGD("Failed new entry\n");
                     return NULL;
                 }
                 buf_size += sizeof(int);
@@ -101,11 +101,12 @@ static Stream_Buf* account_db_new_entry(Account *account, int field_mask) {
                 break;
 
             case EMAIL:
-                len = account_get_email_len(account);
                 str = account_get_email(account);
-                stream_buf_list = account_db_add_info_buf(stream_buf_list, str, len);
-                if (!stream_buf_list) {
-                    LOGD("Failed to add info buf\n");
+                len = strlen(str);
+                stream_buf = account_db_new_account_info_buf(str, len);
+                stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+                if (!stream_buf || !stream_buf_list) {
+                    LOGD("Failed new entry\n");
                     return NULL;
                 }
                 buf_size += sizeof(int);
@@ -113,11 +114,12 @@ static Stream_Buf* account_db_new_entry(Account *account, int field_mask) {
                 break;
 
             case CONFIRM:
-                len = account_get_confirm_len(account);
                 str = account_get_confirm(account);
-                stream_buf_list = account_db_add_info_buf(stream_buf_list, str, len);
-                if (!stream_buf_list) {
-                    LOGD("Failed to add info buf\n");
+                len = strlen(str);
+                stream_buf = account_db_new_account_info_buf(str, len);
+                stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+                if (!stream_buf || !stream_buf_list) {
+                    LOGD("Failed new entry\n");
                     return NULL;
                 }
                 buf_size += sizeof(int);
@@ -125,11 +127,12 @@ static Stream_Buf* account_db_new_entry(Account *account, int field_mask) {
                 break;
 
             case MOBILE:
-                len = account_get_mobile_len(account);
                 str = account_get_mobile(account);
-                stream_buf_list = account_db_add_info_buf(stream_buf_list, str, len);
-                if (!stream_buf_list) {
-                    LOGD("Failed to add info buf\n");
+                len = strlen(str);
+                stream_buf = account_db_new_account_info_buf(str, len);
+                stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+                if (!stream_buf || !stream_buf_list) {
+                    LOGD("Failed new entry\n");
                     return NULL;
                 }
                 buf_size += sizeof(int);
@@ -213,6 +216,7 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
                 }
                 buf += sizeof(int);
 
+                LOGD("len:%d\n");
                 pw = (char*) malloc(len + 1);
                 if (!pw) {
                     LOGD("Failed to make buf\n");
@@ -282,16 +286,14 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
             }
         }
     }
-    LOGD("id:%s\n", id);
     account = new_account(id, pw, email, confirm, mobile);
-    LOGD("id:%s pw:%s email:%s confirm:%s mobile:%s \n", account_get_id(account), account_get_pw(account), account_get_email(account), account_get_confirm(account), account_get_mobile(account));
+    
     free(id);
     free(pw);
     free(email);
     free(confirm);
-    free(mobile); 
+    free(mobile);
 
-    LOGD("account ad:%x\n", account);
     if (!account) {
         LOGD("Failed to make the Account\n");
         return NULL;
@@ -439,11 +441,12 @@ int account_db_delete_account(AccountDB *account_db, char *id, char *pw) {
     Account *account;
 
     if (!account_db) {
-        LOGD("There is nothing to point the MessageDB\n");
+        LOGD("There is nothing to point the AccountDB\n");
         return -1;
     }
 
     account = NULL;
+    entry_point = NULL;
     field_mask = database_get_field_mask(account_db->database);
     if (field_mask == 0) {
         LOGD("Field mask was wrong\n");
@@ -458,7 +461,8 @@ int account_db_delete_account(AccountDB *account_db, char *id, char *pw) {
 
     LOGD("count:%d\n", count);
     LOGD("DELETE START\n");
-    for (i = 0; i <= count; i++) {
+   
+    for (i = 0; i < count; i++) {
         LOGD("i:%d\n", i);
         entry_point = database_nth_entry_point(account_db->database, i);
         if (!entry_point) {
@@ -467,21 +471,32 @@ int account_db_delete_account(AccountDB *account_db, char *id, char *pw) {
         }
         entry_id = entry_point_get_id(entry_point);
         LOGD("entry_id:%d\n", entry_id);
+        if (entry_point) {
+            LOGD("test\n");
+        }
         entry = entry_point_get_value(entry_point);
         account = account_db_new_account(entry, field_mask);
-        LOGD("DELETE ACCOUNT ADDRESS %x\n", account); 
-        destroy_stream_buf(entry);
-        if (!account) {
-            LOGD("Failed to convert\n");
+        LOGD("DELETE Entry %p\n", entry);
+        LOGD("DELETE Entry buf %p\n", stream_buf_get_buf(entry));
+        LOGD("DELETE ACCOUNT ADDRESS %p\n", account);
+        if (entry) {
+            LOGD("DELETE ENTRY\n");
+            destroy_stream_buf(entry);
+        }
+        
+        /*if (!account) {
+            LOGD("Failed to new account\n");
             continue;
         }
+        
         cmp_id = account_get_id(account);
-        id_len = account_get_id_len(account);
+        id_len = strlen(cmp_id);
+        LOGD("id_len:%d\n", id_len);
         cmp_pw = account_get_pw(account);
-        pw_len = account_get_pw_len(account);
+        pw_len = strlen(cmp_pw);
+        LOGD("pw_len:%d\n", pw_len);
         LOGD("delete id:%s\n", account_get_id(account));
         destroy_account(account);
-
         if ((strncmp(id, cmp_id, id_len) == 0) && (strncmp(pw, cmp_pw, pw_len) == 0)) {
             LOGD("delete entry\n");
             result = delete_entry(account_db->database, entry_id);
@@ -491,8 +506,9 @@ int account_db_delete_account(AccountDB *account_db, char *id, char *pw) {
                 entry_id = -1;
             }
             break;
-        }
+        }*/
     }
+    LOGD("finish\n");
 
     return entry_id;
 }

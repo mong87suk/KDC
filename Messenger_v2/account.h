@@ -19,10 +19,5 @@ char* account_get_pw(Account *account);
 char* account_get_email(Account *account);
 char* account_get_confirm(Account *account);
 char* account_get_mobile(Account *account);
-int account_get_id_len(Account *account);
-int account_get_pw_len(Account *account);
-int account_get_email_len(Account *account);
-int account_get_confirm_len(Account *account);
-int account_get_mobile_len(Account *account);
 
 #endif

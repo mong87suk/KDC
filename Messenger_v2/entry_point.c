@@ -179,6 +179,7 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
     }
 
     stream_buf = new_stream_buf(buf_size);
+    LOGD("stream_buf:%p\n", stream_buf);
     result = utils_append_data_to_buf(stream_buf_list, stream_buf);
     utils_destroy_stream_buf_list(stream_buf_list);
 

@@ -64,10 +64,10 @@ TEST_ACCOUNT_DB_OBJECT = \
 				database.o\
 				index_file.o\
 				data_file.o\
+				message.o\
 				entry_point.o\
 				stream_buf.o\
 				utils.o\
-				message.o\
 				account_db.o\
 				account.o\
 
