@@ -18,8 +18,6 @@ Account* new_account(char *id, char *pw, char *email, char *confirm, char *mobil
     Account *account;
 
     account = (Account*) malloc(sizeof(Account));
-    LOGD("ACCOUNT ADDRESS %p\n", account);
-    LOGD("account size:%d\n", sizeof(Account));
     if (!account) {
         LOGD("Failed to make the Account\n");
         return NULL;

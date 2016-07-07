@@ -35,7 +35,6 @@ static void utils_append_data(void *data, void *user_data) {
     }
 
     copy_n = stream_buf_get_position(data_stream_buf);
-    LOGD("copy_n %d\n", copy_n);
     memcpy(dest, src, copy_n);
     stream_buf_increase_pos(user_data_stream_buf, copy_n);
 }
