@@ -299,6 +299,40 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
     return account;
 }
 
+static Account* account_db_nth_account(AccountDB *account_db, int nth) {
+    int field_mask;
+
+    EntryPoint *entry_point;
+    Stream_Buf *entry;
+    Account *account;
+
+    if (!account_db) {
+        LOGD("There is nothing to point the AccountDB\n");
+        return NULL;
+    }
+
+    field_mask = database_get_field_mask(account_db->database);
+    if (field_mask == 0) {
+        LOGD("Field mask was wrong\n");
+        return NULL;
+    }
+
+    entry_point = database_nth_entry_point(account_db->database, nth);
+    if (!entry_point) {
+        LOGD("Faied to nth entry point\n");
+        return NULL;
+    }
+
+    entry = entry_point_get_value(entry_point);
+    account = account_db_new_account(entry, field_mask);
+    if (!account) {
+        LOGD("Failed to new account\n");
+        return NULL;
+    }
+    destroy_stream_buf(entry);
+
+    return account;
+}
 AccountDB* account_db_open(char *data_format) {
     AccountDB *account_db;
     DataBase *database;
@@ -365,7 +399,7 @@ int account_db_add_account(AccountDB *account_db, Account *account) {
     }
 
     count = database_get_entry_count(account_db->database);
-    for (i = 1; i <= count; i++) {
+    for (i = 0; i < count; i++) {
         entry_point = database_nth_entry_point(account_db->database, i);
         if (!entry_point) {
             LOGD("There is no the entry point matched id\n");
@@ -429,7 +463,7 @@ DList* account_db_get_accounts(AccountDB *account_db) {
         return NULL;
     }
 
-    for (i = 1; i <= count; i++) {
+    for (i = 0; i < count; i++) {
         entry_point = database_nth_entry_point(account_db->database, i);
         if (!entry_point) {
             LOGD("There is no the entry point matched id\n");
@@ -462,9 +496,8 @@ int account_db_delete_account(AccountDB *account_db, char *id, char *pw) {
     int id_len;
 
     EntryPoint *entry_point;
-    Stream_Buf *entry;
     Account *account;
-
+    
     if (!account_db) {
         LOGD("There is nothing to point the AccountDB\n");
         return -1;
@@ -472,6 +505,7 @@ int account_db_delete_account(AccountDB *account_db, char *id, char *pw) {
 
     account = NULL;
     entry_point = NULL;
+
     field_mask = database_get_field_mask(account_db->database);
     if (field_mask == 0) {
         LOGD("Field mask was wrong\n");
@@ -484,39 +518,34 @@ int account_db_delete_account(AccountDB *account_db, char *id, char *pw) {
         return -1;
     }
 
-   
     for (i = 0; i < count; i++) {
-        entry_point = database_nth_entry_point(account_db->database, i);
-        if (!entry_point) {
-            LOGD("There is no the entry point matched id\n");
-            continue;
-        }
-        entry_id = entry_point_get_id(entry_point);
-        entry = entry_point_get_value(entry_point);
-        account = account_db_new_account(entry, field_mask);
-        if (entry) {
-            destroy_stream_buf(entry);
-        }
-        
+        account = account_db_nth_account(account_db, i); 
         if (!account) {
             LOGD("Failed to new account\n");
             continue;
         }
-        
+
         cmp_id = account_get_id(account);
         id_len = strlen(cmp_id);
         cmp_pw = account_get_pw(account);
         pw_len = strlen(cmp_pw);
-        if ((strncmp(id, cmp_id, id_len) == 0) && (strncmp(pw, cmp_pw, pw_len) == 0)) {
-            result = delete_entry(account_db->database, entry_id);
-            destroy_account(account);
-            if (result == FALSE) {
-                LOGD("Failed to delete the entry\n");
+        if (strncmp(cmp_id, id, id_len) == 0) {
+            if (strncmp(cmp_pw, pw, pw_len) == 0) {
+                entry_point = database_nth_entry_point(account_db->database, i);
+                entry_id = entry_point_get_id(entry_point);
+                result = delete_entry(account_db->database, entry_id);
+                if (result == FALSE) {
+                    LOGD("Failed to delete the entry\n");
+                    entry_id = -1;
+                }
             } else {
+                LOGD("Pw was wrong\n");
                 entry_id = -1;
             }
+            destroy_account(account);
             break;
         }
+        entry_id = -1;
         destroy_account(account);
     }
     return entry_id;
@@ -540,36 +569,47 @@ int account_db_get_account_count(AccountDB *account_db) {
     return count;
 }
 
-Account* account_db_nth_account(AccountDB *account_db, int nth) {
-    int field_mask;
+char* account_db_get_pw(AccountDB *account_db, char *id, char *confirm) {
+    int count;
+    int i;
+    int len;
+    char *cmp_id;
+    char *cmp_confirm;
+    char *pw;
+    char *tmp;
 
-    EntryPoint *entry_point;
-    Stream_Buf *entry;
-    Account *account;
+    Account* account;
 
     if (!account_db) {
         LOGD("There is nothing to point the AccountDB\n");
         return NULL;
     }
 
-    field_mask = database_get_field_mask(account_db->database);
-    if (field_mask == 0) {
-        LOGD("Field mask was wrong\n");
+    count = database_get_entry_count(account_db->database);
+    if (count <= 0) {
+        LOGD("Can't get entry\n");
         return NULL;
     }
 
-    entry_point = database_nth_entry_point(account_db->database, nth);
-    if (!entry_point) {
-        LOGD("Faied to nth entry point\n");
-        return NULL;
+    pw = NULL;
+    for (i = 0; i < count; i++) {
+        account = account_db_nth_account(account_db, i);
+        cmp_id = account_get_id(account);
+        if (strncmp(cmp_id, id, strlen(cmp_id)) == 0) {
+            cmp_confirm = account_get_confirm(account);
+            if (strncmp(cmp_confirm, confirm, strlen(cmp_confirm)) == 0) {
+                pw = account_get_pw(account);
+                len = strlen(pw);
+                tmp = (char*) malloc(len + 1);
+                strncpy(tmp, pw, len);
+                pw = tmp;
+            } else {
+                LOGD("Confirm was wrong\n");
+            }
+            destroy_account(account);
+            break;
+        }
+        destroy_account(account);
     }
-
-    entry = entry_point_get_value(entry_point);
-    account = account_db_new_account(entry, field_mask);
-    if (!account) {
-        LOGD("Failed to new account\n");
-        return NULL;
-    }
-
-    return account;
+    return pw;
 }

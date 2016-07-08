@@ -425,12 +425,12 @@ void index_file_delete_entry(IndexFile *index_file, EntryPoint *entry_point) {
 
     if (id == index_file->last_id) {
         list = d_list_last(index_file->entry_list);
-        last = (EntryPoint*) d_list_get_data(list);
 
-        if (!last) {
-            LOGD("There is nothing to point the Entry Point\n");
+        if (!list) {
+            LOGD("Last entry has been removed\n");
             index_file->last_id = 0;
         } else {
+            last = (EntryPoint*) d_list_get_data(list);
             id = entry_point_get_id(last);
             if (id < 0) {
                 LOGD("the entry point id was wrong\n");
