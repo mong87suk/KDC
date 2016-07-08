@@ -128,7 +128,7 @@ static BOOLEAN index_file_load(IndexFile *index_file, DataBase *database) {
         LOGD("Failed to read the last id\n");
         return FALSE;
     }
-
+    LOGD("field_mask:%d\n", field_mask);
     if (index_file->field_mask != field_mask) {
         LOGD("field_mask was updated\n");
         index_file->field_mask = field_mask;

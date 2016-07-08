@@ -344,8 +344,14 @@ void account_db_delete_all(AccountDB* account_db) {
 
 int account_db_add_account(AccountDB *account_db, Account *account) {
     int field_mask;
+    int count;
+    char *cmp_id;
+    int entry_id;
+    int i;
+
+    EntryPoint *entry_point;
     Stream_Buf *entry;
-    int id;
+    Account *cmp_account;
 
     if (!account_db || !account) {
         LOGD("Can't add the account\n");
@@ -358,20 +364,42 @@ int account_db_add_account(AccountDB *account_db, Account *account) {
         return -1;
     }
 
+    count = database_get_entry_count(account_db->database);
+    for (i = 1; i <= count; i++) {
+        entry_point = database_nth_entry_point(account_db->database, i);
+        if (!entry_point) {
+            LOGD("There is no the entry point matched id\n");
+            continue;
+        }
+        entry = entry_point_get_value(entry_point);
+        cmp_account = account_db_new_account(entry, field_mask);
+        destroy_stream_buf(entry);
+        if (!cmp_account) {
+            LOGD("Failed to convert\n");
+            continue;
+        }
+        cmp_id = account_get_id(cmp_account);
+        if(strncmp(cmp_id, account_get_id(account), strlen(cmp_id)) == 0) {
+            LOGD("The ID has aleady been existed\n");
+            destroy_account(cmp_account);
+            return -1;
+        }
+        destroy_account(cmp_account);
+    }
+
     entry = account_db_new_entry(account, field_mask);
     if (!entry) {
         LOGD("Failed to new entry\n");
         return -1;
     }
 
-    id = database_add_entry(account_db->database, entry);
+    entry_id = database_add_entry(account_db->database, entry);
     destroy_stream_buf(entry);
-    if (id < 0) {
+    if (entry_id < 0) {
         LOGD("Failed to add_entry\n");
         return -1;
     }
-
-    return id;
+    return entry_id;
 }
 
 DList* account_db_get_accounts(AccountDB *account_db) {

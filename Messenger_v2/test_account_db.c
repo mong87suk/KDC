@@ -28,10 +28,13 @@ int main() {
     assert(account_db);
     count = account_db_get_account_count(account_db);
     state = account_db_add_account(account_db, account1);
-    LOGD("account db add\n");
-    assert(state);
-    assert(account_db_get_account_count(account_db) == (count + 1));
     
+    assert(account_db_get_account_count(account_db) == (count + 1));
+
+    state = account_db_add_account(account_db, account1);
+    assert(state < 0);
+    assert(account_db_get_account_count(account_db) == (count + 1));
+   /* 
     account2 = account_db_nth_account(account_db, count);
     assert(account2);
     assert(strncmp(id, account_get_id(account2), strlen(id)) == 0);
@@ -39,10 +42,8 @@ int main() {
     assert(strncmp(email, account_get_email(account2), strlen(email)) == 0);
     assert(strncmp(confirm, account_get_confirm(account2), strlen(confirm)) == 0);
     assert(strncmp(mobile, account_get_mobile(account2), strlen(mobile)) == 0);
-
     state = account_db_delete_account(account_db, id, pw);
-
     assert(account_db_get_account_count(account_db) == count);
-
+*/
     return 0;
 }
