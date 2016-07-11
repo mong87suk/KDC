@@ -29,7 +29,7 @@ struct _Timer {
     void *user_data;
     BOOLEAN (*callback)(void *user_data);
     unsigned int interval;
-    unsigned int expired;
+    unsigned int expiration;
     unsigned int callback_count;
     struct timespec called_t;
 };
@@ -69,17 +69,27 @@ static struct timespec looper_time_diff(struct timespec cur_t, struct timespec c
     return temp;
 }
 
-static struct timespec looper_get_current_time()
+static int looper_get_current_time()
 {
+    int cur_t;
     struct timespec tv;
 
-    if (clock_gettime(CLOCK_REALTIME, &tv) < 0) {
+    if (clock_gettime(CLOCK_MONOTONIC,, &tv) < 0) {
         LOGD("Failed to get time\n");
-        return tv;
+        return -1;
     }
-    return tv;
+    time = (tv == NULL) ? -1 :
+           (tv.tv_sec * 1000 + tv.tv_nsec / 1000000);
+    return cur_t;
 }
 
+static struct timespec looper_get_expiration(unsigned int interval) {
+    struct timespec cur_tv;
+
+    cur_tv = looper_get_current_time();
+    cur_tv.sec = cur_tv.sec + interval * 
+
+}
 static void looper_destroy_timer(void *timer) {
     if (!timer) {
         LOGD("There is nothing to point timer\n");
@@ -96,7 +106,7 @@ void static looper_remove_timer(Looper *looper, Timer *timer) {
     looper->timer_list =  d_list_remove_with_data(list, timer, looper_destroy_timer);
 }
 
-static void looper_dispatch(Looper *looper, int nfds, unsigned int interval, int n_timer) {
+static void looper_dispatch(Looper *looper, int n_timer) {
     DList *list;
     Timer *timer;
     struct timespec cur_t;
@@ -108,6 +118,11 @@ static void looper_dispatch(Looper *looper, int nfds, unsigned int interval, int
     cur_t = looper_get_current_time();
     list = looper->timer_list;
     LOGD("interval:%d\n", interval);
+
+    for (i = 0; i < n_timer; i++) {
+        timer  = (Timer*) d_list_get_data(list);
+        if ()
+    }
 
     if (n_timer > 1) {
         for (i = 0; i < n_timer; i++) {
@@ -152,7 +167,7 @@ static void looper_dispatch(Looper *looper, int nfds, unsigned int interval, int
     }
 }
 
-static unsigned int looper_get_time(Looper *looper) {
+static unsigned int looper_get_timeout(Looper *looper) {
     int n_timer;
     Timer *timer;
     DList *list;
@@ -303,7 +318,8 @@ int looper_run(Looper *looper) {
             return 0;
         }
 
-        interval = looper_get_time(looper);
+        looper_dispatch(looper, n_timer);
+        interval = looper_get_timeout(looper);
 
         struct pollfd fds[n_watcher];
         looper_get_fds(looper->watcher_list, fds);
@@ -388,7 +404,7 @@ unsigned int looper_add_watcher(Looper* looper, int fd, BOOLEAN (*handle_events)
 
 void looper_add_timer(Looper* looper, unsigned int interval, BOOLEAN (*callback)(void *user_data), void *user_data) {
     Timer *timer;
-    struct timespec called_t;
+    int cur_t;
 
     timer = (Timer*) malloc(sizeof(Timer));
     if (!timer) {
@@ -396,15 +412,15 @@ void looper_add_timer(Looper* looper, unsigned int interval, BOOLEAN (*callback)
         return;
     }
 
-    called_t = looper_get_current_time();
-    LOGD("interval:%u\n", interval);
+    cur_t = looper_get_current_time();
+    if (cur_time < 0) {
+        LOGD("Failed to get current time\n");
+        return;
+    }
 
     timer->user_data = user_data;
-    timer->callback = callback;
-    timer->callback_count = 0;
     timer->interval = interval;
-    timer->expired = interval;
-    timer->called_t = called_t;
+    timer->expiration = cur_t + interval;
 
     looper->timer_list = d_list_append(looper->timer_list, timer);
 }
