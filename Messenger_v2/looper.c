@@ -6,6 +6,7 @@
 #include "DBLinkedList.h"
 #include "looper.h"
 #include "utils.h"
+#include "m_boolean.h"
 
 struct _Looper {
     DList *watcher_list;
@@ -19,7 +20,7 @@ struct _Watcher {
     int fd;
     unsigned int id;
     void *user_data;
-    void (*handle_events)(int fd, void *user_data, int revents);
+    BOOLEAN (*handle_events)(int fd, void *user_data, unsigned int id, int revents);
     short events;
 };
 
@@ -188,7 +189,7 @@ static void looper_get_fds(DList *watcher_list, struct pollfd *fds) {
         watcher = (Watcher*) d_list_get_data(watcher_list);
 
         if (!watcher) {
-            printf("%s %s There is nothing to pointer the Watcher\n", __FILE__, __func__);
+            LOGD("There is nothing to pointer the Watcher\n");
             break;
         }
 
@@ -199,14 +200,9 @@ static void looper_get_fds(DList *watcher_list, struct pollfd *fds) {
     }
 }
 
-static int looper_match_watcher(void *data1, void *data2) {
+static int looper_match_watcher_with_fd(void *data1, void *data2) {
     Watcher *watcher = (Watcher*) data1;
     int fd = *((int*) data2);
-
-    if (!watcher) {
-        printf("%s %s There is nothing to point the Watcher\n", __FILE__, __func__);
-        return 0;
-    }
 
     if (watcher->fd == fd) {
         return 1;
@@ -215,24 +211,27 @@ static int looper_match_watcher(void *data1, void *data2) {
     }
 }
 
-static Watcher* looper_find_watcher(Looper *looper, int fd) {
-    Watcher *watcher;
-    if (!looper) {
-        printf("%s %s There is nothing to pointer the Looper\n", __FILE__, __func__);
-        return NULL;
-    }
+static int looper_match_watcher_with_id(void *data1, void *data2) {
+    Watcher *watcher = (Watcher*) data1;
+    unsigned int id = *((unsigned int*) data2);
 
-    watcher = d_list_find_data(looper->watcher_list, looper_match_watcher, &fd);
+    if (watcher->id == id) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+static Watcher *looper_find_watcher(Looper *looper, int fd) {
+    Watcher *watcher;
+
+    watcher = d_list_find_data(looper->watcher_list, looper_match_watcher_with_fd, &fd);
     return watcher;
 }
 
 static void looper_destroy_watcher(void *data) {
     Watcher *watcher;
 
-    if (!data) {
-        printf("%s %s There is nothing to pointer the Watcher\n", __FILE__, __func__);
-        return;
-    }
     watcher = (Watcher*) data;
     free(watcher);
 }
@@ -256,6 +255,15 @@ void looper_stop(Looper *looper) {
     return;
 }
 
+void looper_remove_watcher(Looper *looper, unsigned int id) {
+    if (!looper && !looper->watcher_list) {
+        LOGD("Can't remove Wathcer\n");
+        return;
+    }
+
+    looper->watcher_list = d_list_remove_with_user_data(looper->watcher_list, &id, looper_match_watcher_with_id, looper_destroy_watcher);
+}
+
 /**
   * looper run:
   * @looper: Looper is struct which includes wathcer_list and state
@@ -269,6 +277,8 @@ int looper_run(Looper *looper) {
     int i;
     int n_watcher, n_timer;
     int interval;
+
+    BOOLEAN result;
     Watcher *watcher;
 
     nfds = 0;
@@ -303,7 +313,6 @@ int looper_run(Looper *looper) {
         if (nfds > 0) {
             for (i = 0; i < n_watcher; i++) {
                 if (fds[i].revents != 0) {
-                    LOGD("pollfd index:%d revent:%d\n", i, fds[i].revents);
                     fd = fds[i].fd;
                     revents = fds[i].revents;
                     looper_event = 0;
@@ -324,7 +333,10 @@ int looper_run(Looper *looper) {
                     if (!watcher) {
                         continue;
                     }
-                    watcher->handle_events(fd, watcher->user_data, watcher->id, looper_event);
+                    result = watcher->handle_events(fd, watcher->user_data, watcher->id, looper_event);
+                    if (result == FALSE) {
+                        looper_remove_watcher(looper, watcher->id);
+                    }
                 }
             }
         }
@@ -336,7 +348,7 @@ int looper_run(Looper *looper) {
     return looper->state;
 }
 
-unsigned int looper_add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, void *user_data, int looper_event), void *user_data, int looper_event) {
+unsigned int looper_add_watcher(Looper* looper, int fd, BOOLEAN (*handle_events)(int fd, void *user_data, unsigned int id, int looper_event), void *user_data, int looper_event) {
     DList *list;
     Watcher *watcher;
     short events;
@@ -345,9 +357,8 @@ unsigned int looper_add_watcher(Looper* looper, int fd, void (*handle_events)(in
     events = 0;
     if (!watcher) {
         printf("Failed to make Watcher\n");
-        return;
+        return -1;
     }
-
 
     looper->watcher_last_id += 1;
     watcher->id = looper->watcher_last_id;
@@ -407,15 +418,6 @@ void looper_remove_all_watchers(Looper *looper) {
     looper->watcher_list = NULL;
 }
 
-void looper_remove_watcher(Looper *looper, int fd) {
-    if (!looper && !looper->watcher_list) {
-        LOGD("Can't remove Wathcer\n");
-        return;
-    }
-
-    looper->watcher_list = d_list_remove_with_user_data(looper->watcher_list, &fd, looper_match_watcher, looper_destroy_watcher);
-}
-
 void destroy_looper(Looper *looper) {
     if (!looper) {
         LOGD("There is nothing to pointer the Looper\n");
@@ -424,5 +426,3 @@ void destroy_looper(Looper *looper) {
     looper_remove_all_watchers(looper);
     free(looper);
 }
-
-

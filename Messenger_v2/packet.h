@@ -3,11 +3,10 @@
 
 #define REQ_ALL_MSG            (char) 0x01
 #define RES_ALL_MSG            (char) 0x02
-#define SND_MSG                (char) 0x03
+#define REQ_INTERVAL_MSG       (char) 0x03
 #define RCV_MSG                (char) 0x04
 #define REQ_FIRST_OR_LAST_MSG  (char) 0x05
 #define RCV_FIRST_OR_LAST_MSG  (char) 0x06
-#define REQ_INTERVAL_MSG       (char) 0x07
 
 #define SOP                    (char) 0xAA
 #define EOP                    (char) 0xFF

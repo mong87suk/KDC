@@ -21,6 +21,7 @@
 
 struct _Server {
     int fd;
+    unsigned int id;
     DList *client_list;
     DList *last_read_mesg_node;
     MessageDB *mesg_db;
@@ -81,22 +82,22 @@ static void server_destroy_client(void *client) {
 
 static int server_match_client(void *data1, void *data2) {
     Client *client = (Client*) data1;
-    int fd = *((int*) data2);
+    unsigned int id = *((int*) data2);
 
     if (!client) {
         LOGD("There is nothing to point the Client\n");
     }
 
-    if (client->fd == fd) {
+    if (client->id == id) {
         return 1;
     } else {
         return 0;
     }
 }
 
-static Client* server_find_client(Server *server, int fd) {
+static Client *server_find_client(Server *server, unsigned int id) {
     Client *client = NULL;
-    client = (Client*) d_list_find_data(server->client_list, server_match_client, &fd);
+    client = (Client*) d_list_find_data(server->client_list, server_match_client, &id);
 
     if (client == NULL) {
         LOGD("Can't find Client\n");
@@ -128,13 +129,8 @@ static int server_add_client(Server *server, int fd, int id) {
     return 1;
 }
 
-static void server_remove_client(Server *server, int fd) {
-    if (!server && !server->client_list) {
-        LOGD("Can't remove Client\n");
-        return;
-    }
-
-    server->client_list = d_list_remove_with_user_data(server->client_list, &fd, server_match_client, server_destroy_client);
+static void server_remove_client(Server *server, unsigned int id) {
+    server->client_list = d_list_remove_with_user_data(server->client_list, &id, server_match_client, server_destroy_client);
 }
 
 static void server_sum_size(void *data, void *user_data) {
@@ -438,7 +434,8 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
 
         break;
 
-    case SND_MSG:
+    case REQ_INTERVAL_MSG:
+        LOGD("REQ_INTERVAL_MSG\n");
         payload_len = packet_get_payload_len(req_packet, NULL);
         LOGD("payload_len:%ld\n", payload_len);
         if (payload_len == -1) {
@@ -451,6 +448,13 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
             LOGD("Failed to get the payload\n");
             return NULL;
         }
+
+        memcpy(&micro_sec, req_payload, INTERVAL_SIZE);
+        LOGD("micro_sec:%d\n", micro_sec);
+        *interval = micro_sec;
+
+        payload_len -= INTERVAL_SIZE;
+        req_payload += INTERVAL_SIZE;
 
         payload = (char*) malloc(payload_len);
         if (!payload) {
@@ -471,9 +475,9 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
         if (id < 0) {
             LOGD("Failed to add mesg\n");
         }
-
         op_code = RCV_MSG;
         break;
+
 
     case REQ_FIRST_OR_LAST_MSG:
         LOGD("REQ_FIRST_OR_LAST_MSG\n");
@@ -581,50 +585,6 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
         }
 
         op_code = RCV_FIRST_OR_LAST_MSG; 
-        break;
-
-    case REQ_INTERVAL_MSG:
-        LOGD("REQ_INTERVAL_MSG\n");
-        payload_len = packet_get_payload_len(req_packet, NULL);
-        LOGD("payload_len:%ld\n", payload_len);
-        if (payload_len == -1) {
-            LOGD("Failed to get the payload_len\n");
-            return NULL;
-        }
-
-        req_payload = packet_get_payload(req_packet, NULL);
-        if (!req_payload) {
-            LOGD("Failed to get the payload\n");
-            return NULL;
-        }
-
-        memcpy(&micro_sec, req_payload, INTERVAL_SIZE);
-        LOGD("micro_sec:%d\n", micro_sec);
-        *interval = micro_sec;
-
-        payload_len -= INTERVAL_SIZE;
-        req_payload += INTERVAL_SIZE;
-
-        payload = (char*) malloc(payload_len);
-        if (!payload) {
-            LOGD("Failed to make buf for payload\n");
-            return NULL;
-        }
-
-        memcpy(payload, req_payload, payload_len);
-
-        mesg = convert_payload_to_mesg(payload, NULL);
-        if (!mesg) {
-            LOGD("Failed to convert payload to the Message\n");
-            return NULL;
-        }
-
-        id = message_db_add_mesg(server->mesg_db, mesg);
-        destroy_mesg(mesg);
-        if (id < 0) {
-            LOGD("Failed to add mesg\n");
-        }
-        op_code = RCV_MSG;
         break;
 
     default:
@@ -819,36 +779,36 @@ static BOOLEAN server_send_packet_to_client(Packet *packet, Client *client, int 
 }
 
 static BOOLEAN server_interval_send_packet(void *user_data) {
-    UserData *c_data;
+    UserData *data;
     Server *server;
     int result;
-
-    LOGD("server_interval_send_packet\n");
 
     if (!user_data) {
         LOGD("There is nothing to point the user_data\n");
         return FALSE;
     }
 
-    c_data = (UserData*) user_data;
-    server = c_data->server;
+    data = (UserData*) user_data;
+    server = data->server;
 
-    LOGD("server_send_packet_to_all_clients\n");
-    result = server_send_packet_to_all_clients(server, c_data->client, c_data->packet);
+    result = server_send_packet_to_all_clients(server, data->client, data->packet);
 
-    if (result == TRUE) {
-        destroy_packet(c_data->packet);
-        free(user_data);
-
-        return FALSE;
+    if (result == FALSE) {
+        LOGD("Failed to sedn packet to all client\n");
     }
-    return TRUE;
+
+    destroy_packet(data->packet);
+    free(user_data);
+    return FALSE;
 }
 
-static void server_handle_disconnect_event(Server *server, int fd) {
-    if (fd != server->fd) {
-        server_remove_client(server, fd);
-        looper_remove_watcher(server->looper, fd);
+static void server_handle_disconnect_event(Server *server, int fd, unsigned int id) {
+    if (id != server->id) {
+        server_remove_client(server, id);
+    }
+
+    if (close(fd) < 0) {
+        LOGD("Failed to close\n");
     }
     LOGD("disconnected:%d\n", fd);
 }
@@ -898,6 +858,8 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
     int count;
     int read_pos;
     unsigned int interval;
+    int result;
+
     Packet *res_packet;
     UserData *user_data;
 
@@ -926,18 +888,31 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
             LOGD("Failed to create the res packet\n");
             return;
         }
-        server_send_packet_to_client(res_packet, client, read_pos);
+        result = server_send_packet_to_client(res_packet, client, read_pos);
+        if (result == FALSE) {
+            LOGD("Failed to send packet to client\n");
+        }
         destroy_packet(res_packet);
         break;
 
-    case SND_MSG:
-        res_packet = server_create_res_packet(server, req_packet, NULL, NULL, NULL);
+    case REQ_INTERVAL_MSG:
+        res_packet = server_create_res_packet(server, req_packet, NULL, NULL, &interval);
         if (!res_packet) {
             LOGD("Failed to create the res packet\n");
             return;
         }
-        server_send_packet_to_all_clients(server, client, res_packet);
-        destroy_packet(res_packet);
+        user_data = (UserData*) malloc(sizeof(UserData));
+        if (!user_data) {
+            LOGD("Failed to create the user data\n");
+            return;
+        }
+
+        user_data->server = server;
+        user_data->client = client;
+        user_data->packet = res_packet;
+
+        looper_add_timer(server->looper, interval, server_interval_send_packet, user_data);
+        LOGD("interval:%d\n", interval);
         break;
 
     case REQ_FIRST_OR_LAST_MSG:
@@ -950,34 +925,11 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
             LOGD("Failed to create the res packet\n");
             return;
         }
-        server_send_packet_to_client(res_packet, client, read_pos);
+        result = server_send_packet_to_client(res_packet, client, read_pos);
+        if (result == FALSE) {
+            LOGD("Failed to send packet to client\n");
+        }
         destroy_packet(res_packet);
-        break;
-
-    case REQ_INTERVAL_MSG:
-        res_packet = server_create_res_packet(server, req_packet, NULL, NULL, &interval);
-        if (!res_packet) {
-            LOGD("Failed to create the res packet\n");
-            return;
-        }
-
-        if (interval == 0) {
-            server_send_packet_to_all_clients(server, client, res_packet);
-            destroy_packet(res_packet);
-        } else {
-            user_data = (UserData*) malloc(sizeof(UserData));
-            if (!user_data) {
-                LOGD("Failed to create the user data\n");
-                return;
-            }
-
-            user_data->server = server;
-            user_data->client = client;
-            user_data->packet = res_packet;
-
-            looper_add_timer(server->looper, interval, server_interval_send_packet, user_data);
-            LOGD("interval:%d\n", interval);
-        }
         break;
 
     default:
@@ -1009,14 +961,14 @@ static void server_handle_req_event(Server *server, int fd, unsigned int id) {
         return;
     }
 
-    client = server_find_client(server, fd);
+    client = server_find_client(server, id);
     if (!client) {
         LOGD("There is nothing to point the Client\n");
         return;
     }
 
-    if (clinet->id != id) {
-        LOGD("Client id was wrong\n");
+    if (client->fd != fd) {
+        LOGD("The client fd was wrong\n");
         return;
     }
 
@@ -1240,7 +1192,6 @@ static void server_handle_req_event(Server *server, int fd, unsigned int id) {
 
 static int server_handle_accept_event(Server *server) {
     int client_fd;
-    int result;
 
     client_fd = accept(server->fd, NULL, NULL);
     if (client_fd < 0) {
@@ -1252,34 +1203,34 @@ static int server_handle_accept_event(Server *server) {
     return client_fd;
 }
 
-static void server_handle_events(int fd, void *user_data, unsigned int id, int looper_event) {
+static BOOLEAN server_handle_events(int fd, void *user_data, unsigned int watcher_id, int looper_event) {
     int client_fd;
+    int result;
     unsigned int id;
+
     Server *server;
     server = (Server*) user_data;
 
-    if (!server || (fd < 0)) {
-        LOGD("Can't handle events\n");
-        return;
-    }
-
     if (looper_event & LOOPER_HUP_EVENT) {
-         server_handle_disconnect_event(server, fd);
+        server_handle_disconnect_event(server, fd, watcher_id);
+        return FALSE;
     } else if (looper_event & LOOPER_IN_EVENT) {
-        if (fd == server->fd && id == server->id) {
+        if (fd == server->fd && watcher_id == server->id) {
             client_fd = server_handle_accept_event(server);
             if (client_fd != -1) {
                 id = looper_add_watcher(server->looper, client_fd, server_handle_events, server, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
                 result = server_add_client(server, client_fd, id);
                 if (result == -1) {
                     LOGD("Failed to add the Client\n");
-                    return -1;
+                    return FALSE;
                 }
             }
         } else {
-            server_handle_req_event(server, fd, id);
+            server_handle_req_event(server, fd, watcher_id);
         }
     }
+
+    return TRUE;
 }
 
 Server* new_server(Looper *looper) {
@@ -1347,13 +1298,19 @@ Server* new_server(Looper *looper) {
         return NULL;
     }
 
-    server->looper = looper;
+    server->looper= looper;
     server->fd = server_fd;
     server->client_list = NULL;
     server->mesg_db = mesg_db;
-
     id = looper_add_watcher(server->looper, server_fd, server_handle_events, server, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
-    server->id = id;
+
+    if (id < 0) {
+        LOGD("Failed to add watcher\n");
+        destroy_server(server);
+        return NULL;
+    }
+
+        server->id = id;
     return server;
 }
 

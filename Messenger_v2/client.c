@@ -20,6 +20,8 @@
 struct _Client
 {
     int fd;
+    unsigned int input_id;
+    unsigned int response_id;
     Looper *looper;
     READ_RES_STATE read_state;
     DList *stream_buf_list;
@@ -477,11 +479,13 @@ static void client_handle_res_events(Client *client, int fd) {
     LOGD("Finish client_handle_res_events()\n");
 }
 
-static void client_handle_disconnect(Client *client, int fd) {
-
+static void client_handle_disconnect(Client *client, int fd, unsigned int id) {
+    if (client->response_id == id) {
+        destroy_client(client);
+    }
 }
 
-static Stream_Buf* client_new_payload(short op_code, char *input_str, int input_strlen) {
+static Stream_Buf *client_new_payload(short op_code, char *input_str, int input_strlen) {
     int str_len;
     int body_len;
     time_t current_time;
@@ -499,39 +503,52 @@ static Stream_Buf* client_new_payload(short op_code, char *input_str, int input_
     input_strlen -= (REQ_STR_MIN_LEN);
     stream_buf_list = NULL;
 
-    if (op_code == REQ_INTERVAL_MSG) {
-        stream_buf = new_stream_buf(INTERVAL_SIZE);
-        if (!stream_buf) {
-            LOGD("Failed to new stream buf\n");
-            return NULL;
+    stream_buf = new_stream_buf(INTERVAL_SIZE);
+    if (!stream_buf) {
+        LOGD("Failed to new stream buf\n");
+        return NULL;
+    }
+    while(1) {
+        num = input_str[i];
+        if (num == ' ') {
+            break;
         }
-        while(1) {
-            num = input_str[i];
-            if (num == ' ') {
-                break;
-            }
+
+        if ('0' <= num && num <= '9') {
             interval = (interval) * 10 + (num -'0');
             i++;
+        } else {
+            LOGD("Your command was wrong\n");
+            destroy_stream_buf(stream_buf);
+            return NULL;
         }
-        memcpy(stream_buf_get_available(stream_buf), &interval, INTERVAL_SIZE);
-        stream_buf_increase_pos(stream_buf, INTERVAL_SIZE);
-        stream_buf_list = d_list_append(stream_buf_list, stream_buf);
-
-        body_len += INTERVAL_SIZE;
-        input_str += (i + 1);
-        input_strlen -= (i + 1);
     }
 
-    current_time = time(NULL);
+    if (i == 0) {
+        LOGD("Your command was wrong\n");
+        destroy_stream_buf(stream_buf);
+        return NULL;
+    }
 
+    memcpy(stream_buf_get_available(stream_buf), &interval, INTERVAL_SIZE);
+    stream_buf_increase_pos(stream_buf, INTERVAL_SIZE);
+    stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+
+    body_len += INTERVAL_SIZE;
+    input_str += (i + 1);
+    input_strlen -= (i + 1);
+
+    current_time = time(NULL);
     if (current_time == ((time_t) - 1)) {
         LOGD("Failed to obtain the current time.\n");
+        utils_destroy_stream_buf_list(stream_buf_list);
         return NULL;
     }
 
     stream_buf = new_stream_buf(TIME_SIZE);
     if (!stream_buf) {
         LOGD("Failed to new stream buf\n");
+        utils_destroy_stream_buf_list(stream_buf_list);
         return NULL;
     }
 
@@ -544,6 +561,7 @@ static Stream_Buf* client_new_payload(short op_code, char *input_str, int input_
     stream_buf = new_stream_buf(STR_LEN_SIZE);
     if (!stream_buf) {
         LOGD("Failed to new stream buf\n");
+        utils_destroy_stream_buf_list(stream_buf_list);
         return NULL;
     }
     memcpy(stream_buf_get_available(stream_buf), &str_len, STR_LEN_SIZE);
@@ -554,6 +572,7 @@ static Stream_Buf* client_new_payload(short op_code, char *input_str, int input_
     stream_buf = new_stream_buf(str_len);
     if (!stream_buf) {
         LOGD("Failed to new stream buf\n");
+        utils_destroy_stream_buf_list(stream_buf_list);
         return NULL;
     }
 
@@ -565,6 +584,7 @@ static Stream_Buf* client_new_payload(short op_code, char *input_str, int input_
     stream_buf = new_stream_buf(body_len);
     if (!stream_buf) {
         LOGD("Failed to new stream buf\n");
+        utils_destroy_stream_buf_list(stream_buf_list);
         return NULL;
     }
 
@@ -572,6 +592,7 @@ static Stream_Buf* client_new_payload(short op_code, char *input_str, int input_
     utils_destroy_stream_buf_list(stream_buf_list);
     if (!result) {
         LOGD("Append data to buf\n");
+        utils_destroy_stream_buf_list(stream_buf_list);
         return NULL;
     }
 
@@ -607,7 +628,7 @@ static Packet* client_create_req_packet(char *input_str, short op_code, int inpu
             }
             break;
 
-        case SND_MSG:
+        case REQ_INTERVAL_MSG:
             if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
                 payload_buf = client_new_payload(op_code, input_str, input_strlen);
                 if (!payload_buf) {
@@ -639,21 +660,6 @@ static Packet* client_create_req_packet(char *input_str, short op_code, int inpu
                     LOGD("Request was wrong. Please recommand\n");
                     return NULL;
                 }
-            } else {
-                LOGD("Request was wrong. Please recommand\n");
-                return NULL;
-            }
-            break;
-            
-        case REQ_INTERVAL_MSG:
-            if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
-                payload_buf = client_new_payload(op_code, input_str, input_strlen);
-                if (!payload_buf) {
-                    LOGD("Failed to new the payload\n");
-                    return NULL;
-                }
-                payload = stream_buf_get_buf(payload_buf);
-                payload_len = stream_buf_get_position(payload_buf);
             } else {
                 LOGD("Request was wrong. Please recommand\n");
                 return NULL;
@@ -854,28 +860,28 @@ static void client_handle_stdin_event(Client *client, int fd) {
     return;
 }
 
-static void client_handle_events(int fd, void *user_data, int looper_event) {
+static BOOLEAN client_handle_events(int fd, void *user_data, unsigned int id, int looper_event) {
     Client *client = (Client*) user_data;
 
-    if (!client) {
-        LOGD("There is no a pointer to Client\n");
-        return;
-    }
-
+    LOGD("handle_event\n");
     if (looper_event & LOOPER_HUP_EVENT) {
-        client_handle_disconnect(client, fd);
+        client_handle_disconnect(client, fd, id);
+        return FALSE;
     } else if (looper_event & LOOPER_IN_EVENT) {
-        if (fd == client->fd) {
+        if (fd == client->fd && client->response_id == id) {
             client_handle_res_events(client, fd);
-        } else if (fd == STDIN_FILENO) {
+        } else if (fd == STDIN_FILENO && client->input_id == id) {
             client_handle_stdin_event(client, fd);
         } else {
             LOGD("There is no fd to handle event\n");
-            return;
+            return FALSE;
         }
     } else {
         LOGD("There is no event to handle\n");
+        return FALSE;
     }
+
+    return TRUE;
 }
 
 Client* new_client(Looper *looper) {
@@ -883,6 +889,7 @@ Client* new_client(Looper *looper) {
 
     struct sockaddr_un addr;
     int client_fd;
+    unsigned int id;
 
     if (!looper) {
         LOGD("There is no a pointer to Looper\n");
@@ -913,14 +920,23 @@ Client* new_client(Looper *looper) {
         return NULL;
     }
 
+    id = looper_add_watcher(looper, STDIN_FILENO, client_handle_events, client, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
+    if (id < 0) {
+        return NULL;
+    }
+    client->input_id = id;
+
+    id = looper_add_watcher(looper, client_fd, client_handle_events, client, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
+    if (id < 0) {
+        return NULL;
+    }
+    client->response_id = id;
+
     client->fd = client_fd;
-    client->read_state = READY_TO_READ_RES; 
+    client->read_state = READY_TO_READ_RES;
     client->stream_buf_list = NULL;
     client->stdin_stream_buf_list = NULL;
     client->packet_len = 0;
-
-    looper_add_watcher(looper, STDIN_FILENO, client_handle_events, client, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
-    looper_add_watcher(looper, client_fd, client_handle_events, client, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
 
     return client;
 }
