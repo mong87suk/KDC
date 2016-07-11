@@ -190,7 +190,7 @@ int database_get_entry_count(DataBase *database) {
     return count;
 }
 
-BOOLEAN delete_entry(DataBase *database, int id) {
+BOOLEAN database_delete_entry(DataBase *database, int id) {
     EntryPoint *entry_point;
     int result;
 

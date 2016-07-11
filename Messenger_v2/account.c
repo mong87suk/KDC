@@ -6,14 +6,15 @@
 #include "utils.h"
 
 struct _Account {
-    char *id;
+    int id;
+    char *user_id;
     char *pw;
     char *email;
     char *confirm;
     char *mobile;
 };
 
-Account* new_account(char *id, char *pw, char *email, char *confirm, char *mobile) {
+Account* new_account(char *user_id, char *pw, char *email, char *confirm, char *mobile) {
     int str_len;
     Account *account;
 
@@ -23,15 +24,17 @@ Account* new_account(char *id, char *pw, char *email, char *confirm, char *mobil
         return NULL;
     }
 
-    str_len = strlen(id);
+    account->id = -1;
+
+    str_len = strlen(user_id);
     if (str_len < ID_MIN_SIZE || str_len > ID_MAX_SIZE) {
         LOGD("Failed to make the Account\n");
         free(account);
         return NULL;
     }
-    account->id = (char*) malloc(str_len + 1);
-    memset(account->id, 0, str_len + 1);
-    strncpy(account->id, id, str_len);
+    account->user_id = (char*) malloc(str_len + 1);
+    memset(account->user_id, 0, str_len + 1);
+    strncpy(account->user_id, user_id, str_len);
 
     str_len = strlen(pw);
     if (str_len < PW_MIN_SIZE || str_len > PW_MAX_SIZE) {
@@ -82,8 +85,8 @@ void destroy_account(Account *account) {
         return;
     }
 
-    if (account->id) {
-        free(account->id);
+    if (account->user_id) {
+        free(account->user_id);
     }
 
     if (account->pw) {
@@ -105,13 +108,22 @@ void destroy_account(Account *account) {
     free(account);
 }
 
-char* account_get_id(Account *account) {
+int account_get_id(Account *account) {
+    if (!account) {
+        LOGD("There is nothing to point the account\n");
+        return -1;
+    }
+
+    return account->id;
+}
+
+char *account_get_user_id(Account *account) {
     if (!account) {
         LOGD("There is noting to point the account\n");
         return NULL;
     }
 
-    return account->id;
+    return account->user_id;
 }
 
 char* account_get_pw(Account *account) {
@@ -148,4 +160,14 @@ char* account_get_mobile(Account *account) {
     }
 
     return account->mobile;
+}
+
+BOOLEAN account_set_id(Account *account, int id) {
+    if (!account || id < 0) {
+        LOGD("Can't set id\n");
+        return FALSE;
+    }
+    account->id = id;
+
+    return TRUE;
 }

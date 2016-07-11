@@ -105,6 +105,21 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
         return NULL;
     }
 
+    stream_buf = new_stream_buf(ID_SIZE);
+    if (!stream_buf) {
+        LOGD("Failed to new stream buf\n");
+        return NULL;
+    }
+    buf_size += ID_SIZE;
+    buf = stream_buf_get_buf(stream_buf);
+    if (!buf) {
+        LOGD("Failed to get buf\n");
+        return NULL;
+    }
+    memcpy(buf, &id, ID_SIZE);
+    stream_buf_increase_pos(stream_buf, n_byte);
+    stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+
     count = utils_get_colum_count(field_mask);
     if (count <= 0) {
         LOGD("Failed to get colum count\n");
@@ -128,7 +143,6 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
                     return NULL;
                 }
                 stream_buf_increase_pos(stream_buf, n_byte);
-
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
                 break;
 
@@ -166,7 +180,6 @@ Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
                     return FALSE;
                 }
                 stream_buf_increase_pos(stream_buf, n_byte);
-
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
                 break;
 

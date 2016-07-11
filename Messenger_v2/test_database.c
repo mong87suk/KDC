@@ -24,6 +24,7 @@ int main() {
     int count;
     EntryPoint *entry_point;
     int result;
+    int id;
 
     count = 0;
 
@@ -48,17 +49,20 @@ int main() {
     stream_buf_increase_pos(stream_buf, len);
 
     count = database_get_entry_count(database);
-    database_add_entry(database, stream_buf);
+    id = database_add_entry(database, stream_buf);
+    assert(id > 0);
 
     assert(database_get_entry_count(database) == (count + 1));
 
-    delete_entry(database, 1);
+    database_delete_entry(database, id);
     assert(database_get_entry_count(database) == count);
 
-    database_add_entry(database, stream_buf);
+    id = database_add_entry(database, stream_buf);
+    assert(id > 0);
 
-    entry_point = database_find_entry_point(database, 1);
+    entry_point = database_find_entry_point(database, id);
     assert(entry_point);
+    assert(entry_point_get_id(entry_point) == id);
 
     update_stream_buf = new_stream_buf(12);
     assert(stream_buf);
@@ -88,5 +92,9 @@ int main() {
 
     database_delete_all(database);
     assert(database_get_entry_count(database) == 0);
+
+    destroy_stream_buf(stream_buf);
+    destroy_stream_buf(update_stream_buf);
+
     return 0;
 }

@@ -10,17 +10,21 @@
 struct _Looper {
     DList *watcher_list;
     DList *timer_list;
+    unsigned int watcher_last_id;
+    unsigned int timer_last_id;
     int state;
 };
 
 struct _Watcher {
     int fd;
+    unsigned int id;
     void *user_data;
     void (*handle_events)(int fd, void *user_data, int revents);
     short events;
 };
 
 struct _Timer {
+    unsigned int id;
     void *user_data;
     BOOLEAN (*callback)(void *user_data);
     unsigned int interval;
@@ -91,7 +95,7 @@ void static looper_remove_timer(Looper *looper, Timer *timer) {
     looper->timer_list =  d_list_remove_with_data(list, timer, looper_destroy_timer);
 }
 
-static void looper_callback(Looper *looper, int nfds, unsigned int interval, int n_timer) {
+static void looper_dispatch(Looper *looper, int nfds, unsigned int interval, int n_timer) {
     DList *list;
     Timer *timer;
     struct timespec cur_t;
@@ -236,6 +240,8 @@ static void looper_destroy_watcher(void *data) {
 Looper* new_looper() {
     Looper *looper;
     looper = (Looper*) malloc(sizeof(Looper));
+    looper->watcher_last_id = 0;
+    looper->timer_last_id = 0;
     looper->watcher_list = NULL;
     looper->state = 0;
     return looper;
@@ -318,19 +324,19 @@ int looper_run(Looper *looper) {
                     if (!watcher) {
                         continue;
                     }
-                    watcher->handle_events(fd, watcher->user_data, looper_event);
+                    watcher->handle_events(fd, watcher->user_data, watcher->id, looper_event);
                 }
             }
         }
 
         if (n_timer) {
-            looper_callback(looper, nfds, interval, n_timer);
+            looper_dispatch(looper, nfds, interval, n_timer);
         }
     }
     return looper->state;
 }
 
-void looper_add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, void *user_data, int looper_event), void *user_data, int looper_event) {
+unsigned int looper_add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, void *user_data, int looper_event), void *user_data, int looper_event) {
     DList *list;
     Watcher *watcher;
     short events;
@@ -342,6 +348,9 @@ void looper_add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, vo
         return;
     }
 
+
+    looper->watcher_last_id += 1;
+    watcher->id = looper->watcher_last_id;
     watcher->fd = fd;
     watcher->handle_events = handle_events;
     watcher->user_data = user_data;
@@ -362,6 +371,8 @@ void looper_add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, vo
 
     list = looper->watcher_list;
     looper->watcher_list = d_list_append(list, watcher);
+
+    return looper->watcher_last_id;
 }
 
 void looper_add_timer(Looper* looper, unsigned int interval, BOOLEAN (*callback)(void *user_data), void *user_data) {

@@ -14,7 +14,7 @@ struct _AccountDB {
     DataBase *database;
 };
 
-static Stream_Buf* account_db_new_account_info_buf(char *info, int len) {
+static Stream_Buf *account_db_new_account_info_buf(char *info, int len) {
     Stream_Buf *stream_buf;
 
     if (!info) {
@@ -42,7 +42,7 @@ static Stream_Buf* account_db_new_account_info_buf(char *info, int len) {
     return stream_buf;
 }
 
-static Stream_Buf* account_db_new_entry(Account *account, int field_mask) {
+static Stream_Buf *account_db_new_entry(Account *account, int field_mask) {
     int len;
     int i;
     int index;
@@ -73,8 +73,8 @@ static Stream_Buf* account_db_new_entry(Account *account, int field_mask) {
         colum = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;
         if (colum == STRING_FIELD) {
             switch(index) {
-            case ID:
-                str = account_get_id(account);
+            case USER_ID:
+                str = account_get_user_id(account);
                 len = strlen(str);
                 stream_buf = account_db_new_account_info_buf(str, len);
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
@@ -154,13 +154,16 @@ static Stream_Buf* account_db_new_entry(Account *account, int field_mask) {
     return stream_buf;
 }
 
-static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
+static Account *account_db_new_account(Stream_Buf *entry, int field_mask) {
+    int id;
     int len;
     int i;
     int index;
     int colum, count;
     char *buf;
-    char *id, *pw, *email, *confirm, *mobile;
+    char *user_id, *pw, *email, *confirm, *mobile;
+    int result;
+
     Account* account;
 
     account = NULL;
@@ -183,12 +186,19 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
         return NULL;
     }
 
+    memcpy(&id, buf, ID_SIZE);
+    if (id < 0) {
+        LOGD("ID was wrong\n");
+        return NULL;
+    }
+    buf += ID_SIZE;
+
     for (i = count; i >= 0; i--) {
         index += 1;
         colum = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;
         if (colum == STRING_FIELD) {
             switch(index) {
-            case ID:
+            case USER_ID:
                 memcpy(&len, buf, sizeof(int));
                 if (len < 0) {
                     LOGD("Failed to get len\n");
@@ -196,13 +206,13 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
                 }
                 buf += sizeof(int);
 
-                id = (char*) malloc(len + 1);
+                user_id = (char*) malloc(len + 1);
                 if (!id) {
                     LOGD("Failed to make buf\n");
                     return NULL;
                 }
-                memset(id, 0, len + 1);
-                strncpy(id, buf, len);
+                memset(user_id, 0, len + 1);
+                strncpy(user_id, buf, len);
                 buf += len;
                 break;
 
@@ -283,9 +293,9 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
             }
         }
     }
-    account = new_account(id, pw, email, confirm, mobile);
+    account = new_account(user_id, pw, email, confirm, mobile);
     
-    free(id);
+    free(user_id);
     free(pw);
     free(email);
     free(confirm);
@@ -296,10 +306,17 @@ static Account* account_db_new_account(Stream_Buf *entry, int field_mask) {
         return NULL;
     }
 
+    result = account_set_id(account, id);
+    if (result == FALSE) {
+        LOGD("Failed to set id\n");
+        destroy_account(account);
+        return NULL;
+    }
+
     return account;
 }
 
-static Account* account_db_nth_account(AccountDB *account_db, int nth) {
+static Account *account_db_nth_account(AccountDB *account_db, int nth) {
     int field_mask;
 
     EntryPoint *entry_point;
@@ -333,6 +350,7 @@ static Account* account_db_nth_account(AccountDB *account_db, int nth) {
 
     return account;
 }
+
 AccountDB* account_db_open(char *data_format) {
     AccountDB *account_db;
     DataBase *database;
@@ -412,8 +430,8 @@ int account_db_add_account(AccountDB *account_db, Account *account) {
             LOGD("Failed to convert\n");
             continue;
         }
-        cmp_id = account_get_id(cmp_account);
-        if(strncmp(cmp_id, account_get_id(account), strlen(cmp_id)) == 0) {
+        cmp_id = account_get_user_id(cmp_account);
+        if(strncmp(cmp_id, account_get_user_id(account), strlen(cmp_id)) == 0) {
             LOGD("The ID has aleady been existed\n");
             destroy_account(cmp_account);
             return -1;
@@ -483,39 +501,27 @@ DList* account_db_get_accounts(AccountDB *account_db) {
     return account_list;
 }
 
-int account_db_delete_account(AccountDB *account_db, char *id, char *pw) {
+Account *account_db_find_account(AccountDB *account_db, char *user_id) {
     int i;
-    int entry_id;
-    int field_mask;
     int count;
-    BOOLEAN result;
-    
     char *cmp_id;
-    char *cmp_pw;
-    int pw_len;
-    int id_len;
 
-    EntryPoint *entry_point;
     Account *account;
     
-    if (!account_db) {
-        LOGD("There is nothing to point the AccountDB\n");
-        return -1;
+    if (!account_db || !user_id) {
+        LOGD("Can't find the account\n");
+        return NULL;
     }
 
-    account = NULL;
-    entry_point = NULL;
-
-    field_mask = database_get_field_mask(account_db->database);
-    if (field_mask == 0) {
-        LOGD("Field mask was wrong\n");
-        return -1;
+    if (strlen(user_id) == 0) {
+        LOGD("Can't find the account\n");
+        return NULL;
     }
 
     count = database_get_entry_count(account_db->database);
     if (count <= 0) {
         LOGD("Can't get entry\n");
-        return -1;
+        return NULL;
     }
 
     for (i = 0; i < count; i++) {
@@ -524,31 +530,38 @@ int account_db_delete_account(AccountDB *account_db, char *id, char *pw) {
             LOGD("Failed to new account\n");
             continue;
         }
-
-        cmp_id = account_get_id(account);
-        id_len = strlen(cmp_id);
-        cmp_pw = account_get_pw(account);
-        pw_len = strlen(cmp_pw);
-        if (strncmp(cmp_id, id, id_len) == 0) {
-            if (strncmp(cmp_pw, pw, pw_len) == 0) {
-                entry_point = database_nth_entry_point(account_db->database, i);
-                entry_id = entry_point_get_id(entry_point);
-                result = delete_entry(account_db->database, entry_id);
-                if (result == FALSE) {
-                    LOGD("Failed to delete the entry\n");
-                    entry_id = -1;
-                }
-            } else {
-                LOGD("Pw was wrong\n");
-                entry_id = -1;
-            }
-            destroy_account(account);
+        cmp_id = account_get_user_id(account);
+        if (strcmp(cmp_id, user_id) == 0) {
             break;
         }
-        entry_id = -1;
         destroy_account(account);
+        account = NULL;
     }
-    return entry_id;
+    return account;
+}
+
+void account_db_delete_account(AccountDB *account_db, char *user_id, char *pw) {
+    int id;
+    char *cmp_pw;
+
+    BOOLEAN result;
+    Account *account;
+
+    account = account_db_find_account(account_db, user_id);
+    if (!account) {
+        LOGD("Failed to find account\n");
+        return;
+    }
+
+    cmp_pw = account_get_pw(account);
+    if (strcmp(pw, cmp_pw) == 0) {
+        id = account_get_id(account);
+        result = database_delete_entry(account_db->database, id);
+         destroy_account(account);
+        if (result == FALSE) {
+            LOGD("Failed to delte the entry\n");
+        }
+    }
 }
 
 int account_db_get_account_count(AccountDB *account_db) {
@@ -569,47 +582,64 @@ int account_db_get_account_count(AccountDB *account_db) {
     return count;
 }
 
-char* account_db_get_pw(AccountDB *account_db, char *id, char *confirm) {
-    int count;
-    int i;
+char *account_db_get_pw(AccountDB *account_db, char *user_id, char *confirm) {
     int len;
-    char *cmp_id;
     char *cmp_confirm;
     char *pw;
     char *tmp;
 
-    Account* account;
-
-    if (!account_db) {
-        LOGD("There is nothing to point the AccountDB\n");
-        return NULL;
-    }
-
-    count = database_get_entry_count(account_db->database);
-    if (count <= 0) {
-        LOGD("Can't get entry\n");
-        return NULL;
-    }
-
+    Account *account;
     pw = NULL;
-    for (i = 0; i < count; i++) {
-        account = account_db_nth_account(account_db, i);
-        cmp_id = account_get_id(account);
-        if (strncmp(cmp_id, id, strlen(cmp_id)) == 0) {
-            cmp_confirm = account_get_confirm(account);
-            if (strncmp(cmp_confirm, confirm, strlen(cmp_confirm)) == 0) {
-                pw = account_get_pw(account);
-                len = strlen(pw);
-                tmp = (char*) malloc(len + 1);
-                strncpy(tmp, pw, len);
-                pw = tmp;
-            } else {
-                LOGD("Confirm was wrong\n");
-            }
-            destroy_account(account);
-            break;
-        }
-        destroy_account(account);
+
+    account = account_db_find_account(account_db, user_id);
+    if (!account) {
+        LOGD("Failed to find account\n");
+        return NULL;
     }
+
+    cmp_confirm = account_get_confirm(account);
+    if (!cmp_confirm) {
+        LOGD("Failed to get confirm\n");
+        return NULL;
+    }
+
+    if (strcmp(confirm, cmp_confirm) == 0) {
+        pw = account_get_pw(account);
+        len = strlen(pw);
+        tmp = (char*) malloc(len + 1);
+        if (!tmp) {
+            LOGD("Failed to create buf for pw\n");
+            destroy_account(account);
+            return NULL;
+        }
+        memset(tmp, 0, len + 1);
+        strncpy(tmp, pw, len);
+        pw = tmp;
+    }
+
+    destroy_account(account);
     return pw;
+}
+
+BOOLEAN account_db_identify_account(AccountDB *account_db, char *user_id, char *pw) {
+    Account *account;
+    char *cmp_pw;
+
+    account = account_db_find_account(account_db, user_id);
+    if (!account) {
+        LOGD("Failed to find account\n");
+        return FALSE;
+    }
+
+    cmp_pw = account_get_pw(account);
+    if (!cmp_pw) {
+        LOGD("Failed to get the pw\n");
+        return FALSE;
+    }
+
+    if (strcmp(cmp_pw, pw) == 0) {
+        return TRUE;
+    }
+
+    return FALSE;
 }

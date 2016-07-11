@@ -118,7 +118,11 @@ Message* message_db_new_message(Stream_Buf *entry, int field_mask) {
     int i;
     int mesg_time;
     int len;
+    int id;
+    int result;
+
     Message *mesg;
+    id = 0;
 
     if (!entry) {
         LOGD("Can't failed convert\n");
@@ -130,6 +134,13 @@ Message* message_db_new_message(Stream_Buf *entry, int field_mask) {
         LOGD("Failed to get the buf\n");
         return NULL;
     }
+
+    memcpy(&id, buf, ID_SIZE);
+    if (id < 0) {
+        LOGD("ID was wrong\n");
+        return NULL;
+    }
+    buf += ID_SIZE;
 
     count = utils_get_colum_count(field_mask);
     if (count <= 0) {
@@ -151,6 +162,7 @@ Message* message_db_new_message(Stream_Buf *entry, int field_mask) {
             break;
 
         case STRING_FIELD:
+            len = 0;
             memcpy(&len, buf, sizeof(int));
             if (len < 0) {
                 LOGD("Failed to get len\n");
@@ -163,6 +175,7 @@ Message* message_db_new_message(Stream_Buf *entry, int field_mask) {
                 LOGD("Failed to make buf\n");
                 return NULL;
             }
+            memset(str, 0, len);
             memcpy(str, buf, len);
             buf += len;
             break;
@@ -179,6 +192,13 @@ Message* message_db_new_message(Stream_Buf *entry, int field_mask) {
     mesg = new_mesg((long int)mesg_time, len, str);
     if (!mesg) {
         LOGD("Failed to make the Message\n");
+        return NULL;
+    }
+
+    result = message_set_id(mesg, id);
+    if (result == FALSE) {
+        LOGD("Failed to set id\n");
+        destroy_mesg(mesg);
         return NULL;
     }
 

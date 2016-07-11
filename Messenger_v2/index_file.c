@@ -128,7 +128,7 @@ static BOOLEAN index_file_load(IndexFile *index_file, DataBase *database) {
         LOGD("Failed to read the last id\n");
         return FALSE;
     }
-    LOGD("field_mask:%d\n", field_mask);
+
     if (index_file->field_mask != field_mask) {
         LOGD("field_mask was updated\n");
         index_file->field_mask = field_mask;
@@ -187,6 +187,11 @@ IndexFile* index_file_open(char *name, int field_mask, DataBase *database) {
         return NULL;
     }
 
+    if (!field_mask) {
+        LOGD("field_maks was wrong\n");
+        return NULL;
+    }
+
     path = utils_create_path(name, INDEXFILE);
     if (!path) {
         LOGD("Failed to make path\n");
@@ -234,6 +239,7 @@ IndexFile* index_file_open(char *name, int field_mask, DataBase *database) {
 
     index_file->fd = fd;
     index_file->path = path;
+    index_file->field_mask = field_mask;
 
     if (size > 0) {
         result = index_file_load(index_file, database);

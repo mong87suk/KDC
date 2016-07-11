@@ -14,7 +14,7 @@ typedef struct _Timer Timer;
 Looper* new_looper();
 int looper_run(Looper *looper);
 void looper_stop(Looper *looper);
-void looper_add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, void *user_data, int revents), void *user_data, int events);
+unsigned int looper_add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, void *user_data, int revents), void *user_data, int events);
 void looper_add_timer(Looper* looper, unsigned int interval, BOOLEAN (*callback)(void *user_data), void *user_data);
 void looper_remove_watcher(Looper *looper, int fd);
 void looper_remove_all_watchers(Looper *looper);

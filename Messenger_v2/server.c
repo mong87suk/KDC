@@ -28,6 +28,7 @@ struct _Server {
 };
 
 struct _Client {
+    int id;
     int fd;
     int last_read_pos;
     READ_REQ_STATE read_state;
@@ -104,7 +105,7 @@ static Client* server_find_client(Server *server, int fd) {
     return client;
 }
 
-static int server_add_client(Server *server, int fd) {
+static int server_add_client(Server *server, int fd, int id) {
     Client *client;
     DList *list;
 
@@ -116,6 +117,7 @@ static int server_add_client(Server *server, int fd) {
         return -1;
     }
 
+    client->id = id;
     client->fd = fd;
     client->last_read_pos = 1;
     client->read_state = READY_TO_READ_REQ;
@@ -128,7 +130,7 @@ static int server_add_client(Server *server, int fd) {
 
 static void server_remove_client(Server *server, int fd) {
     if (!server && !server->client_list) {
-        printf("%s %s Can't remove Client\n", __FILE__, __func__);
+        LOGD("Can't remove Client\n");
         return;
     }
 
@@ -349,6 +351,7 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
     int read_count;
     char more;
     unsigned int micro_sec;
+    int id;
 
     LOGD("Start server_create_res_packet()\n");
 
@@ -463,11 +466,10 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
             return NULL;
         }
 
-        result = message_db_add_mesg(server->mesg_db, mesg);
+        id = message_db_add_mesg(server->mesg_db, mesg);
         destroy_mesg(mesg);
-        if (!result) {
-            LOGD("Failed to add the Message\n");
-            return NULL;
+        if (id < 0) {
+            LOGD("Failed to add mesg\n");
         }
 
         op_code = RCV_MSG;
@@ -617,13 +619,11 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
             return NULL;
         }
 
-        result = message_db_add_mesg(server->mesg_db, mesg);
+        id = message_db_add_mesg(server->mesg_db, mesg);
         destroy_mesg(mesg);
-        if (!result) {
-            LOGD("Failed to add the Message\n");
-            return NULL;
+        if (id < 0) {
+            LOGD("Failed to add mesg\n");
         }
-
         op_code = RCV_MSG;
         break;
 
@@ -986,7 +986,7 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
     }
 }
 
-static void server_handle_req_event(Server *server, int fd) {
+static void server_handle_req_event(Server *server, int fd, unsigned int id) {
     char *buf;
     Client *client;
     short check_sum;
@@ -1012,6 +1012,11 @@ static void server_handle_req_event(Server *server, int fd) {
     client = server_find_client(server, fd);
     if (!client) {
         LOGD("There is nothing to point the Client\n");
+        return;
+    }
+
+    if (clinet->id != id) {
+        LOGD("Client id was wrong\n");
         return;
     }
 
@@ -1243,18 +1248,13 @@ static int server_handle_accept_event(Server *server) {
         return -1;
     }
 
-    result = server_add_client(server, client_fd);
-    if (result == -1) {
-        LOGD("Failed to add the Client\n");
-        return -1;
-    }
-
     LOGD("connected:%d\n", client_fd);
     return client_fd;
 }
 
-static void server_handle_events(int fd, void *user_data, int looper_event) {
+static void server_handle_events(int fd, void *user_data, unsigned int id, int looper_event) {
     int client_fd;
+    unsigned int id;
     Server *server;
     server = (Server*) user_data;
 
@@ -1266,13 +1266,18 @@ static void server_handle_events(int fd, void *user_data, int looper_event) {
     if (looper_event & LOOPER_HUP_EVENT) {
          server_handle_disconnect_event(server, fd);
     } else if (looper_event & LOOPER_IN_EVENT) {
-        if (fd == server->fd) {
+        if (fd == server->fd && id == server->id) {
             client_fd = server_handle_accept_event(server);
             if (client_fd != -1) {
-                looper_add_watcher(server->looper, client_fd, server_handle_events, server, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
+                id = looper_add_watcher(server->looper, client_fd, server_handle_events, server, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
+                result = server_add_client(server, client_fd, id);
+                if (result == -1) {
+                    LOGD("Failed to add the Client\n");
+                    return -1;
+                }
             }
         } else {
-            server_handle_req_event(server, fd);
+            server_handle_req_event(server, fd, id);
         }
     }
 }
@@ -1283,6 +1288,7 @@ Server* new_server(Looper *looper) {
     char *data_format, *str;
     struct sockaddr_un addr;
     int server_fd;
+    int id;
 
     if (!looper) {
         LOGD("Looper is empty\n");
@@ -1346,8 +1352,8 @@ Server* new_server(Looper *looper) {
     server->client_list = NULL;
     server->mesg_db = mesg_db;
 
-    looper_add_watcher(server->looper, server_fd, server_handle_events, server, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
-
+    id = looper_add_watcher(server->looper, server_fd, server_handle_events, server, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
+    server->id = id;
     return server;
 }
 

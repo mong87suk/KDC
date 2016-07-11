@@ -6,6 +6,7 @@
 #include "m_boolean.h"
 
 struct _Message {
+    int id;
     long int time;
     int str_len;
     char *str;
@@ -20,6 +21,7 @@ Message* new_mesg(long int time, int str_len, char *str) {
         return NULL;
     }
 
+    mesg->id = -1;
     mesg->time = time;
     mesg->str_len = str_len;
     mesg->str = str;
@@ -38,6 +40,16 @@ void destroy_mesg(Message *mesg) {
     }
 
     free(mesg);
+}
+
+BOOLEAN message_set_id(Message *mesg, int id) {
+    if (!mesg) {
+        LOGD("There is nothing to point the mesg\n");
+        return FALSE;
+    }
+
+    mesg->id = id;
+    return TRUE;
 }
 
 BOOLEAN message_set_time(Message *mesg, long int time) {
@@ -68,6 +80,15 @@ BOOLEAN message_set_str(Message *mesg, char *str) {
 
     mesg->str = str;
     return TRUE;
+}
+
+int message_get_id(Message *mesg) {
+    if (!mesg) {
+        LOGD("There is nothing to point the mesg\n");
+        return -1;
+    }
+
+    return mesg->id;
 }
 
 long int message_get_time(Message *mesg) {
