@@ -12,7 +12,7 @@ struct _Stream_Buf {
     int position;
 };
 
-Stream_Buf* new_stream_buf(int len) {
+Stream_Buf *new_stream_buf(int len) {
     Stream_Buf *stream_buf;
 
     if (len < 0) {
@@ -43,7 +43,7 @@ void destroy_stream_buf(Stream_Buf *stream_buf) {
     free(stream_buf);
 }
 
-char* stream_buf_get_available(Stream_Buf *stream_buf) {
+char *stream_buf_get_available(Stream_Buf *stream_buf) {
     if (!stream_buf && !stream_buf->buf) {
         LOGD("There is nothing to point Stream_Buf\n");
         return NULL;
@@ -77,7 +77,7 @@ BOOLEAN stream_buf_increase_pos(Stream_Buf *stream_buf, int n_byte) {
     return TRUE;
 }
 
-char* stream_buf_get_buf(Stream_Buf *stream_buf) {
+char *stream_buf_get_buf(Stream_Buf *stream_buf) {
     if (!stream_buf && !stream_buf->buf) {
         LOGD("There is nothing to point the Stream_Buf\n");
         return NULL;

@@ -11,10 +11,10 @@
 #define FIELD_SIZE       4
 #define ENTRY_POINT_SIZE  16 
 
-EntryPoint* new_entry_point(int id, int offset, DataBase *database);
+EntryPoint *new_entry_point(int id, int offset, DataBase *database);
 void destroy_entry_point(EntryPoint *entry_point);
 int entry_point_get_id(EntryPoint *entry_point);
-Stream_Buf* entry_point_get_value(EntryPoint *entry_point);
+Stream_Buf *entry_point_get_value(EntryPoint *entry_point);
 BOOLEAN entry_point_set_offset(EntryPoint *entry_point, int offset);
 int entry_point_get_offset(EntryPoint *entry_point);
 

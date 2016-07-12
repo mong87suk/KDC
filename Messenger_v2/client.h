@@ -16,7 +16,7 @@ typedef enum {
 
 typedef struct _Client Client;
 
-Client* new_client(Looper *looper);
+Client *new_client(Looper *looper);
 void destroy_client(Client *client);
 
 #endif

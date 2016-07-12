@@ -14,7 +14,7 @@ struct _Account {
     char *mobile;
 };
 
-Account* new_account(char *user_id, char *pw, char *email, char *confirm, char *mobile) {
+Account *new_account(char *user_id, char *pw, char *email, char *confirm, char *mobile) {
     int str_len;
     Account *account;
 
@@ -126,7 +126,7 @@ char *account_get_user_id(Account *account) {
     return account->user_id;
 }
 
-char* account_get_pw(Account *account) {
+char *account_get_pw(Account *account) {
     if (!account) {
         LOGD("There is noting to point the account\n");
         return NULL;
@@ -135,7 +135,7 @@ char* account_get_pw(Account *account) {
     return account->pw;
 }
 
-char* account_get_email(Account *account) {
+char *account_get_email(Account *account) {
     if (!account) {
         LOGD("There is nothing to point the account\n");
         return NULL;
@@ -144,7 +144,7 @@ char* account_get_email(Account *account) {
    return account->email;
 }
 
-char* account_get_confirm(Account *account) {
+char *account_get_confirm(Account *account) {
     if (!account) {
         LOGD("There is nothing to point the account\n");
         return NULL;
@@ -153,7 +153,7 @@ char* account_get_confirm(Account *account) {
     return account->confirm;
 }
 
-char* account_get_mobile(Account *account) {
+char *account_get_mobile(Account *account) {
     if (!account) {
         LOGD("There is nothing to point the account\n");
         return NULL;

@@ -176,7 +176,7 @@ static BOOLEAN index_file_load(IndexFile *index_file, DataBase *database) {
     return TRUE;
 }
 
-IndexFile* index_file_open(char *name, int field_mask, DataBase *database) {
+IndexFile *index_file_open(char *name, int field_mask, DataBase *database) {
     IndexFile *index_file;
     char *path;
     int fd, size;
@@ -395,7 +395,7 @@ int index_file_get_count(IndexFile *index_file) {
     return index_file->entry_count;
 }
 
-EntryPoint* index_file_find_entry(IndexFile *index_file, int id) {
+EntryPoint *index_file_find_entry(IndexFile *index_file, int id) {
     EntryPoint *entry_point;
 
     if (!index_file) {
@@ -448,7 +448,7 @@ void index_file_delete_entry(IndexFile *index_file, EntryPoint *entry_point) {
     index_file->entry_count = d_list_length(index_file->entry_list);
 }
 
-DList* index_file_get_list(IndexFile *index_file) {
+DList *index_file_get_list(IndexFile *index_file) {
     if (!index_file) {
         LOGD("There is nothing to point the IndexFile\n");
         return NULL;
@@ -457,7 +457,7 @@ DList* index_file_get_list(IndexFile *index_file) {
     return index_file->entry_list;
 }
 
-EntryPoint* index_file_nth_entry(IndexFile *index_file, int nth) {
+EntryPoint *index_file_nth_entry(IndexFile *index_file, int nth) {
     DList *list;
     EntryPoint* entry;
 

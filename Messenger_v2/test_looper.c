@@ -14,14 +14,14 @@ struct _UserData {
 
 typedef struct _UserData UserData;
 
-static BOOLEAN print_data(void *user_data) {
+static BOOLEAN print_data(void *user_data, unsigned int id) {
     UserData *data;
 
     assert(user_data);
 
     data = (UserData*) user_data;
-    LOGD("num:%d, time=%ld\n\n", data->num, time(NULL));
-
+    LOGD("id:%d num:%d, time=%ld\n\n", id, data->num, time(NULL));
+    
     return TRUE;
 }
 

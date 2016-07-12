@@ -13,7 +13,7 @@ typedef struct _Server Server;
 typedef struct _Client Client;
 typedef struct _UserData UserData;
 
-Server* new_server(Looper *looper);
+Server *new_server(Looper *looper);
 void destroy_server(Server *server);
 
 #endif

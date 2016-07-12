@@ -8,32 +8,28 @@
 #include "stream_buf.h"
 #include "converter.h"
 
-struct _Header
-{
+struct _Header {
     char sop;
     short op_code;
     long int payload_len;
 };
 
-struct _Body
-{
+struct _Body {
     char *payload;
 };
 
-struct _Tail
-{
+struct _Tail {
     char eop;
     short checksum;
 };
 
-struct _Packet
-{
+struct _Packet {
     Header *header;
     Body *body;
     Tail *tail;
 };
 
-Packet* new_packet(char *buf) {
+Packet *new_packet(char *buf) {
     Packet *packet;
 
     packet = convert_buf_to_packet(buf);
@@ -57,7 +53,7 @@ void destroy_packet(Packet *packet) {
     free(packet);
 }
 
-Header* packet_new_header(char sop, short op_code, long int payload_len) {
+Header *packet_new_header(char sop, short op_code, long int payload_len) {
     Header *header;
 
     header = (Header*) malloc(sizeof(Header));
@@ -83,7 +79,7 @@ void packet_destroy_header(Header *header) {
     free(header);
 }
 
-Body* packet_new_body(char *payload) {
+Body *packet_new_body(char *payload) {
     Body *body;
 
     body = (Body*) malloc(sizeof(Body));
@@ -109,7 +105,7 @@ void packet_destroy_body(Body *body) {
     free(body);
 }
 
-Tail* packet_new_tail(char eop, short checksum) {
+Tail *packet_new_tail(char eop, short checksum) {
     Tail *tail;
 
     tail = (Tail*) malloc(sizeof(Tail));
@@ -264,7 +260,7 @@ BOOLEAN packet_set_payload(Packet *packet, char *payload) {
     return TRUE;
 }
 
-char* packet_get_payload(Packet *packet, Body *body) {
+char *packet_get_payload(Packet *packet, Body *body) {
     if (packet) {
         body = packet->body;
     }
@@ -359,7 +355,7 @@ BOOLEAN packet_set_tail(Packet *packet, Tail *tail) {
     return TRUE;
 }
 
-Header* packet_get_header(Packet *packet) {
+Header *packet_get_header(Packet *packet) {
     if (!packet) {
         LOGD("Can't get the Header");
         return NULL;
@@ -367,7 +363,7 @@ Header* packet_get_header(Packet *packet) {
     return packet->header;
 }
 
-Tail* packet_get_tail(Packet *packet) {
+Tail *packet_get_tail(Packet *packet) {
     if (!packet) {
         LOGD("Can't get the Tail");
         return NULL;
@@ -375,7 +371,7 @@ Tail* packet_get_tail(Packet *packet) {
     return packet->tail;
 }
 
-Body* packet_get_body(Packet *packet) {
+Body *packet_get_body(Packet *packet) {
     if (!packet) {
         LOGD("Can't get the Body");
         return NULL;

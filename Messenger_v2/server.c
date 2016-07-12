@@ -38,6 +38,7 @@ struct _Client {
 };
 
 struct _UserData {
+    unsigned int id;
     Server *server;
     Client *client;
     Packet *packet;
@@ -57,11 +58,6 @@ static void server_free_message(void *data) {
 }
 
 static void server_destroy_mesg_list(DList *mesg_list) {
-    if (!mesg_list) {
-        LOGD("There is nothing to the mesg list\n");
-        return;
-    }
-
     d_list_free(mesg_list, server_free_message);
 }
 
@@ -332,7 +328,7 @@ static BOOLEAN server_copy_mesgs(DList *mesg_list, Message *mesgs, int len) {
     return TRUE;
 }
 
-static Packet* server_create_res_packet(Server *server, Packet *req_packet, Client *client, int *read_pos, unsigned int *interval) {
+static Packet *server_create_res_packet(Server *server, Packet *req_packet, Client *client, int *read_pos, unsigned int *interval) {
     short op_code, check_sum;
     char *payload, *packet_buf, *tmp, *req_payload;
     Packet *res_packet;
@@ -350,11 +346,6 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
     int id;
 
     LOGD("Start server_create_res_packet()\n");
-
-    if (!req_packet || !server) {
-        LOGD("There is nothing to point req_packet or server\n");
-        return NULL;
-    }
 
     mesg = NULL;
 
@@ -644,11 +635,7 @@ static Packet* server_create_res_packet(Server *server, Packet *req_packet, Clie
 
 static BOOLEAN server_copy_payload_len(Stream_Buf *stream_buf, long int *payload_len) {
     char *buf;
-    if (!stream_buf) {
-        LOGD("There is nothing to point the stream buf\n");
-        return FALSE;
-    }
-
+    
     buf = stream_buf_get_buf(stream_buf);
     if (!buf) {
         LOGD("There is nothing to point the buf\n");
@@ -662,11 +649,6 @@ static BOOLEAN server_copy_payload_len(Stream_Buf *stream_buf, long int *payload
 
 static BOOLEAN server_is_checksum_true(short check_sum, char *buf, int packet_len) {
     short comp_check_sum;
-
-    if (!buf) {
-        LOGD("Failed to check enable check_sum\n");
-        return FALSE;
-    }
 
     comp_check_sum = 0;
     memcpy(&comp_check_sum, buf + packet_len - 2, sizeof(comp_check_sum));
@@ -685,11 +667,6 @@ static BOOLEAN server_send_packet_to_all_clients(Server *server, Client *comp_cl
     int fd, len;
     BOOLEAN result;
     char *buf;
-
-    if (!server || !comp_client || !packet) {
-        LOGD("Can't send the packet to all clients");
-        return FALSE;
-    }
 
     len = packet_get_len(packet);
     LOGD("len:%d\n", len);
@@ -740,11 +717,6 @@ static BOOLEAN server_send_packet_to_client(Packet *packet, Client *client, int 
     int len, result;
     char *buf;
 
-    if (!packet || !client) {
-        LOGD("There is nothing to point the pocket or client\n");
-        return FALSE;
-    }
-
     if (client->fd < 0) {
         LOGD("the fd was wrong\n");
         return FALSE;
@@ -778,7 +750,27 @@ static BOOLEAN server_send_packet_to_client(Packet *packet, Client *client, int 
     return TRUE;
 }
 
-static BOOLEAN server_interval_send_packet(void *user_data) {
+static void destroy_user_data(UserData *user_data) {
+    free(user_data);
+}
+
+static UserData *new_user_data(Server *server, Client *client, Packet *packet) {
+    UserData *user_data;
+
+    user_data = (UserData*) malloc(sizeof(UserData));
+    if (!user_data) {
+        LOGD("Failed to make UserData\n");
+        return NULL;
+    }
+    user_data->id = -1;
+    user_data->server = server;
+    user_data->client = client;
+    user_data->packet = packet;
+
+    return user_data;
+}
+
+static BOOLEAN server_interval_send_packet(void *user_data, unsigned int id) {
     UserData *data;
     Server *server;
     int result;
@@ -789,16 +781,20 @@ static BOOLEAN server_interval_send_packet(void *user_data) {
     }
 
     data = (UserData*) user_data;
+    if (data->id != id) {
+        destroy_packet(data->packet);
+        destroy_user_data(user_data);
+        return FALSE;
+    }
+    
     server = data->server;
-
     result = server_send_packet_to_all_clients(server, data->client, data->packet);
-
     if (result == FALSE) {
         LOGD("Failed to sedn packet to all client\n");
     }
 
     destroy_packet(data->packet);
-    free(user_data);
+    destroy_user_data(user_data);
     return FALSE;
 }
 
@@ -815,11 +811,6 @@ static void server_handle_disconnect_event(Server *server, int fd, unsigned int 
 
 static BOOLEAN server_copy_overread_buf(Stream_Buf *c_stream_buf, Stream_Buf *r_stream_buf, int packet_len, int len) {
     char *copy_buf, *buf;
-
-    if (!r_stream_buf || !c_stream_buf) {
-        LOGD("Can't check overwrite\n");
-        return FALSE;
-    }
 
     buf = stream_buf_get_buf(r_stream_buf);
     if (!buf) {
@@ -840,11 +831,6 @@ static BOOLEAN server_copy_overread_buf(Stream_Buf *c_stream_buf, Stream_Buf *r_
 static int server_check_overread(Stream_Buf *r_stream_buf, int packet_len) {
     int pos;
 
-    if (!r_stream_buf) {
-        LOGD("There is nothing to point the Stream_Buf\n");
-        return 0;
-    }
-
     pos = stream_buf_get_position(r_stream_buf);
     if (!pos) {
         LOGD("Stream Buffer Position is zero\n");
@@ -859,14 +845,11 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
     int read_pos;
     unsigned int interval;
     int result;
+    unsigned int id;
 
     Packet *res_packet;
     UserData *user_data;
 
-    if (!req_packet || !server || !client) {
-        LOGD("There is nothing to point the Packet\n");
-        return;
-    }
     op_code = packet_get_op_code(req_packet, NULL);
     if (op_code == -1) {
         LOGD("Failed to get the op_code\n");
@@ -874,67 +857,70 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
     }
     read_pos = 0;
     interval = 0;
+    id = 0;
     count = message_db_get_message_count(server->mesg_db);
     LOGD("count:%d\n", count);
 
     switch (op_code) {
-    case REQ_ALL_MSG:
-        if (!count) {
-            LOGD("There is no message\n");
-            return;
-        }
-        res_packet = server_create_res_packet(server, req_packet, client, &read_pos, NULL);
-        if (!res_packet) {
-            LOGD("Failed to create the res packet\n");
-            return;
-        }
-        result = server_send_packet_to_client(res_packet, client, read_pos);
-        if (result == FALSE) {
-            LOGD("Failed to send packet to client\n");
-        }
-        destroy_packet(res_packet);
-        break;
+        case REQ_ALL_MSG:
+            if (!count) {
+                LOGD("There is no message\n");
+                return;
+            }
+            res_packet = server_create_res_packet(server, req_packet, client, &read_pos, NULL);
+            if (!res_packet) {
+                LOGD("Failed to create the res packet\n");
+                return;
+            }
+            result = server_send_packet_to_client(res_packet, client, read_pos);
+            if (result == FALSE) {
+                LOGD("Failed to send packet to client\n");
+            }
+            destroy_packet(res_packet);
+            break;
 
-    case REQ_INTERVAL_MSG:
-        res_packet = server_create_res_packet(server, req_packet, NULL, NULL, &interval);
-        if (!res_packet) {
-            LOGD("Failed to create the res packet\n");
-            return;
-        }
-        user_data = (UserData*) malloc(sizeof(UserData));
-        if (!user_data) {
-            LOGD("Failed to create the user data\n");
-            return;
-        }
+        case REQ_INTERVAL_MSG:
+            res_packet = server_create_res_packet(server, req_packet, NULL, NULL, &interval);
+            if (!res_packet) {
+                LOGD("Failed to create the res packet\n");
+                return;
+            }
+            user_data = new_user_data(server, client, res_packet);
+            if (!user_data) {
+                LOGD("Failed to create the user data\n");
+                destroy_packet(res_packet);
+                return;
+            }
 
-        user_data->server = server;
-        user_data->client = client;
-        user_data->packet = res_packet;
+            id = looper_add_timer(server->looper, interval, server_interval_send_packet, user_data);
+            if (id < 0) {
+                LOGD("Faield to add timer\n");
+                destroy_packet(res_packet);
+            }
+            user_data->id = id;
+            LOGD("interval:%d\n", interval);
+            break;
 
-        looper_add_timer(server->looper, interval, server_interval_send_packet, user_data);
-        LOGD("interval:%d\n", interval);
-        break;
+        case REQ_FIRST_OR_LAST_MSG:
+            if (!count) {
+                LOGD("There is no message\n");
+                return;
+            }
+            res_packet = server_create_res_packet(server, req_packet, client, &read_pos, NULL);
+            if (!res_packet) {
+                LOGD("Failed to create the res packet\n");
+                return;
+            }
+            result = server_send_packet_to_client(res_packet, client, read_pos);
+            if (result == FALSE) {
+                LOGD("Failed to send packet to client\n");
+            }
+            destroy_packet(res_packet);
+            break;
 
-    case REQ_FIRST_OR_LAST_MSG:
-        if (!count) {
-            LOGD("There is no message\n");
+        default:
+            LOGD("OPCODE is wrong\n");
             return;
-        }
-        res_packet = server_create_res_packet(server, req_packet, client, &read_pos, NULL);
-        if (!res_packet) {
-            LOGD("Failed to create the res packet\n");
-            return;
-        }
-        result = server_send_packet_to_client(res_packet, client, read_pos);
-        if (result == FALSE) {
-            LOGD("Failed to send packet to client\n");
-        }
-        destroy_packet(res_packet);
-        break;
-
-    default:
-        LOGD("OPCODE is wrong\n");
-        return;
     }
 }
 
@@ -955,11 +941,6 @@ static void server_handle_req_event(Server *server, int fd, unsigned int id) {
     r_stream_buf = NULL;
 
     LOGD("Start server_handle_req_event()\n");
-
-    if (!server) {
-        LOGD("There is nothing to point the Server\n");
-        return;
-    }
 
     client = server_find_client(server, id);
     if (!client) {
@@ -1233,7 +1214,7 @@ static BOOLEAN server_handle_events(int fd, void *user_data, unsigned int watche
     return TRUE;
 }
 
-Server* new_server(Looper *looper) {
+Server *new_server(Looper *looper) {
     Server *server;
     MessageDB *mesg_db;
     char *data_format, *str;

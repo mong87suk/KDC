@@ -351,7 +351,7 @@ static Account *account_db_nth_account(AccountDB *account_db, int nth) {
     return account;
 }
 
-AccountDB* account_db_open(char *data_format) {
+AccountDB *account_db_open(char *data_format) {
     AccountDB *account_db;
     DataBase *database;
 
@@ -454,7 +454,7 @@ int account_db_add_account(AccountDB *account_db, Account *account) {
     return entry_id;
 }
 
-DList* account_db_get_accounts(AccountDB *account_db) {
+DList *account_db_get_accounts(AccountDB *account_db) {
     int i;
     int field_mask;
     int count;

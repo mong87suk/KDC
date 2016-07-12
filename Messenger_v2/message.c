@@ -12,7 +12,7 @@ struct _Message {
     char *str;
 };
 
-Message* new_mesg(long int time, int str_len, char *str) {
+Message *new_mesg(long int time, int str_len, char *str) {
     Message* mesg;
 
     mesg = (Message*) malloc(sizeof(Message));
@@ -109,7 +109,7 @@ int message_get_str_len(Message *mesg) {
     return mesg->str_len;
 }
 
-char* message_get_str(Message *mesg) {
+char *message_get_str(Message *mesg) {
     if (!mesg) {
         LOGD("There is nothing to point the mesg\n");
         return NULL;
@@ -122,7 +122,7 @@ int message_get_size() {
     return sizeof(Message);
 }
 
-Message* message_create_array(int len) {
+Message *message_create_array(int len) {
     Message *mesgs;
     if (len == 0) {
         LOGD("Len is zero\n");
@@ -138,7 +138,7 @@ Message* message_create_array(int len) {
     return mesgs;
 }
 
-Message* message_next(Message *mesgs, int i) {
+Message *message_next(Message *mesgs, int i) {
     if (!mesgs) {
         LOGD("There is nothing to point the message\n");
         return NULL;

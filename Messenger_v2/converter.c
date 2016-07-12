@@ -85,7 +85,7 @@ static void converter_print_packet(Packet *packet) {
     printf("\n\n");
 }
 
-Packet* convert_buf_to_packet(char *buf) {
+Packet *convert_buf_to_packet(char *buf) {
     Packet *packet;
     Header *header;
     Body *body;
@@ -253,7 +253,7 @@ BOOLEAN convert_packet_to_buf(Packet *packet, char *buf) {
     return TRUE;
 }
 
-Message* convert_payload_to_mesgs(char *payload, int *mesg_num) {
+Message *convert_payload_to_mesgs(char *payload, int *mesg_num) {
     int n, i;
     int mesgs_size;
     int mesg_size;
@@ -290,7 +290,7 @@ Message* convert_payload_to_mesgs(char *payload, int *mesg_num) {
     return tmp;
 }
 
-Message* convert_payload_to_mesg(char *payload, int *mesg_len) {
+Message *convert_payload_to_mesg(char *payload, int *mesg_len) {
     long int time;
     int len, mesg_size;
     char *str;

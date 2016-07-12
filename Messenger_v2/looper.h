@@ -11,11 +11,11 @@ typedef struct _Looper Looper;
 typedef struct _Watcher Watcher;
 typedef struct _Timer Timer;
 
-Looper* new_looper();
+Looper *new_looper();
 int looper_run(Looper *looper);
 void looper_stop(Looper *looper);
 unsigned int looper_add_watcher(Looper* looper, int fd, BOOLEAN (*handle_events)(int fd, void *user_data, unsigned int id, int revents), void *user_data, int events);
-void looper_add_timer(Looper* looper, unsigned int interval, BOOLEAN (*callback)(void *user_data), void *user_data);
+unsigned int looper_add_timer(Looper* looper, unsigned int interval, BOOLEAN (*callback)(void *user_data, unsigned int id), void *user_data);
 void looper_remove_watcher(Looper *looper, unsigned int id);
 void looper_remove_all_watchers(Looper *looper);
 void destroy_looper(Looper *looper);

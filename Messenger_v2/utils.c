@@ -21,11 +21,6 @@ static void utils_append_data(void *data, void *user_data) {
     data_stream_buf = (Stream_Buf*) data;
     user_data_stream_buf = (Stream_Buf*) user_data;
 
-    if (!data_stream_buf || !user_data_stream_buf) {
-        LOGD("There is nothing to point Stream_Buf\n");
-        return;
-    }
-
     dest = stream_buf_get_available(user_data_stream_buf);
     src = stream_buf_get_buf(data_stream_buf);
 
@@ -39,14 +34,9 @@ static void utils_append_data(void *data, void *user_data) {
     stream_buf_increase_pos(user_data_stream_buf, copy_n);
 }
 
-static char* utils_create_full_name(char *name, char *file_name) {
+static char *utils_create_full_name(char *name, char *file_name) {
     int namelen, file_namelen, full_namelen;
     char *full_name;
-
-    if (!name || !file_name) {
-        LOGD("There is nothing to point name or file_name\n");
-        return NULL;
-    }
 
     namelen = strlen(name);
     if (namelen == 0) {
@@ -202,7 +192,7 @@ void utils_destroy_stream_buf_list(DList *stream_buf_list) {
     d_list_free(stream_buf_list, utils_free_stream_buf);
 }
 
-char* utils_create_path(char *name, char *file_name) {
+char *utils_create_path(char *name, char *file_name) {
     char *homedir, *full_name, *path;
     int home_pathlen, pathlen, full_namelen;
 

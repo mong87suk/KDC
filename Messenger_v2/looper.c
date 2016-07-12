@@ -27,11 +27,9 @@ struct _Watcher {
 struct _Timer {
     unsigned int id;
     void *user_data;
-    BOOLEAN (*callback)(void *user_data);
+    BOOLEAN (*callback)(void *user_data, unsigned int id);
     unsigned int interval;
-    unsigned int expiration;
-    unsigned int callback_count;
-    struct timespec called_t;
+    long expiration;
 };
 
 static int looper_set_sort_rule(void *data1, void *data2) {
@@ -46,50 +44,25 @@ static int looper_set_sort_rule(void *data1, void *data2) {
     timer1 = (Timer*) data1;
     timer2 = (Timer*) data2;
 
-    if (timer1->expired < timer2->expired) {
+    if (timer1->interval < timer2->interval) {
         return 1;
-    } else if (timer1->expired == timer2->expired) {
-        if (timer1->callback_count < TRUE && timer2->callback_count) {
-            return 1;
-        }
-    }
+    } 
     return 0;
 }
 
-static struct timespec looper_time_diff(struct timespec cur_t, struct timespec called_t) {
-    struct timespec temp;
+static long looper_get_monotonic_time(void) {
+    long cur_time;
+    struct timespec ts;
 
-    if ((cur_t.tv_nsec - called_t.tv_nsec) < 0) {
-        temp.tv_sec = cur_t.tv_sec - called_t.tv_sec - 1;
-        temp.tv_nsec = 1000000000 + cur_t.tv_nsec - called_t.tv_nsec;
-    } else {
-        temp.tv_sec = cur_t.tv_sec - called_t.tv_sec;
-        temp.tv_nsec = cur_t.tv_nsec - called_t.tv_nsec;
-    }
-    return temp;
-}
-
-static int looper_get_current_time()
-{
-    int cur_t;
-    struct timespec tv;
-
-    if (clock_gettime(CLOCK_MONOTONIC,, &tv) < 0) {
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0) {
         LOGD("Failed to get time\n");
         return -1;
     }
-    time = (tv == NULL) ? -1 :
-           (tv.tv_sec * 1000 + tv.tv_nsec / 1000000);
-    return cur_t;
+
+    cur_time = (ts.tv_sec * 1000) + (ts.tv_nsec / 1000000);
+    return cur_time;
 }
 
-static struct timespec looper_get_expiration(unsigned int interval) {
-    struct timespec cur_tv;
-
-    cur_tv = looper_get_current_time();
-    cur_tv.sec = cur_tv.sec + interval * 
-
-}
 static void looper_destroy_timer(void *timer) {
     if (!timer) {
         LOGD("There is nothing to point timer\n");
@@ -109,70 +82,45 @@ void static looper_remove_timer(Looper *looper, Timer *timer) {
 static void looper_dispatch(Looper *looper, int n_timer) {
     DList *list;
     Timer *timer;
-    struct timespec cur_t;
-    struct timespec df_t;
-    long int df_ms;
+    long cur_time;
     int result;
     int i;
 
-    cur_t = looper_get_current_time();
+    cur_time = looper_get_monotonic_time();
+    if (cur_time < 0) {
+        LOGD("Failed to get current time\n");
+    }
+    
     list = looper->timer_list;
-    LOGD("interval:%d\n", interval);
 
     for (i = 0; i < n_timer; i++) {
-        timer  = (Timer*) d_list_get_data(list);
-        if ()
-    }
-
-    if (n_timer > 1) {
-        for (i = 0; i < n_timer; i++) {
-            timer  = (Timer*) d_list_get_data(list);
-            df_t = looper_time_diff(cur_t, timer->called_t);
-            df_ms = df_t.tv_sec * 1000 + df_t.tv_nsec / 1000000;
-            timer->called_t = cur_t;
-
-            if (i == n_timer - 1) {
-                if (interval == timer->expired || df_ms >= timer->expired) {
-                    result = timer->callback(timer->user_data);
-                    timer->callback_count += 1;
-                    if (result == 0) {
-                        looper_remove_timer(looper, timer);
-                    } else {
-                        timer->expired = timer->interval;
-                    }
-                    return;
+        timer = (Timer*) d_list_get_data(list);
+        if (timer) {
+            if (timer->expiration - cur_time <= 0) {
+                result = timer->callback(timer->user_data, timer->id);
+                if (result == FALSE) {
+                    looper_remove_timer(looper, timer);
+                } else if (result == TRUE) {
+                    timer->expiration = cur_time + timer->interval;
                 }
             }
-            timer->expired -= df_ms;
-            list = d_list_next(list);
         }
-    } else {
-        timer = (Timer*) d_list_get_data(list);
-        df_t = looper_time_diff(cur_t, timer->called_t);
-        df_ms = df_t.tv_sec * 1000;
-        timer->called_t = cur_t;
-
-        if (interval == timer->expired || df_ms >= timer->expired) {
-            LOGD("interval:%u timer->interval:%u\n", interval, timer->interval);
-            result = timer->callback(timer->user_data);
-            timer->callback_count += 1;
-            if (result == 0) {
-                looper_remove_timer(looper, timer);
-            } else {
-                timer->expired = timer->interval;
-            }
-        } else {
-            timer->expired = (unsigned int) (interval - df_ms);
-        }
+        list = d_list_next(list); 
     }
 }
 
-static unsigned int looper_get_timeout(Looper *looper) {
-    int n_timer;
+static long looper_get_timeout(Looper *looper, int n_timer) {
+    int cur_time;
+
     Timer *timer;
     DList *list;
 
-    n_timer = d_list_length(looper->timer_list);
+    cur_time = looper_get_monotonic_time();
+    if (cur_time < 0) {
+        LOGD("Failed to get current time");
+        return 0;
+    }
+
     if (n_timer > 0) {
         looper->timer_list = d_list_insert_sort(looper->timer_list, looper_set_sort_rule);
         list = d_list_last(looper->timer_list);
@@ -181,7 +129,7 @@ static unsigned int looper_get_timeout(Looper *looper) {
             LOGD("Failed to get data\n");
             return 0;
         }
-        return timer->expired;
+        return timer->expiration - cur_time;
     }
     return 0;
 }
@@ -189,7 +137,7 @@ static unsigned int looper_get_timeout(Looper *looper) {
 /**
   * set_fd_event:
   * @looper: a pointer to Looper which includes watch_list
-  * @fds         : a pointer to pollfd
+  * @fds   : a pointer to pollfd
   *
   * Set events vaule of pollfd
   **/
@@ -251,7 +199,7 @@ static void looper_destroy_watcher(void *data) {
     free(watcher);
 }
 
-Looper* new_looper() {
+Looper *new_looper() {
     Looper *looper;
     looper = (Looper*) malloc(sizeof(Looper));
     looper->watcher_last_id = 0;
@@ -275,7 +223,6 @@ void looper_remove_watcher(Looper *looper, unsigned int id) {
         LOGD("Can't remove Wathcer\n");
         return;
     }
-
     looper->watcher_list = d_list_remove_with_user_data(looper->watcher_list, &id, looper_match_watcher_with_id, looper_destroy_watcher);
 }
 
@@ -291,7 +238,7 @@ int looper_run(Looper *looper) {
     int fd, nfds;
     int i;
     int n_watcher, n_timer;
-    int interval;
+    long timeout;
 
     BOOLEAN result;
     Watcher *watcher;
@@ -319,12 +266,12 @@ int looper_run(Looper *looper) {
         }
 
         looper_dispatch(looper, n_timer);
-        interval = looper_get_timeout(looper);
+        timeout = looper_get_timeout(looper, n_timer);
 
         struct pollfd fds[n_watcher];
         looper_get_fds(looper->watcher_list, fds);
 
-        nfds = poll(fds, n_watcher, interval);
+        nfds = poll(fds, n_watcher, timeout);
 
         if (nfds > 0) {
             for (i = 0; i < n_watcher; i++) {
@@ -358,7 +305,7 @@ int looper_run(Looper *looper) {
         }
 
         if (n_timer) {
-            looper_dispatch(looper, nfds, interval, n_timer);
+            looper_dispatch(looper, n_timer);
         }
     }
     return looper->state;
@@ -402,27 +349,35 @@ unsigned int looper_add_watcher(Looper* looper, int fd, BOOLEAN (*handle_events)
     return looper->watcher_last_id;
 }
 
-void looper_add_timer(Looper* looper, unsigned int interval, BOOLEAN (*callback)(void *user_data), void *user_data) {
+unsigned int looper_add_timer(Looper* looper, unsigned int interval, BOOLEAN (*callback)(void *user_data, unsigned int id), void *user_data) {
     Timer *timer;
-    int cur_t;
+    long cur_time;
 
     timer = (Timer*) malloc(sizeof(Timer));
     if (!timer) {
         LOGD("Failed to make Timer\n");
-        return;
+        return -1;
     }
 
-    cur_t = looper_get_current_time();
+    cur_time = looper_get_monotonic_time();
     if (cur_time < 0) {
         LOGD("Failed to get current time\n");
-        return;
+        return -1;
     }
 
     timer->user_data = user_data;
     timer->interval = interval;
-    timer->expiration = cur_t + interval;
-
+    timer->expiration = cur_time + interval;
+    timer->callback = callback;
     looper->timer_list = d_list_append(looper->timer_list, timer);
+    if (!looper->timer_list) {
+        LOGD("Failed to add timer\n");
+        return -1;
+    }
+    looper->timer_last_id += 1;
+    timer->id = looper->timer_last_id;
+
+    return looper->timer_last_id;
 }
 
 void looper_remove_all_watchers(Looper *looper) {

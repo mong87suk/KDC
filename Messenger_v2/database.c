@@ -46,7 +46,7 @@ static int database_new_field_mask(char *data_format) {
     return field_mask;
 }
 
-DataBase* database_open(char *name, char *data_format) {
+DataBase *database_open(char *name, char *data_format) {
     DataBase *database;
     IndexFile *index_file;
     DataFile *data_file;
@@ -216,7 +216,7 @@ BOOLEAN database_delete_entry(DataBase *database, int id) {
     return TRUE;
 }
 
-DList* database_get_entry_list(DataBase *database) {
+DList *database_get_entry_list(DataBase *database) {
     DList *list;
 
     if (!database) {
@@ -263,7 +263,7 @@ int database_update_entry(DataBase *database, EntryPoint *entry_point, Stream_Bu
     return FALSE;
 }
 
-Stream_Buf* database_get_entry(DataBase *database, int id) {
+Stream_Buf *database_get_entry(DataBase *database, int id) {
     EntryPoint *entry_point;
     Stream_Buf *entry;
     int fd;
@@ -303,7 +303,7 @@ int database_get_field_mask(DataBase *database) {
     return database->field_mask;
 }
 
-EntryPoint* database_find_entry_point(DataBase *database, int id) {
+EntryPoint *database_find_entry_point(DataBase *database, int id) {
     EntryPoint *entry_point;
 
     if (!database || id <= 0) {
@@ -320,7 +320,7 @@ EntryPoint* database_find_entry_point(DataBase *database, int id) {
     return entry_point;
 }
 
-EntryPoint* database_nth_entry_point(DataBase *database, int nth) {
+EntryPoint *database_nth_entry_point(DataBase *database, int nth) {
     EntryPoint* entry;
 
     if (!database) {

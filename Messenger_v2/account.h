@@ -14,14 +14,14 @@
 
 typedef struct _Account Account;
 
-Account* new_account(char *user_id, char *pw, char *email, char *confirm, char *mobile);
+Account *new_account(char *user_id, char *pw, char *email, char *confirm, char *mobile);
 void destroy_account(Account *account);
 int account_get_id(Account *account);
 char *account_get_user_id(Account *account);
-char* account_get_pw(Account *account);
-char* account_get_email(Account *account);
-char* account_get_confirm(Account *account);
-char* account_get_mobile(Account *account);
+char *account_get_pw(Account *account);
+char *account_get_email(Account *account);
+char *account_get_confirm(Account *account);
+char *account_get_mobile(Account *account);
 BOOLEAN account_set_id(Account *account, int id);
 
 #endif

@@ -15,7 +15,7 @@ struct _MessageDB {
     DataBase *database;
 };
 
-static Stream_Buf* message_db_new_entry(Message *mesg, int field_mask) {
+static Stream_Buf *message_db_new_entry(Message *mesg, int field_mask) {
     int mesg_time;
     int len;
     int i;
@@ -24,11 +24,6 @@ static Stream_Buf* message_db_new_entry(Message *mesg, int field_mask) {
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
     BOOLEAN result;
-
-    if (!mesg) {
-        LOGD("There is nothing to point the mesg\n");
-        return NULL;
-    }
 
     count = utils_get_colum_count(field_mask);
     if (count <= 0) {
@@ -112,7 +107,7 @@ static Stream_Buf* message_db_new_entry(Message *mesg, int field_mask) {
     return stream_buf;
 }
 
-Message* message_db_new_message(Stream_Buf *entry, int field_mask) {
+Message *message_db_new_message(Stream_Buf *entry, int field_mask) {
     char *buf, *str;
     int colum, count;
     int i;
@@ -205,7 +200,7 @@ Message* message_db_new_message(Stream_Buf *entry, int field_mask) {
     return mesg;
 }
 
-MessageDB* message_db_open(char *data_format) {
+MessageDB *message_db_open(char *data_format) {
     MessageDB *message_db;
     DataBase *database;
 
@@ -281,7 +276,7 @@ int message_db_add_mesg(MessageDB *mesg_db, Message *mesg) {
     return id;
 }
 
-DList* message_db_get_messages(MessageDB *mesg_db, int pos, int count) {
+DList *message_db_get_messages(MessageDB *mesg_db, int pos, int count) {
     int i;
     int field_mask;
     DList *mesg_list;

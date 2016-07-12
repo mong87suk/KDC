@@ -884,7 +884,7 @@ static BOOLEAN client_handle_events(int fd, void *user_data, unsigned int id, in
     return TRUE;
 }
 
-Client* new_client(Looper *looper) {
+Client *new_client(Looper *looper) {
     Client *client;
 
     struct sockaddr_un addr;

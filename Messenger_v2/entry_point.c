@@ -17,7 +17,7 @@ struct _EntryPoint {
     DataBase *database;
 };
 
-EntryPoint* new_entry_point(int id, int offset, DataBase *database) {
+EntryPoint *new_entry_point(int id, int offset, DataBase *database) {
     EntryPoint *entry_point;
 
     if (id < 0 || offset < 0) {
@@ -52,7 +52,7 @@ void destroy_entry_point(EntryPoint *entry_point) {
     free(entry_point);
 }
 
-Stream_Buf* entry_point_get_value(EntryPoint *entry_point) {
+Stream_Buf *entry_point_get_value(EntryPoint *entry_point) {
     DList *stream_buf_list;
     Stream_Buf *stream_buf;
     int colum;
