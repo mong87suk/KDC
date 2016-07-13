@@ -860,13 +860,12 @@ static void client_handle_stdin_event(Client *client, int fd) {
     return;
 }
 
-static BOOLEAN client_handle_events(int fd, void *user_data, unsigned int id, int looper_event) {
+static void client_handle_events(int fd, void *user_data, unsigned int id, int looper_event) {
     Client *client = (Client*) user_data;
 
     LOGD("handle_event\n");
     if (looper_event & LOOPER_HUP_EVENT) {
         client_handle_disconnect(client, fd, id);
-        return FALSE;
     } else if (looper_event & LOOPER_IN_EVENT) {
         if (fd == client->fd && client->response_id == id) {
             client_handle_res_events(client, fd);
@@ -874,14 +873,10 @@ static BOOLEAN client_handle_events(int fd, void *user_data, unsigned int id, in
             client_handle_stdin_event(client, fd);
         } else {
             LOGD("There is no fd to handle event\n");
-            return FALSE;
         }
     } else {
         LOGD("There is no event to handle\n");
-        return FALSE;
     }
-
-    return TRUE;
 }
 
 Client *new_client(Looper *looper) {

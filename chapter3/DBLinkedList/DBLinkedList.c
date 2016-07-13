@@ -90,14 +90,14 @@ DList* d_list_remove_with_data(DList *list, void *data, void(*free_data)(void *d
     return list;
 }
 
-DList* d_list_remove_with_user_data(DList *list, void *user_data, int(*find_data)(void *data, void *user_data), void(*free_data)(void *data)) {
+DList* d_list_remove_with_user_data(DList *list, void *user_data, int(*match_data)(void *data, void *user_data), void(*free_data)(void *data)) {
     DList *remove_data;
 
     if (!list) {
         printf("There is nothing to point DList\n");
         return NULL;
     }
-    remove_data = d_list_find_data(list, find_data, user_data);
+    remove_data = d_list_find_data(list, match_data, user_data);
 
     if (!remove_data) {
         printf("There is nothing to point  DList to remove\n");
@@ -358,9 +358,9 @@ DList* d_list_prepend_node(DList* sorted_node, DList* insert_node, DList* list) 
     return list;
 }
 
-void* d_list_find_data(DList *list, int(*find_data)(void *data1, void *data2), void *data) {
+void* d_list_find_data(DList *list, int(*match_data)(void *data1, void *data2), void *data) {
     while (list) {
-        if (find_data(list->data, data)) {
+        if (match_data(list->data, data)) {
             return list->data;
         }
         list = list->next;

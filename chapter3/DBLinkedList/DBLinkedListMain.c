@@ -82,7 +82,7 @@ int main(void) {
     data = d_list_get_data(tmp);
     test_data = (int*)data;
     printf("test_data: %d\n", *test_data);
-    list = d_list_remove_nth_with_data(list, data, free_data);
+    list = d_list_remove_with_data(list, data, free_data);
     printf("after_remove_nth_with_data\n");
     d_list_print_all_data(list, print_all_data);
     list2 = insert_data(10);

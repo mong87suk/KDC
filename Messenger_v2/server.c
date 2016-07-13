@@ -1184,7 +1184,7 @@ static int server_handle_accept_event(Server *server) {
     return client_fd;
 }
 
-static BOOLEAN server_handle_events(int fd, void *user_data, unsigned int watcher_id, int looper_event) {
+static void server_handle_events(int fd, void *user_data, unsigned int watcher_id, int looper_event) {
     int client_fd;
     int result;
     unsigned int id;
@@ -1194,7 +1194,6 @@ static BOOLEAN server_handle_events(int fd, void *user_data, unsigned int watche
 
     if (looper_event & LOOPER_HUP_EVENT) {
         server_handle_disconnect_event(server, fd, watcher_id);
-        return FALSE;
     } else if (looper_event & LOOPER_IN_EVENT) {
         if (fd == server->fd && watcher_id == server->id) {
             client_fd = server_handle_accept_event(server);
@@ -1203,15 +1202,12 @@ static BOOLEAN server_handle_events(int fd, void *user_data, unsigned int watche
                 result = server_add_client(server, client_fd, id);
                 if (result == -1) {
                     LOGD("Failed to add the Client\n");
-                    return FALSE;
                 }
             }
         } else {
             server_handle_req_event(server, fd, watcher_id);
         }
     }
-
-    return TRUE;
 }
 
 Server *new_server(Looper *looper) {

@@ -30,9 +30,13 @@ int main() {
     int num1;
     int num2;
     int num3;
+    int id1;
+    int id2;
+    int id3;
 
     UserData user_data1;
     UserData user_data2;
+    UserData user_data3;
     Looper *looper;
 
     looper = new_looper();
@@ -43,19 +47,19 @@ int main() {
     num1 = 4000;
     user_data1.num = num1;
     user_data1.looper = looper;
-    looper_add_timer(looper, 4000, print_data, &user_data1);
+    id1 = looper_add_timer(looper, 4000, print_data, &user_data1);
 
     num2 = 2000;
     user_data2.num = num2;
     user_data2.looper = looper;
-    looper_add_timer(looper, 2000, print_data, &user_data2);
-/*
+    id2 = looper_add_timer(looper, 2000, print_data, &user_data2);
+
     num3 = 0;
-    user_data = (UserData*) malloc(sizeof(UserData));
-    assert(user_data);
-    user_data->num = num3;
-    user_data->looper = looper;
-    looper_add_timer(looper, 0, print_data, user_data); */
+    user_data3.num = num3;  
+    user_data3.looper = looper;
+    id3 = looper_add_timer(looper, 0, print_data, &user_data3);
+
+    looper_remove_timer_with_id(looper, id3);
 
     looper_run(looper);
     return 0;
