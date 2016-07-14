@@ -11,7 +11,7 @@ typedef struct _Looper Looper;
 typedef struct _Watcher Watcher;
 typedef struct _Timer Timer;
 
-Looper *new_looper();
+Looper *new_looper(void);
 int looper_run(Looper *looper);
 void looper_stop(Looper *looper);
 unsigned int looper_add_watcher(Looper* looper, int fd, void (*handle_events)(int fd, void *user_data, unsigned int id, int revents), void *user_data, int events);
