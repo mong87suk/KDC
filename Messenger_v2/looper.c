@@ -36,14 +36,14 @@ struct _Timer {
 //This struct is used to get timeout.
 struct _TimerData {
     Looper *looper;
-    long cur_time;
     long timeout;
 };
 
 //This struct is used to get pollfds
 struct _FDData {
     struct pollfd *fds;
-    int len; 
+    int index;
+    int cmp_fd;
 };
 
 static long looper_get_monotonic_time(void) {
@@ -75,7 +75,7 @@ void static looper_remove_timer(Looper *looper, Timer *timer) {
     looper->timer_list =  d_list_remove_with_data(list, timer, looper_free_timer);
 }
 
-static void looper_handle_event(void *data, void *user_data) {
+static void looper_watcher_dispatch(void *data, void *user_data) {
     short revents;
     unsigned int looper_event;
 
@@ -105,8 +105,8 @@ static void looper_handle_event(void *data, void *user_data) {
     }    
 }
 
-static void looper_watcher_dispatch(DList *list, struct pollfd fd) {
-    d_list_foreach(list, looper_handle_event, &fd);
+static void looper_handle_event(DList *list, struct pollfd pfd) {
+    d_list_foreach(list, looper_watcher_dispatch, &pfd);
 }
 
 static void looper_timer_dispatch(void *data, void *user_data) {
@@ -119,9 +119,9 @@ static void looper_timer_dispatch(void *data, void *user_data) {
     struct _TimerData *timer_data;
 
     timer_data = (struct _TimerData *) user_data;
-    cur_time = timer_data->cur_time;
-    cmp_timeout = timer_data->timeout;
     timer = (Timer *) data;
+    cur_time = looper_get_monotonic_time();
+    cmp_timeout = timer_data->timeout;
 
     timeout = timer->expiration - cur_time;
     if (timeout <= 0) { 
@@ -134,87 +134,38 @@ static void looper_timer_dispatch(void *data, void *user_data) {
         }
     }
 
-    if (timeout < cmp_timeout) {
+    if (cmp_timeout == -1) {
+        timer_data->timeout = timeout;
+    } else if (timeout < cmp_timeout) {
         timer_data->timeout = timeout;
     }
 }
 
-static long looper_get_timeout(Looper *looper) {
-    long cur_time;
+static long looper_timer_callback(Looper *looper) {
     long timeout;
 
-    BOOLEAN result;
-    DList *next;
     DList *list;
-    Timer *timer;
     struct _TimerData timer_data;
 
     list = looper->timer_list;
     if (!list) {
-        return 0;
+        return -1;
     }
 
-    next = d_list_next(list);
-    timeout = 0;
+    timer_data.timeout = -1;
     timer_data.looper = looper;
-    
-    cur_time = looper_get_monotonic_time();
-    if (cur_time < 0) {
-        LOGD("Failed to get current time\n");
-    }
-    timer_data.cur_time = cur_time;
-
-    timer = (Timer *) d_list_get_data(list);
-    if (timer) {
-        timeout = timer->expiration - cur_time;
-        if (timeout <= 0) {
-            result = timer->callback(timer->user_data, timer->id);
-            timeout = 0;
-            if (result == FALSE) {
-                looper_remove_timer(looper, timer);
-            } else if (result == TRUE) {
-                timer->expiration = cur_time + timer->interval;
-            }
-        }
-        timer_data.timeout = timeout;
-    }
-    
-    if (next) {
-        d_list_foreach(next, looper_timer_dispatch, &timer_data);
+    if (list) {
+        d_list_foreach(list, looper_timer_dispatch, &timer_data);
         timeout = timer_data.timeout;
     }
 
     return timeout;
 }
 
-static void looper_match_fd(void *data, void *user_data) {
-    Watcher *watcher;
-    int *count_data;
-
-    count_data = (int *) user_data;
-    watcher = (Watcher *) data;
-
-    if (count_data[0] != watcher->fd) {
-        count_data[0] = watcher->fd;
-        count_data[1] += 1;
-    } 
-}
-
-static int looper_get_fd_count(DList *watcher_list) {
-    // It it a value to save a fd and count;
-    // count_data[0] to save fd of watcher
-    // count_data[1] to fd count
-    int count_data[2];
-    
-    memset(count_data, 0, sizeof(count_data));
-    d_list_foreach(watcher_list, looper_match_fd, count_data);
-    
-    return count_data[1];
-}
-
-
 static void looper_match_fd_with_pollfd(void *data, void *user_data) {
-    int i;
+    int index;
+    int cmp_fd;
+    int fd;
 
     struct pollfd *fds;
     struct _FDData *fd_data;
@@ -224,19 +175,32 @@ static void looper_match_fd_with_pollfd(void *data, void *user_data) {
     fd_data = (struct _FDData *) user_data;
 
     fds = fd_data->fds;
+    fd = watcher->fd;
+    cmp_fd = fd_data->cmp_fd;
+    index = fd_data->index;
 
-    for (i = 0; i < fd_data->len; i++) {
-        if (fds[i].fd == watcher->fd && fds[i].events == watcher->events) {
-            break;
-        } else if (fds[i].fd == watcher->fd) {
-            fds[i].events |= watcher->events;
-            break;
-        } else {
-            fds[i].fd = watcher->fd;
-            fds[i].events = watcher->events;
-            break;           
-        }
+    if (cmp_fd != fd) {
+        fds[index].fd = fd;
+        fds[index].events = watcher->events;
+    } else if (fds[index - 1].events != watcher->events) {
+       fds[index - 1].events |= watcher->events;
     }
+    cmp_fd = fd;
+    fd_data->index += 1;
+}
+
+int looper_fd_sort(void *data1, void *data2) {
+    Watcher *w1;
+    Watcher *w2;
+
+    w1 = (Watcher *) data1;
+    w2 = (Watcher *) data2;
+
+    if (w1->fd > w2->fd) {
+        return 1;
+    } else {
+        return 0;
+    }   
 }
 
 /**
@@ -246,18 +210,21 @@ static void looper_match_fd_with_pollfd(void *data, void *user_data) {
   *
   * Set events vaule of pollfd
   **/
-static void looper_get_fds(DList *watcher_list, struct pollfd *fds, int n_fds) {
-    int i;
-
+static int looper_get_fds(DList *watcher_list, struct pollfd *fds) {
     struct _FDData fd_data;
 
-    for (i = 0; i < n_fds; i++) {
-        fds[i].fd = 0;
+    if (!watcher_list) {
+        return 0;
     }
 
     fd_data.fds = fds;
-    fd_data.len = n_fds;
+    fd_data.index = 0;
+    fd_data.cmp_fd = -1;
+
+    d_list_insert_sort(watcher_list, looper_fd_sort);
     d_list_foreach(watcher_list, looper_match_fd_with_pollfd, &fd_data);
+
+    return fd_data.index + 1;
 }
 
 static int looper_match_watcher_with_id(void *data1, void *data2) {
@@ -349,17 +316,15 @@ int looper_run(Looper *looper) {
             LOGD("There are no Watcher and no Timer\n");
             return 0;
         }
-        timeout = looper_get_timeout(looper);
-        n_fds = looper_get_fd_count(looper->watcher_list);
-        struct pollfd fds[n_fds];
-        if (n_fds > 0) {
-            looper_get_fds(looper->watcher_list, fds, n_fds);
-        }
+        timeout = looper_timer_callback(looper);
+        struct pollfd fds[n_watcher];     
+        n_fds = looper_get_fds(looper->watcher_list, fds);
+        
         n_revents = poll(fds, n_fds, timeout);
         if (n_revents > 0) {
-            for (i = 0; i < n_revents; i++) {
+            for (i = 0; i < n_fds; i++) {
                 if (fds[i].revents != 0) {
-                    looper_watcher_dispatch(looper->watcher_list, fds[i]);
+                    looper_handle_event(looper->watcher_list, fds[i]);
                 }
             }
         }  
