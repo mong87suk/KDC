@@ -20,5 +20,6 @@ void looper_remove_watcher(Looper *looper, unsigned int id);
 void looper_remove_all_watchers(Looper *looper);
 void destroy_looper(Looper *looper);
 void looper_remove_timer_with_id(Looper *looper, int id);
+void looper_remove_all_timer(Looper *looper);
 
 #endif

@@ -162,7 +162,8 @@ static long looper_get_timeout(Looper *looper) {
     if (cur_time < 0) {
         LOGD("Failed to get current time\n");
     }
-    
+    timer_data.cur_time = cur_time;
+
     timer = (Timer *) d_list_get_data(list);
     if (timer) {
         timeout = timer->expiration - cur_time;
@@ -175,11 +176,10 @@ static long looper_get_timeout(Looper *looper) {
                 timer->expiration = cur_time + timer->interval;
             }
         }
+        timer_data.timeout = timeout;
     }
     
     if (next) {
-        timer_data.cur_time = cur_time;
-        timer_data.timeout = timeout;
         d_list_foreach(next, looper_timer_dispatch, &timer_data);
         timeout = timer_data.timeout;
     }
@@ -226,7 +226,9 @@ static void looper_match_fd_with_pollfd(void *data, void *user_data) {
     fds = fd_data->fds;
 
     for (i = 0; i < fd_data->len; i++) {
-        if (fds[i].fd == watcher->fd) {
+        if (fds[i].fd == watcher->fd && fds[i].events == watcher->events) {
+            break;
+        } else if (fds[i].fd == watcher->fd) {
             fds[i].events |= watcher->events;
             break;
         } else {
@@ -280,7 +282,7 @@ static int looper_match_timer(void *data1, void *data2) {
     }
 }
 
-static void looper_destroy_watcher(void *data) {
+static void looper_free_watcher(void *data) {
     Watcher *watcher;
 
     watcher = (Watcher *) data;
@@ -311,7 +313,7 @@ void looper_remove_watcher(Looper *looper, unsigned int id) {
         LOGD("Can't remove Wathcer\n");
         return;
     }
-    looper->watcher_list = d_list_remove_with_user_data(looper->watcher_list, &id, looper_match_watcher_with_id, looper_destroy_watcher);
+    looper->watcher_list = d_list_remove_with_user_data(looper->watcher_list, &id, looper_match_watcher_with_id, looper_free_watcher);
 }
 
 /**
@@ -344,7 +346,7 @@ int looper_run(Looper *looper) {
         n_watcher = d_list_length(looper->watcher_list);
         n_timer = d_list_length(looper->timer_list);
         if ((n_watcher <= 0) && (n_timer <= 0)) {
-            LOGD("There is no Watcher\n");
+            LOGD("There are no Watcher and no Timer\n");
             return 0;
         }
         timeout = looper_get_timeout(looper);
@@ -360,7 +362,7 @@ int looper_run(Looper *looper) {
                     looper_watcher_dispatch(looper->watcher_list, fds[i]);
                 }
             }
-        }
+        }  
     }
     return looper->state;
 }
@@ -435,12 +437,20 @@ unsigned int looper_add_timer(Looper* looper, unsigned int interval, BOOLEAN (*c
 }
 
 void looper_remove_all_watchers(Looper *looper) {
-    if (!looper && !(looper->watcher_list)) {
-        printf("There is nothing to pointer the Looper\n");
+    if (!looper || !(looper->watcher_list)) {
+        LOGD("There is nothing to pointer the Looper\n");
         return;
     }
-    d_list_free(looper->watcher_list, looper_destroy_watcher);
+    d_list_free(looper->watcher_list, looper_free_watcher);
     looper->watcher_list = NULL;
+}
+
+void looper_remove_all_timer(Looper *looper) {
+    if (!looper || !(looper->timer_list)) {
+        LOGD("There is nothing to pointer the Looper\n");
+    }
+    d_list_free(looper->timer_list, looper_free_timer);
+    looper->timer_list = NULL;
 }
 
 void looper_remove_timer_with_id(Looper *looper, int id) {
@@ -463,5 +473,6 @@ void destroy_looper(Looper *looper) {
         return;
     }
     looper_remove_all_watchers(looper);
+    looper_remove_all_timer(looper);
     free(looper);
 }
