@@ -63,7 +63,7 @@ DataBase *database_open(char *name, char *data_format) {
         return NULL;
     }
 
-    database = (DataBase*) malloc(sizeof(DataBase));
+    database = (DataBase *) malloc(sizeof(DataBase));
     if (!database) {
         LOGD("Faield to make the new DataBase\n");
         return NULL;

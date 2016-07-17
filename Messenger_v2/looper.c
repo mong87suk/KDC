@@ -185,7 +185,7 @@ static void looper_match_fd_with_pollfd(void *data, void *user_data) {
     } else if (fds[index - 1].events != watcher->events) {
        fds[index - 1].events |= watcher->events;
     }
-    cmp_fd = fd;
+    fd_data->cmp_fd = fd;
     fd_data->index += 1;
 }
 
@@ -224,7 +224,7 @@ static int looper_get_fds(DList *watcher_list, struct pollfd *fds) {
     d_list_insert_sort(watcher_list, looper_fd_sort);
     d_list_foreach(watcher_list, looper_match_fd_with_pollfd, &fd_data);
 
-    return fd_data.index + 1;
+    return fd_data.index;
 }
 
 static int looper_match_watcher_with_id(void *data1, void *data2) {
@@ -319,7 +319,6 @@ int looper_run(Looper *looper) {
         timeout = looper_timer_callback(looper);
         struct pollfd fds[n_watcher];     
         n_fds = looper_get_fds(looper->watcher_list, fds);
-        
         n_revents = poll(fds, n_fds, timeout);
         if (n_revents > 0) {
             for (i = 0; i < n_fds; i++) {
@@ -337,7 +336,7 @@ unsigned int looper_add_watcher(Looper* looper, int fd, void (*handle_events)(in
     Watcher *watcher;
     short events;
 
-    watcher = (Watcher*) malloc(sizeof(Watcher));
+    watcher = (Watcher *) malloc(sizeof(Watcher));
     events = 0;
     if (!watcher) {
         printf("Failed to make Watcher\n");
@@ -370,11 +369,11 @@ unsigned int looper_add_watcher(Looper* looper, int fd, void (*handle_events)(in
     return looper->watcher_last_id;
 }
 
-unsigned int looper_add_timer(Looper* looper, unsigned int interval, BOOLEAN (*callback)(void *user_data, unsigned int id), void *user_data) {
+unsigned int looper_add_timer(Looper *looper, unsigned int interval, BOOLEAN (*callback)(void *user_data, unsigned int id), void *user_data) {
     Timer *timer;
     long cur_time;
 
-    timer = (Timer*) malloc(sizeof(Timer));
+    timer = (Timer *) malloc(sizeof(Timer));
     if (!timer) {
         LOGD("Failed to make Timer\n");
         return -1;
