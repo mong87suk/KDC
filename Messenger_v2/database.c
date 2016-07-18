@@ -16,6 +16,18 @@ struct _DataBase {
     int field_mask;
 };
 
+struct _Where {
+    int column;
+    void *data;
+};
+
+// This struct is usded to search the Data
+struct _SearchData {
+    DataBase *database;
+    DList *matched_list;
+    DList *where_list;
+};
+
 static int database_new_field_mask(char *data_format) {
     int len;
     int field_mask;
@@ -44,6 +56,92 @@ static int database_new_field_mask(char *data_format) {
     }
     LOGD("field_mask: 0x%02X\n", field_mask);
     return field_mask;
+}
+
+void *database_get_data(DataBase *database, EntryPoint *entry_point, int column, int *field_type) {
+    int field_mask;
+    int fd, offset, n_byte;
+    int id, entry_id;
+
+    field_mask = database->field_mask;
+    fd = data_file_get_fd(database->data_file);
+    if (fd < 0) {
+        LOGD("Failed to get the fd\n");
+        return;
+    }
+
+    offset = entry_point_get_offset(entry_point);
+    if (offset < 0) {
+        LOGD("Failed to get the offset\n");
+        return; 
+    }
+
+    offset = lseek(fd, offset, SEEK_SET);
+    if (offset != entry_point->offset) {
+        LOGD("Failed to set offset\n");
+        return;
+    }
+
+    n_byte = utils_read_n_byte(fd, &id, sizeof(id));
+    if (n_byte != sizeof(id)) {
+        LOGD("Failed to read id\n");
+        return;
+    }
+
+    entry_id = entry_point_get_id(entry);
+    if (entry_id < 0) {
+        LOGD("Failed to get the id\n");
+        return;
+    }
+
+    if (id != entry_id) {
+        LOGD("the entry id was wrong\n");
+        return;
+    }
+}
+
+static void database_match_data(void *data, void *user_data) {
+    int field_type;
+    int i, len;
+    void *data;
+    BOOLEAN result;
+    
+    struct _SearchData *search_data;
+    EntryPoint *entry_point;
+    DataBase *database;
+    DList *where_list;
+    DList *next;
+    Where *where;
+
+    if (!data) {
+        LOGD("There is nothing to point the data\n");
+        return;
+    }
+
+    entry_point = (EntryPoint *) data;
+    search_data = (struct _SearchData *) user_data;
+    database = search_data->database;
+
+    where_list = search_data->where_list;
+    
+}
+
+Where *new_where(int column,void *data) {
+    Where *where;
+
+    if (column < 0 || !data) {
+        LOGD("Can't make the Where\n'");
+        return NULL;
+    }
+
+    where = (Where *) malloc(sizeof(Where));
+    if (!where) {
+        LOGD("Failed to make the Where\n");
+        return NULL;
+    }
+
+    where->column = column;
+    where->data = data;
 }
 
 DataBase *database_open(char *name, char *data_format) {
@@ -351,4 +449,26 @@ int database_get_data_file_fd(DataBase *database) {
     }
 
     return fd;
+}
+
+DList *database_search(DataBase *database, DList *where_list) {
+    DList *entry_list;
+    struct _SearchData search_data;
+
+    if (!database || !where_list) {
+        LOGD("Can't search a data\n");
+        return NULL;
+    }
+
+    entry_list = database_get_entry_list(database);
+    if (!entry_list) {
+        LOGD("Can't search a data\n");
+        return NULL;
+    }
+
+    search_data.database = database;
+    search_data.matched_list = NULL;
+    search_data.where_list = where_list;
+    
+    d_list_foreach(entry_list, database_match_data, &serach_data); 
 }

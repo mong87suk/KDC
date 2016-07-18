@@ -7,6 +7,7 @@
 #define DATAFILE "data_file"
 
 typedef struct _DataFile DataFile;
+typedef struct _Where Where;
 
 DataFile *data_file_open(char *name);
 void data_file_close(DataFile *data_file);
