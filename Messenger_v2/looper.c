@@ -317,7 +317,8 @@ int looper_run(Looper *looper) {
             return 0;
         }
         timeout = looper_timer_callback(looper);
-        struct pollfd fds[n_watcher];     
+        struct pollfd fds[n_watcher];
+        memset(fds, 0, sizeof(struct pollfd) * n_watcher);     
         n_fds = looper_get_fds(looper->watcher_list, fds);
         n_revents = poll(fds, n_fds, timeout);
         if (n_revents > 0) {
