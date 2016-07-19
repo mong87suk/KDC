@@ -6,11 +6,14 @@
 #include "DBLinkedList.h"
 #include "m_boolean.h"
 
-#define ID_SIZE                 4
+#define ID_SIZE                  4
+#define LEN_SIZE                 4
+#define FIELD_SIZE               4
+#define FIELD_I_SIZE             4
 
 #define INTEGER_FIELD   0x00000001
 #define STRING_FIELD    0x00000002
-#define FIELD_SIZE               4
+
 
 DataBase *database_open(char *name, char *filed_mask);
 void database_close(DataBase *database);

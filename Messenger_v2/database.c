@@ -24,8 +24,10 @@ struct _Where {
 // This struct is usded to search the Data
 struct _SearchData {
     DataBase *database;
-    DList *matched_list;
+    DList *matched_entry;
     DList *where_list;
+    EntryPoint *entry_point;
+    BOOLEAN result;
 };
 
 static int database_new_field_mask(char *data_format) {
@@ -58,10 +60,11 @@ static int database_new_field_mask(char *data_format) {
     return field_mask;
 }
 
-void *database_get_data(DataBase *database, EntryPoint *entry_point, int column, int *field_type) {
-    int field_mask;
+StreamBuf *database_get_data(DataBase *database, EntryPoint *entry_point, int column_index, int *field_type) {
+    int field_mask, count, column, index;
     int fd, offset, n_byte;
     int id, entry_id;
+    int len, size;
 
     field_mask = database->field_mask;
     fd = data_file_get_fd(database->data_file);
@@ -70,6 +73,7 @@ void *database_get_data(DataBase *database, EntryPoint *entry_point, int column,
         return;
     }
 
+    index = 0;
     offset = entry_point_get_offset(entry_point);
     if (offset < 0) {
         LOGD("Failed to get the offset\n");
@@ -98,32 +102,153 @@ void *database_get_data(DataBase *database, EntryPoint *entry_point, int column,
         LOGD("the entry id was wrong\n");
         return;
     }
+
+    count = utils_get_colum_count(field_mask);
+    if (count <= 0) {
+        LOGD("Failed to get colum count\n");
+        return NULL;
+    }
+    count -= 1;
+
+    stream_buf = NULL;
+
+    for (i = count; i >= 0; i--) {
+        column = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;
+        switch (column) {
+            case INTEGER_FIELD:
+                stream_buf = new_stream_buf(sizeof(int));
+                if (!stream_buf) {
+                    LOGD("Failed to make the StreamBuf\n");
+                    return NULL;
+                }
+                buf_size += sizeof(int);
+                n_byte = utils_read_n_byte(fd, stream_buf_get_available(stream_buf), stream_buf_get_available_size(stream_buf));
+                if (n_byte != sizeof(int)) {
+                    LOGD("Failed to write n byte\n");
+                    return NULL;
+                }
+                stream_buf_increase_pos(stream_buf, n_byte);
+                break;
+
+            case STRING_FIELD:
+                n_byte = utils_read_n_byte(fd, &len, sizeof(len));
+                if (n_byte != sizeof(len)) {
+                    LOGD("Failed to write n byte\n");
+                    return NULL;
+                }
+                
+                size = len + 1 + sizeof(len);
+                stream_buf = new_stream_buf(size);
+                if (!stream_buf) {
+                    LOGD("Failed to make the StreamBuf\n");
+                    return NULL;
+                }
+
+                buf = stream_buf_get_buf(stream_buf);
+                if (!buf) {
+                    LOGD("Failed to get the buf\n");
+                    return NULL;
+                }
+                memset(buf, 0, size);
+                memcpy(&len, buf, sizeof(len));
+                if (len < 0) {
+                    LOGD("len value was wrong\n");
+                    return NULL;
+                }
+                stream_buf_increase_pos(stream_buf, n_byte);
+
+                n_byte = utils_read_n_byte(fd, stream_buf_get_available(stream_buf), len);
+                if (n_byte != len) {
+                    LOGD("Failed to write n byte\n");
+                    return FALSE;
+                }
+                stream_buf_increase_pos(stream_buf, len);
+                break;
+
+            case 0:
+                break;
+
+            default:
+                LOGD("field mask was wrong\n");
+                return NULL;
+        }
+        if (index == column_num) {
+             *field_type = column;
+             break;
+        } else {
+            destroy_stream_buf(stream_buf);
+            stream_buf = NULL;
+        }
+        index++;
+    }
+
+    return stream_buf;
 }
 
-static void database_match_data(void *data, void *user_data) {
+static void database_comp_data(void *data, void *user_data) {
     int field_type;
     int i, len;
-    void *data;
-    BOOLEAN result;
+    StreamBuf *comp_data;
+    char *buf;
     
     struct _SearchData *search_data;
-    EntryPoint *entry_point;
-    DataBase *database;
-    DList *where_list;
-    DList *next;
     Where *where;
-
+    
     if (!data) {
         LOGD("There is nothing to point the data\n");
         return;
     }
 
-    entry_point = (EntryPoint *) data;
-    search_data = (struct _SearchData *) user_data;
-    database = search_data->database;
+    where = (Where *) data;
+    comp_data = database_get_data(search_data->database, search_data->entry_point, where->column, &field_type);
+    buf = stream_buf_get_buf(stream_buf);
+    i = 0;
 
-    where_list = search_data->where_list;
+    switch (field_mask) {
+        case INTEGER_FIELD:
+        memcpy(&i, buf, FIELD_I_SIZE);
+        if (i == *((int *) where->data)) {
+            search->result = TRUE;
+        } else {
+            search->result = FALSE;
+        }
+        break;
+
+        case STRING_FIELD:
+        buf += sizeof(LEN_SIZE);
+
+        if (strcmp(buf, (char *) where->data) == 0) {
+            search->result = TRUE;
+        } else {
+            search->result = FALSE;
+        }
+        break;
+
+        default:
+        LOGD("Field type was wrong\n");
+        search->result = FALSE;
+        return;
+    }
+}
+
+static void database_match_data(void *data, void *user_data) {
+    struct _SearchData *search_data;
+    struct _CompData *comp_data;
+    EntryPoint *entry_point;
     
+    if (!data) {
+        LOGD("There is nothing to point the data\n");
+        return;
+    }
+
+    search_data = (struct _SearchData *) user_data;
+    search_data->entry_point = (EntryPoint *) data;
+    
+    d_list_foreach(search_data->where_list, database_comp_data, search_data);
+
+    if (search->result == TRUE) {
+        search->matched_entry = d_list_append(search->matched_entry, entry_point);
+    }
 }
 
 Where *new_where(int column,void *data) {
@@ -467,8 +592,10 @@ DList *database_search(DataBase *database, DList *where_list) {
     }
 
     search_data.database = database;
-    search_data.matched_list = NULL;
+    search_data.matched_entry = NULL;
     search_data.where_list = where_list;
     
-    d_list_foreach(entry_list, database_match_data, &serach_data); 
+    d_list_foreach(entry_list, database_match_data, &serach_data);
+
+    return search->matched_entry;
 }

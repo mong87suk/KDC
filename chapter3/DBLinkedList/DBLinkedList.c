@@ -358,7 +358,7 @@ DList* d_list_prepend_node(DList* sorted_node, DList* insert_node, DList* list) 
     return list;
 }
 
-void* d_list_find_data(DList *list, int(*match_data)(void *data1, void *data2), void *data) {
+void *d_list_find_data(DList *list, int(*match_data)(void *data1, void *data2), void *data) {
     while (list) {
         if (match_data(list->data, data)) {
             return list->data;
