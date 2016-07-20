@@ -666,6 +666,21 @@ static Packet* client_create_req_packet(char *input_str, short op_code, int inpu
             }
             break;
 
+        case REQ_MAKE_ACCOUNT:
+            if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
+                payload_buf = client_new_payload(op_code, input_str, input_strlen);
+                if (!payload_buf) {
+                    LOGD("Failed to new the payload\n");
+                    return NULL;
+                }
+                payload = stream_buf_get_buf(payload_buf);
+                payload_len = stream_buf_get_position(payload_buf);
+            } else {
+                LOGD("Request was wrong. Please recommand\n");
+                return NULL;
+            }
+        break;
+
         default:
             LOGD("Request number is 0x%02X Please recommand\n", op_code);
             return NULL;

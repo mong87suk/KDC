@@ -9,34 +9,26 @@
 #include "utils.h"
 
 int main() {
-    Account *account1;
-    Account *account2;
-
-    AccountDB *account_db;
-    int id;
-    int count;
     char *user_id = "hjeong";
     char *pw = "qwer1234";
     char *error_pw;
     char *email = "mmm@hanmail.net";
     char *confirm = "1111";
     char *mobile = "01088254687";
-    char *cmp_pw;
-    int result;
 
-    account1 = new_account(user_id, pw, email, confirm, mobile);
+    Account *account1 = new_account(user_id, pw, email, confirm, mobile);
     assert(account1);
     assert(account_get_id(account1) == -1);
 
-    account_db = account_db_open(ACCOUNT_DATA_FORMAT);
+    AccountDB *account_db = account_db_open(ACCOUNT_DATA_FORMAT);
     assert(account_db);
 
-    count = account_db_get_account_count(account_db);
-    id = account_db_add_account(account_db, account1);
+    int count = account_db_get_account_count(account_db);
+    int id = account_db_add_account(account_db, account1);
     assert(id > 0);
     assert(account_db_get_account_count(account_db) == (count + 1));
     
-    result = account_set_id(account1, id);
+    BOOLEAN result = account_set_id(account1, id);
     assert(result == TRUE);
 
     result = account_db_identify_account(account_db, user_id, "222");
@@ -45,8 +37,7 @@ int main() {
     result = account_db_identify_account(account_db, user_id, pw);
     assert(result == TRUE);
 
-    LOGD("find\n");
-    account2 = account_db_find_account(account_db, user_id);
+    Account *account2 = account_db_find_account(account_db, user_id);
     assert(account_get_id(account2) == id);
     
     assert(strcmp(account_get_user_id(account2), user_id) == 0);
@@ -57,41 +48,35 @@ int main() {
 
     account_db_delete_account(account_db, user_id, pw);
     assert(account_db_get_account_count(account_db) == count);
-    LOGD("after delete\n");
 
     count = account_db_get_account_count(account_db);
     id = account_db_add_account(account_db, account1);
+    assert(id > 0);
     assert(account_db_get_account_count(account_db) == (count + 1));
-    LOGD("count check\n");
 
     count = account_db_get_account_count(account_db);
-    LOGD("count check2 add before\n");
-    result = account_db_add_account(account_db, account1);
-    LOGD("count check2\n");
-    assert(result < 0);
+    id = account_db_add_account(account_db, account1);
+    assert(id < 0);
     assert(account_db_get_account_count(account_db) == count);
 
     error_pw = "qwer223";
-    LOGD("before delete account\n");
     result = account_db_delete_account(account_db, user_id, error_pw);
-    LOGD("after delete account\n");
     assert(result == FALSE);
     assert(account_db_get_account_count(account_db) == count);
 
-    LOGD("before pass word\n");
-    cmp_pw = account_db_get_pw(account_db, user_id, "2222");
+    char *cmp_pw = account_db_get_pw(account_db, user_id, "2222");
     assert(cmp_pw == NULL);
-    LOGD("After pass word\n");
 
-    LOGD("Before get pass word\n");
     cmp_pw = account_db_get_pw(account_db, user_id, confirm);
     assert(cmp_pw);
     assert(strcmp(cmp_pw, pw) == 0);
-    LOGD("After get pass word\n");
     free(cmp_pw);
-    LOGD("After free word\n");
-    account_db_delete_account(account_db, user_id, pw); 
+    result = account_db_delete_account(account_db, user_id, pw);
+    assert(result == TRUE); 
     assert(account_db_get_account_count(account_db) == (count - 1));
+
+    account_db_delete_all(account_db);
+    assert(account_db_get_account_count(account_db) == 0);
 
     destroy_account(account1);
     destroy_account(account2);

@@ -7,6 +7,7 @@
 #define RCV_MSG                (char) 0x04
 #define REQ_FIRST_OR_LAST_MSG  (char) 0x05
 #define RCV_FIRST_OR_LAST_MSG  (char) 0x06
+#define REQ_MAKE_ACCOUNT       (char) 0x07
 
 #define SOP                    (char) 0xAA
 #define EOP                    (char) 0xFF

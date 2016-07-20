@@ -95,7 +95,7 @@ TEST_MESSAGE_DB_OBJET = \
 
 SHARED_LIBRARY = lib$(DBLINKED_LIST).so
 
-CFLAGS += -Wall -g $(INC)
+CFLAGS +=  -Wall -std=gnu99 -g $(INC)
 
 .c.o:
 	$(CC) -c $(CFLAGS) -o $@ $<
