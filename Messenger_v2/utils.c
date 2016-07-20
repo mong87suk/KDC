@@ -171,7 +171,6 @@ int utils_get_colum_count(int field_mask) {
         }
         i++;
     }
-    LOGD("colum count:%d\n", i);
     return i;
 }
 

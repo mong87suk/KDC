@@ -35,11 +35,14 @@ Stream_Buf *new_stream_buf(int len) {
 }
 
 void destroy_stream_buf(Stream_Buf *stream_buf) {
-    if (!stream_buf || !stream_buf->buf) {
+    if (!stream_buf) {
         LOGD("There is nothing to destroy Stream_buf\n");
         return;
     }
-    free(stream_buf->buf);
+
+    if (!stream_buf->buf) {
+        free(stream_buf->buf);
+    }
     free(stream_buf);
 }
 

@@ -70,7 +70,8 @@ Stream_Buf *database_get_data(DataBase *database, EntryPoint *entry_point, int c
     int len, size;
     int i;
     char *buf;
-
+    
+    BOOLEAN result;
     Stream_Buf *stream_buf;
 
     if (!database || !entry_point || column_index < 0) {
@@ -127,17 +128,28 @@ Stream_Buf *database_get_data(DataBase *database, EntryPoint *entry_point, int c
         column = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;
         switch (column) {
             case INTEGER_FIELD:
-                stream_buf = new_stream_buf(sizeof(int));
-                if (!stream_buf) {
-                    LOGD("Failed to make the StreamBuf\n");
-                    return NULL;
+                if (column_index == index) {
+                    stream_buf = new_stream_buf(FIELD_I_SIZE);
+                    if (!stream_buf) {
+                        LOGD("Failed to make the StreamBuf\n");
+                        return NULL;
+                    }
+                    n_byte = utils_read_n_byte(fd, stream_buf_get_available(stream_buf), stream_buf_get_available_size(stream_buf));
+                    if (n_byte != FIELD_I_SIZE) {
+                        LOGD("Failed to write n byte\n");
+                        return NULL;
+                    }
+                    result = stream_buf_increase_pos(stream_buf, n_byte);
+                    if (result == FALSE) {
+                        destroy_stream_buf(stream_buf);
+                        stream_buf = NULL;
+                    }
+                } else {
+                    if (lseek(fd, FIELD_I_SIZE, SEEK_CUR) < 0) {
+                        LOGD("Failed to locate the offset\n");
+                        return NULL;
+                    }
                 }
-                n_byte = utils_read_n_byte(fd, stream_buf_get_available(stream_buf), stream_buf_get_available_size(stream_buf));
-                if (n_byte != sizeof(int)) {
-                    LOGD("Failed to write n byte\n");
-                    return NULL;
-                }
-                stream_buf_increase_pos(stream_buf, n_byte);
                 break;
 
             case STRING_FIELD:
@@ -152,29 +164,44 @@ Stream_Buf *database_get_data(DataBase *database, EntryPoint *entry_point, int c
                     return NULL;
                 }
                 
-                size = len + 1 + sizeof(len);
-                stream_buf = new_stream_buf(size);
-                if (!stream_buf) {
-                    LOGD("Failed to make the StreamBuf\n");
-                    return NULL;
-                }
+                if (column_index == index) {
+                    size = len + 1 + sizeof(len);
+                    stream_buf = new_stream_buf(size);
+                    if (!stream_buf) {
+                        LOGD("Failed to make the StreamBuf\n");
+                        return NULL;
+                    }
 
-                buf = stream_buf_get_buf(stream_buf);
-                if (!buf) {
-                    LOGD("Failed to get the buf\n");
-                    return NULL;
-                }
-                memset(buf, 0, size);
-                memcpy(buf, &len, sizeof(len));
-                
-                stream_buf_increase_pos(stream_buf, LEN_SIZE);
+                    buf = stream_buf_get_buf(stream_buf);
+                    if (!buf) {
+                        LOGD("Failed to get the buf\n");
+                        return NULL;
+                    }
+                    memset(buf, 0, size);
+                    memcpy(buf, &len, sizeof(len));
+                    result = stream_buf_increase_pos(stream_buf, LEN_SIZE);
+                    if (result == FALSE) {
+                        destroy_stream_buf(stream_buf);
+                        stream_buf = NULL;
+                    }
 
-                n_byte = utils_read_n_byte(fd, stream_buf_get_available(stream_buf), len);
-                if (n_byte != len) {
-                    LOGD("Failed to write n byte\n");
-                    return FALSE;
+                    n_byte = utils_read_n_byte(fd, stream_buf_get_available(stream_buf), len);
+                    if (n_byte != len) {
+                        LOGD("Failed to write n byte\n");
+                        return NULL;
+                    }
+                    result = stream_buf_increase_pos(stream_buf, len);
+                    if (result == FALSE) {
+                        destroy_stream_buf(stream_buf);
+                        stream_buf = NULL;
+                    }
+
+                } else {
+                    if (lseek(fd, len, SEEK_CUR) < 0) {
+                        LOGD("Failed to locate the offset\n");
+                        return NULL;
+                    }
                 }
-                stream_buf_increase_pos(stream_buf, len);
                 break;
 
             case 0:
@@ -184,13 +211,12 @@ Stream_Buf *database_get_data(DataBase *database, EntryPoint *entry_point, int c
                 LOGD("field mask was wrong\n");
                 return NULL;
         }
+
         if (column_index == index) {
-             *field_type = column;
-             break;
-        } else {
-            destroy_stream_buf(stream_buf);
-            stream_buf = NULL;
+            *field_type = column;
+            break;
         }
+
         index++;
     }
 
@@ -260,6 +286,10 @@ static void database_match_data(void *data, void *user_data) {
     if (search_data->result == TRUE) {
         search_data->matched_entry = d_list_append(search_data->matched_entry, (EntryPoint *) data);
     }
+}
+
+static void free_where(Where *where) {
+    free(where);
 }
 
 Where *new_where(int column,void *data) {
@@ -611,4 +641,27 @@ DList *database_search(DataBase *database, DList *where_list) {
     d_list_foreach(entry_list, database_match_data, &search_data);
 
     return search_data.matched_entry;
+}
+
+void destory_where(void *where) {
+    if (!where) {
+        LOGD("Failed to destory the where\n");
+        return;
+    }
+    free_where((Where *) where);
+}
+
+void destory_where_list(DList *where_list) {
+    if (!where_list) {
+        LOGD("Can't' destroy the where list\n");
+        return;
+    }
+    d_list_free(where_list, destory_where);   
+}
+
+void destroy_matched_list(DList *matched_entry) {
+    if (!matched_entry) {
+        LOGD("Can't destroy the matched list\n");
+    }
+    d_list_remove(matched_entry, NULL);
 }
