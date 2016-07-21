@@ -4,9 +4,9 @@
 #include "message.h"
 #include "DBLinkedList.h"
 
-#define MEESAGE_DB              "message_db"
-#define MESSAGE_DB_DATA_FORMAT  "is"     
-#define ID_SIZE                 4
+#define MEESAGE_DB                      "message_db"
+#define MESSAGE_DB_DATA_FORMAT          "is"  
+#define ID_SIZE                         4
 
 typedef struct _MessageDB MessageDB;
 

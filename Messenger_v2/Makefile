@@ -36,6 +36,8 @@ SERVER_MAIN_OBJECT = \
 					database.o\
 					data_file.o\
 					index_file.o\
+					account.o\
+					account_db.o\
 
 CLIENT_MAIN_OBJECT = \
 					client_main.o\
@@ -46,6 +48,7 @@ CLIENT_MAIN_OBJECT = \
 					converter.o\
 					message.o\
 					utils.o\
+					account.o\
 
 TEST_DATABASE_OBJECT = \
 						test_database.o\

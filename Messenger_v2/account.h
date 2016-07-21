@@ -11,6 +11,7 @@
 #define CONFIRM_MAX_SIZE    20
 #define CONFIRM_MIN_SIZE    4
 #define MOBILE_SIZE         20
+#define ACCOUNT_INFO_NUM    5
 
 typedef struct _Account Account;
 

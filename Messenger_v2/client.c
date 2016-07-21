@@ -16,6 +16,7 @@
 #include "converter.h"
 #include "m_boolean.h"
 #include "utils.h"
+#include "account.h"
 
 struct _Client
 {
@@ -459,21 +460,21 @@ static void client_handle_res_events(Client *client, int fd) {
 
     payload = packet_get_payload(packet, NULL);
     switch (op_code) {
-    case RES_ALL_MSG: case RCV_FIRST_OR_LAST_MSG:
-        LOGD("RES_ALL_MSG\n");
-        mesg =  convert_payload_to_mesgs(payload, &n_mesg);
-        LOGD("FINISH CONVERT\n");
-        tmp = mesg;
-        for (i = 0; i < n_mesg; i++) {
-            mesg = message_next(tmp, i);
+        case RES_ALL_MSG: case RCV_FIRST_OR_LAST_MSG:
+            LOGD("RES_ALL_MSG\n");
+            mesg =  convert_payload_to_mesgs(payload, &n_mesg);
+            LOGD("FINISH CONVERT\n");
+            tmp = mesg;
+            for (i = 0; i < n_mesg; i++) {
+                mesg = message_next(tmp, i);
+                utils_print_mesg(mesg);
+            }
+            break;
+        case RCV_MSG:
+            LOGD("RCV_MSG\n");
+            mesg = convert_payload_to_mesg(payload, &mesg_len);
             utils_print_mesg(mesg);
-        }
-        break;
-    case RCV_MSG:
-        LOGD("RCV_MSG\n");
-        mesg = convert_payload_to_mesg(payload, &mesg_len);
-        utils_print_mesg(mesg);
-        break;
+            break;
     }
 
     LOGD("Finish client_handle_res_events()\n");
@@ -485,7 +486,7 @@ static void client_handle_disconnect(Client *client, int fd, unsigned int id) {
     }
 }
 
-static Stream_Buf *client_new_payload(short op_code, char *input_str, int input_strlen) {
+static Stream_Buf *client_new_interval_msg_payload(char *input_str, int input_strlen) {
     int str_len;
     int body_len;
     time_t current_time;
@@ -510,7 +511,7 @@ static Stream_Buf *client_new_payload(short op_code, char *input_str, int input_
     }
     while(1) {
         num = input_str[i];
-        if (num == ' ') {
+        if (num == SPACE) {
             break;
         }
 
@@ -599,7 +600,109 @@ static Stream_Buf *client_new_payload(short op_code, char *input_str, int input_
     return stream_buf;
 }
 
-static Packet* client_create_req_packet(char *input_str, short op_code, int input_strlen) {
+static Stream_Buf *client_new_account_info(char *dest, int *size) {
+    int i = 0;
+    int buf_size = 0;
+    char c;
+    do {
+        c = dest[i++];
+    } while (c != SPACE && c != NEW_LINE);
+
+    if (i == 0) {
+        LOGD("Can't new account info\n");
+        return NULL;
+    }    
+    int str_len = i - 1;
+    buf_size = STR_LEN_SIZE + str_len;
+
+    Stream_Buf *stream_buf = new_stream_buf(buf_size);
+    char *buf = stream_buf_get_buf(stream_buf);
+    if (!buf) {
+        LOGD("Faild to get the buf\n");
+        destroy_stream_buf(stream_buf);
+        return NULL;
+    }
+
+    memcpy(buf, &str_len, STR_LEN_SIZE);
+    BOOLEAN result = stream_buf_increase_pos(stream_buf, STR_LEN_SIZE);
+    if (result == FALSE) {
+        LOGD("Failed to increase position\n");
+        destroy_stream_buf(stream_buf);
+        return NULL;
+    }
+
+    buf = stream_buf_get_available(stream_buf);
+    if (!buf) {
+        LOGD("Faield to get the buf\n");
+        destroy_stream_buf(stream_buf);
+        return NULL;
+    }
+    memcpy(buf, dest, str_len);
+    result = stream_buf_increase_pos(stream_buf, str_len);
+    if (result == FALSE) {
+        LOGD("Failed to increase position\n");
+        destroy_stream_buf(stream_buf);
+        return NULL;
+    }
+    *size = i;
+    return stream_buf;
+}
+
+static Stream_Buf *client_new_account_payload(char *input_str, int input_strlen) {
+    DList *stream_buf_list = NULL;
+    Stream_Buf *stream_buf =  NULL;
+    int n_info = 0;
+    int read_size = 0;
+
+    input_str += REQ_STR_MIN_LEN;
+    input_strlen -= (REQ_STR_MIN_LEN);
+
+    do {
+        stream_buf = client_new_account_info(input_str, &read_size);
+        if (!stream_buf) {
+            if (!stream_buf_list) {
+                utils_destroy_stream_buf_list(stream_buf_list);
+            }
+            return NULL;
+        }
+        stream_buf_list = d_list_append(stream_buf_list, stream_buf);
+        n_info++;
+        input_strlen -= read_size;
+        input_str += read_size;
+    } while (input_strlen > 0);
+
+    if (n_info > ACCOUNT_INFO_NUM || n_info < ACCOUNT_INFO_NUM) {
+        LOGD("Your command was wrong\n");
+        utils_destroy_stream_buf_list(stream_buf_list);
+        return NULL;
+    }
+
+    read_size = client_get_read_size(stream_buf_list);
+    if (read_size <= 0) {
+        LOGD("Your command was wrong\n");
+        utils_destroy_stream_buf_list(stream_buf_list);
+        return NULL;
+    }
+
+    stream_buf = new_stream_buf(read_size);
+    if (!stream_buf) {
+        LOGD("Failed to make the buf\n");
+        utils_destroy_stream_buf_list(stream_buf_list);
+        return NULL;
+    }
+    
+    BOOLEAN result = utils_append_data_to_buf(stream_buf_list, stream_buf);
+    utils_destroy_stream_buf_list(stream_buf_list);
+    if (result == FALSE) {
+        LOGD("Failed to append data to buf\n");
+        destroy_stream_buf(stream_buf);
+        return NULL;
+    }
+
+    return stream_buf;
+}
+
+static Packet *client_create_req_packet(char *input_str, short op_code, int input_strlen) {
     Packet *req_packet;
     Stream_Buf *payload_buf;
     char *payload, *packet_buf, *tmp;
@@ -630,7 +733,7 @@ static Packet* client_create_req_packet(char *input_str, short op_code, int inpu
 
         case REQ_INTERVAL_MSG:
             if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
-                payload_buf = client_new_payload(op_code, input_str, input_strlen);
+                payload_buf = client_new_interval_msg_payload(input_str, input_strlen);
                 if (!payload_buf) {
                     LOGD("Failed to new the payload\n");
                     return NULL;
@@ -668,13 +771,24 @@ static Packet* client_create_req_packet(char *input_str, short op_code, int inpu
 
         case REQ_MAKE_ACCOUNT:
             if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
-                payload_buf = client_new_payload(op_code, input_str, input_strlen);
+                LOGD("REQ_MAKE_ACCOUNT\n");
+                payload_buf = client_new_account_payload(input_str, input_strlen);
                 if (!payload_buf) {
                     LOGD("Failed to new the payload\n");
                     return NULL;
                 }
                 payload = stream_buf_get_buf(payload_buf);
+                if (!payload) {
+                    LOGD("Failed to get the buf\n");
+                    destroy_stream_buf(payload_buf);
+                    return NULL;
+                }
                 payload_len = stream_buf_get_position(payload_buf);
+                if (payload_len == 0) {
+                    LOGD("The buf was wrong\n");
+                    destroy_stream_buf(payload_buf);
+                    return NULL;
+                }
             } else {
                 LOGD("Request was wrong. Please recommand\n");
                 return NULL;
@@ -763,14 +877,14 @@ static BOOLEAN send_packet_to_server(Client *client, Packet *packet) {
         return FALSE;
     }
 
-    if (write(client->fd, buf, len) < 0) {
+    if (write_n_byte(client->fd, buf, len) != len) {
         LOGD("Failed to send the Packet to server\n");
         return FALSE;
     }
     return TRUE;
 }
 
-static void handle_req_input_str(Client *client, char *input_str, int input_strlen) {
+static void client_handle_req_input_str(Client *client, char *input_str, int input_strlen) {
     Packet *req_packet;
     BOOLEAN result;
     short op_code;
@@ -869,7 +983,7 @@ static void client_handle_stdin_event(Client *client, int fd) {
     input_str = stream_buf_get_buf(stream_buf);
     input_strlen = input_size;
 
-    handle_req_input_str(client, input_str, input_strlen);
+    client_handle_req_input_str(client, input_str, input_strlen);
     destroy_stream_buf(stream_buf);
 
     return;

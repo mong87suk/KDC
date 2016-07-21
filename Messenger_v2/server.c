@@ -18,6 +18,8 @@
 #include "converter.h"
 #include "message.h"
 #include "message_db.h"
+#include "account_db.h"
+#include "account.h"
 
 struct _Server {
     int fd;
@@ -25,6 +27,7 @@ struct _Server {
     DList *client_list;
     DList *last_read_mesg_node;
     MessageDB *mesg_db;
+    AccountDB *account_db;
     Looper *looper;
 };
 
@@ -328,6 +331,56 @@ static BOOLEAN server_copy_mesgs(DList *mesg_list, Message *mesgs, int len) {
     return TRUE;
 }
 
+static char *server_new_account_info(char **payload) {
+    int str_len = 0;
+
+    memcpy(&str_len, *payload, STR_LEN_SIZE);
+    if (str_len < 0) {
+        LOGD("The Payload was wrong\n");
+        return NULL;
+    }
+    *payload += STR_LEN_SIZE;
+
+    char *info = (char*) malloc(str_len + 1);
+    if (!info) {
+        LOGD("Failed to make the buf\n");
+        return NULL;
+    }
+    memset(info, 0, str_len + 1);
+    memcpy(info, *payload, str_len);
+
+    *payload += str_len;
+
+    return info;    
+}
+
+static Account *server_new_account(char *payload) {
+    char *user_id = server_new_account_info(&payload);
+    LOGD("user_id:%s\n", user_id);
+    char *pw = server_new_account_info(&payload);
+    LOGD("pw:%s\n", pw);
+    char *email = server_new_account_info(&payload);
+    LOGD("email:%s\n", email);
+    char *confirm = server_new_account_info(&payload);
+    LOGD("confirm:%s\n", confirm);
+    char *mobile = server_new_account_info(&payload);
+    LOGD("mobile:%s\n", mobile);
+    
+    Account *account = new_account(user_id, pw, email, confirm, mobile);
+    free(user_id);
+    free(pw);
+    free(email);
+    free(confirm);
+    free(mobile);
+
+    if (!account) {
+        LOGD("Failed to new account\n");
+        return NULL;
+    }
+
+    return account;
+}
+
 static Packet *server_create_res_packet(Server *server, Packet *req_packet, Client *client, int *read_pos, unsigned int *interval) {
     short op_code, check_sum;
     char *payload, *packet_buf, *tmp, *req_payload;
@@ -357,230 +410,249 @@ static Packet *server_create_res_packet(Server *server, Packet *req_packet, Clie
     micro_sec = 0;
 
     switch(op_code) {
-    case REQ_ALL_MSG:
-        count = message_db_get_message_count(server->mesg_db);
-        LOGD("count:%d\n", count);
-        if (count < 0) {
-            LOGD("Faield to get message\n");
-            return NULL;
-        }
+        case REQ_ALL_MSG:
+            count = message_db_get_message_count(server->mesg_db);
+            LOGD("count:%d\n", count);
+            if (count < 0) {
+                LOGD("Faield to get message\n");
+                return NULL;
+            }
 
-        if (count == 0) {
-            LOGD("Thre is no message\n");
-            return NULL;
-        }
+            if (count == 0) {
+                LOGD("Thre is no message\n");
+                return NULL;
+            }
 
-        mesg_list = message_db_get_messages(server->mesg_db, 1, count);
-        if (!mesg_list) {
-            LOGD("There is no message\n");
-            return NULL;
-        }
+            mesg_list = message_db_get_messages(server->mesg_db, 1, count);
+            if (!mesg_list) {
+                LOGD("There is no message\n");
+                return NULL;
+            }
 
-        mesgs_size = server_get_all_mesgs_size(mesg_list);
-        if (!mesgs_size) {
-            LOGD("There is no message\n");
+            mesgs_size = server_get_all_mesgs_size(mesg_list);
+            if (!mesgs_size) {
+                LOGD("There is no message\n");
+                server_destroy_mesg_list(mesg_list);
+                return NULL;
+            }
+            payload_len =  sizeof(int) + mesgs_size + (count * (sizeof(long int) + sizeof(int)));
+            if (payload_len <= 0) {
+                LOGD("payload_len was wrong\n");
+                server_destroy_mesg_list(mesg_list);
+                return NULL;
+            }
+
+            payload = (char*) malloc(payload_len);
+            if (!payload) {
+                LOGD("Failed to make buf\n");
+                server_destroy_mesg_list(mesg_list);
+                return NULL;
+            }
+
+            mesgs = message_create_array(count);
+            if (!mesgs) {
+                LOGD("Failed to create mesg array\n");
+                free(payload);
+                server_destroy_mesg_list(mesg_list);
+                return NULL;
+            }
+
+            result = server_copy_mesgs(mesg_list, mesgs, count);
             server_destroy_mesg_list(mesg_list);
-            return NULL;
-        }
-        payload_len =  sizeof(int) + mesgs_size + (count * (sizeof(long int) + sizeof(int)));
-        if (payload_len <= 0) {
-            LOGD("payload_len was wrong\n");
-            server_destroy_mesg_list(mesg_list);
-            return NULL;
-        }
-
-        payload = (char*) malloc(payload_len);
-        if (!payload) {
-            LOGD("Failed to make buf\n");
-            server_destroy_mesg_list(mesg_list);
-            return NULL;
-        }
-
-        mesgs = message_create_array(count);
-        if (!mesgs) {
-            LOGD("Failed to create mesg array\n");
-            free(payload);
-            server_destroy_mesg_list(mesg_list);
-            return NULL;
-        }
-
-        result = server_copy_mesgs(mesg_list, mesgs, count);
-        server_destroy_mesg_list(mesg_list);
-        if (result == FALSE) {
+            if (result == FALSE) {
+                destroy_mesg(mesgs);
+                free(payload);
+                LOGD("Failed to copy the mesg list\n");
+                return NULL;
+            }
+            result = convert_mesgs_to_payload(mesgs, payload, count);
             destroy_mesg(mesgs);
-            free(payload);
-            LOGD("Failed to copy the mesg list\n");
-            return NULL;
-        }
-        result = convert_mesgs_to_payload(mesgs, payload, count);
-        destroy_mesg(mesgs);
-        if (result == FALSE) {
-            free(payload);
-            LOGD("Failed to convert mesg to payload\n");
-            return NULL;
-        }
+            if (result == FALSE) {
+                free(payload);
+                LOGD("Failed to convert mesg to payload\n");
+                return NULL;
+            }
 
-        *read_pos = count;
-        op_code = RES_ALL_MSG;
+            *read_pos = count;
+            op_code = RES_ALL_MSG;
 
-        break;
+            break;
 
-    case REQ_INTERVAL_MSG:
-        LOGD("REQ_INTERVAL_MSG\n");
-        payload_len = packet_get_payload_len(req_packet, NULL);
-        LOGD("payload_len:%ld\n", payload_len);
-        if (payload_len == -1) {
-            LOGD("Failed to get the payload_len\n");
-            return NULL;
-        }
+        case REQ_INTERVAL_MSG:
+            LOGD("REQ_INTERVAL_MSG\n");
+            payload_len = packet_get_payload_len(req_packet, NULL);
+            LOGD("payload_len:%ld\n", payload_len);
+            if (payload_len == -1) {
+                LOGD("Failed to get the payload_len\n");
+                return NULL;
+            }
 
-        req_payload = packet_get_payload(req_packet, NULL);
-        if (!req_payload) {
-            LOGD("Failed to get the payload\n");
-            return NULL;
-        }
+            req_payload = packet_get_payload(req_packet, NULL);
+            if (!req_payload) {
+                LOGD("Failed to get the payload\n");
+                return NULL;
+            }
 
-        memcpy(&micro_sec, req_payload, INTERVAL_SIZE);
-        LOGD("micro_sec:%d\n", micro_sec);
-        *interval = micro_sec;
+            memcpy(&micro_sec, req_payload, INTERVAL_SIZE);
+            LOGD("micro_sec:%d\n", micro_sec);
+            *interval = micro_sec;
 
-        payload_len -= INTERVAL_SIZE;
-        req_payload += INTERVAL_SIZE;
+            payload_len -= INTERVAL_SIZE;
+            req_payload += INTERVAL_SIZE;
 
-        payload = (char*) malloc(payload_len);
-        if (!payload) {
-            LOGD("Failed to make buf for payload\n");
-            return NULL;
-        }
+            payload = (char*) malloc(payload_len);
+            if (!payload) {
+                LOGD("Failed to make buf for payload\n");
+                return NULL;
+            }
 
-        memcpy(payload, req_payload, payload_len);
+            memcpy(payload, req_payload, payload_len);
 
-        mesg = convert_payload_to_mesg(payload, NULL);
-        if (!mesg) {
-            LOGD("Failed to convert payload to the Message\n");
-            return NULL;
-        }
+            mesg = convert_payload_to_mesg(payload, NULL);
+            if (!mesg) {
+                LOGD("Failed to convert payload to the Message\n");
+                return NULL;
+            }
 
-        id = message_db_add_mesg(server->mesg_db, mesg);
-        destroy_mesg(mesg);
-        if (id < 0) {
-            LOGD("Failed to add mesg\n");
-        }
-        op_code = RCV_MSG;
-        break;
+            id = message_db_add_mesg(server->mesg_db, mesg);
+            destroy_mesg(mesg);
+            if (id < 0) {
+                LOGD("Failed to add mesg\n");
+            }
+            op_code = RCV_MSG;
+            break;
 
 
-    case REQ_FIRST_OR_LAST_MSG:
-        LOGD("REQ_FIRST_OR_LAST_MSG\n");
-        if (!read_pos) {
-            LOGD("Can't set last read pos\n");
-            return NULL;
-        }
+        case REQ_FIRST_OR_LAST_MSG:
+            LOGD("REQ_FIRST_OR_LAST_MSG\n");
+            if (!read_pos) {
+                LOGD("Can't set last read pos\n");
+                return NULL;
+            }
 
-        payload_len = packet_get_payload_len(req_packet, NULL);
-        LOGD("payload_len:%ld\n", payload_len);
-        payload = packet_get_payload(req_packet, NULL);
-        if (!payload) {
-            LOGD("Failed to get the payload\n");
-            return NULL;
-        }
-        memcpy(&more, payload, sizeof(char));
-        LOGD("more:%c\n", more);
-        if (more == '0') {
-            pos = 1;
-        } else {
-            pos = client->last_read_pos;
-        }
-        LOGD("pos:%d\n", pos);
+            payload_len = packet_get_payload_len(req_packet, NULL);
+            LOGD("payload_len:%ld\n", payload_len);
+            payload = packet_get_payload(req_packet, NULL);
+            if (!payload) {
+                LOGD("Failed to get the payload\n");
+                return NULL;
+            }
+            memcpy(&more, payload, sizeof(char));
+            LOGD("more:%c\n", more);
+            if (more == '0') {
+                pos = 1;
+            } else {
+                pos = client->last_read_pos;
+            }
+            LOGD("pos:%d\n", pos);
 
-        if (pos < 0) {
-            LOGD("Can't read message\n");
-            return NULL;
-        }
+            if (pos < 0) {
+                LOGD("Can't read message\n");
+                return NULL;
+            }
 
-        count = message_db_get_message_count(server->mesg_db);
-        LOGD("count:%d\n", count);
-        if (count < 0) {
-            LOGD("Faield to get message\n");
-            return NULL;
-        }
+            count = message_db_get_message_count(server->mesg_db);
+            LOGD("count:%d\n", count);
+            if (count < 0) {
+                LOGD("Faield to get message\n");
+                return NULL;
+            }
 
-        if (count == 0) {
-            LOGD("Thre is no message\n");
-            return NULL;
-        }
+            if (count == 0) {
+                LOGD("Thre is no message\n");
+                return NULL;
+            }
 
-        if (count > 10) {
-            read_count = 10;
-        } else {
-            read_count = count;
-        }
+            if (count > 10) {
+                read_count = 10;
+            } else {
+                read_count = count;
+            }
 
-        mesg_list = message_db_get_messages(server->mesg_db, pos, read_count);
-        if (!mesg_list) {
-            LOGD("There is no message\n");
-            return NULL;
-        }
+            mesg_list = message_db_get_messages(server->mesg_db, pos, read_count);
+            if (!mesg_list) {
+                LOGD("There is no message\n");
+                return NULL;
+            }
 
-        mesg_len = d_list_length(mesg_list);
-        LOGD("mesg_len:%d\n", mesg_len);
-        if (!mesg_len) {
+            mesg_len = d_list_length(mesg_list);
+            LOGD("mesg_len:%d\n", mesg_len);
+            if (!mesg_len) {
+                server_destroy_mesg_list(mesg_list);
+                LOGD("There is no message\n");
+                return NULL;
+            }
+
+            *read_pos = pos + mesg_len - 1;
+
+            mesgs_size = server_get_all_mesgs_size(mesg_list);
+            if (!mesgs_size) {
+                LOGD("There is no message\n");
+                server_destroy_mesg_list(mesg_list);
+                return NULL;
+            }
+            payload_len =  sizeof(int) + mesgs_size + (mesg_len * (sizeof(long int) + sizeof(int)));
+            if (payload_len <= 0) {
+                LOGD("payload_len was wrong\n");
+                server_destroy_mesg_list(mesg_list);
+                return NULL;
+            }
+
+            payload = (char*) malloc(payload_len);
+            if (!payload) {
+                LOGD("Failed to make buf\n");
+                server_destroy_mesg_list(mesg_list);
+                return NULL;
+            }
+
+            mesgs = message_create_array(mesg_len);
+            if (!mesgs) {
+                LOGD("Failed to create mesg array\n");
+                free(payload);
+                server_destroy_mesg_list(mesg_list);
+                return NULL;
+            }
+
+            result = server_copy_mesgs(mesg_list, mesgs, mesg_len);
             server_destroy_mesg_list(mesg_list);
-            LOGD("There is no message\n");
-            return NULL;
-        }
+            if (result == FALSE) {
+                free(payload);
+                LOGD("Failed to copy the mesg list\n");
+                return NULL;
+            }
+            result = convert_mesgs_to_payload(mesgs, payload, mesg_len);
+            destroy_mesg(mesgs);
+            if (result == FALSE) {
+                free(payload);
+                LOGD("Failed to convert mesg to payload\n");
+                return NULL;
+            }
 
-        *read_pos = pos + mesg_len - 1;
+            op_code = RCV_FIRST_OR_LAST_MSG; 
+            break;
 
-        mesgs_size = server_get_all_mesgs_size(mesg_list);
-        if (!mesgs_size) {
-            LOGD("There is no message\n");
-            server_destroy_mesg_list(mesg_list);
-            return NULL;
-        }
-        payload_len =  sizeof(int) + mesgs_size + (mesg_len * (sizeof(long int) + sizeof(int)));
-        if (payload_len <= 0) {
-            LOGD("payload_len was wrong\n");
-            server_destroy_mesg_list(mesg_list);
-            return NULL;
-        }
+        case REQ_MAKE_ACCOUNT:
+            LOGD("REQ_MAKE_ACCOUNT\n");
+            payload_len = packet_get_payload_len(req_packet, NULL);
+            LOGD("payload_len:%ld\n", payload_len);
+            if (payload_len == -1) {
+                LOGD("Failed to get the payload_len\n");
+                return NULL;
+            }
 
-        payload = (char*) malloc(payload_len);
-        if (!payload) {
-            LOGD("Failed to make buf\n");
-            server_destroy_mesg_list(mesg_list);
+            req_payload = packet_get_payload(req_packet, NULL);
+            if (!req_payload) {
+                LOGD("Failed to get the payload\n");
+                return NULL;
+            }
+            
+            Account *account = server_new_account(req_payload);
+            if (!account) {
+                LOGD("Failed new account\n");
+            }
+        default:
+            LOGD("The OPCODE is wrong\n");
             return NULL;
-        }
-
-        mesgs = message_create_array(mesg_len);
-        if (!mesgs) {
-            LOGD("Failed to create mesg array\n");
-            free(payload);
-            server_destroy_mesg_list(mesg_list);
-            return NULL;
-        }
-
-        result = server_copy_mesgs(mesg_list, mesgs, mesg_len);
-        server_destroy_mesg_list(mesg_list);
-        if (result == FALSE) {
-            free(payload);
-            LOGD("Failed to copy the mesg list\n");
-            return NULL;
-        }
-        result = convert_mesgs_to_payload(mesgs, payload, mesg_len);
-        destroy_mesg(mesgs);
-        if (result == FALSE) {
-            free(payload);
-            LOGD("Failed to convert mesg to payload\n");
-            return NULL;
-        }
-
-        op_code = RCV_FIRST_OR_LAST_MSG; 
-        break;
-
-    default:
-        LOGD("The OPCODE is wrong\n");
-        return NULL;
     }
 
     packet_len = HEADER_SIZE + payload_len + TAIL_SIZE;
@@ -918,6 +990,19 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
             destroy_packet(res_packet);
             break;
 
+        case REQ_MAKE_ACCOUNT:
+            res_packet = server_create_res_packet(server, req_packet, client, &read_pos, NULL);
+            if (!res_packet) {
+                LOGD("Failed to create the res packet\n");
+                return;
+            }
+            result = server_send_packet_to_client(res_packet, client, read_pos);
+            if (result == FALSE) {
+                LOGD("Failed to send packet to client\n");
+            }
+            destroy_packet(res_packet);
+            return;
+
         default:
             LOGD("OPCODE is wrong\n");
             return;
@@ -1213,7 +1298,8 @@ static void server_handle_events(int fd, void *user_data, unsigned int watcher_i
 Server *new_server(Looper *looper) {
     Server *server;
     MessageDB *mesg_db;
-    char *data_format, *str;
+    AccountDB *account_db;
+
     struct sockaddr_un addr;
     int server_fd;
     int id;
@@ -1251,20 +1337,14 @@ Server *new_server(Looper *looper) {
         return NULL;
     }
     
-    data_format = (char*) malloc(2);
-    if (!data_format) {
-        LOGD("Failed to make data_format\n");
-        close(server_fd);
-        return NULL;
-    }
-
-    str = "is";
-    memcpy(data_format, str, strlen(str));
-    mesg_db = message_db_open(data_format);
-
-    free(data_format);
+    mesg_db = message_db_open(MESSAGE_DB_DATA_FORMAT);
     if (!mesg_db) {
         LOGD("Failed to make the MessageDB\n");
+        return NULL;
+    }
+    account_db = account_db_open(ACCOUNT_DATA_FORMAT);
+    if (!account_db) {
+        LOGD("Failed to make the AccountDB\n");
         return NULL;
     }
 
@@ -1279,6 +1359,7 @@ Server *new_server(Looper *looper) {
     server->fd = server_fd;
     server->client_list = NULL;
     server->mesg_db = mesg_db;
+    server->account_db = account_db;
     id = looper_add_watcher(server->looper, server_fd, server_handle_events, server, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
 
     if (id < 0) {

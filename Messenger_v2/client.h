@@ -3,9 +3,10 @@
 
 #include "looper.h"
 
-#define BUF_SIZE 3
-#define REQ_STR "command "
-#define REQ_STR_MIN_LEN 10
+#define REQ_STR     "command "
+#define SPACE       ' '
+#define NEW_LINE    '\n'
+#define REQ_STR_MIN_LEN                    10
 #define REQ_FIRST_OR_LAST_MESG_PACKET_SIZE 12
 
 typedef enum {

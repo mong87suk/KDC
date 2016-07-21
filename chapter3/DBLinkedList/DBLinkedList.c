@@ -15,7 +15,8 @@ DList* d_list_append(DList *list, void *data) {
     DList *last;
     new_list = (DList*) malloc(sizeof(DList));
 	if (!new_list) {
-		return NULL;
+        printf("Failed to make new list\n");
+		return list;
 	}
     new_list->next = NULL;
     new_list->data = data;
