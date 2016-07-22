@@ -12,6 +12,7 @@ typedef enum {
 typedef struct _Server Server;
 typedef struct _Client Client;
 typedef struct _UserData UserData;
+typedef struct _Online   Online;
 
 Server *new_server(Looper *looper);
 void destroy_server(Server *server);

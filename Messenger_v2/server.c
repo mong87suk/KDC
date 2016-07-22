@@ -25,6 +25,7 @@ struct _Server {
     int fd;
     unsigned int id;
     DList *client_list;
+    DList *online_list;
     DList *last_read_mesg_node;
     MessageDB *mesg_db;
     AccountDB *account_db;
@@ -38,6 +39,11 @@ struct _Client {
     READ_REQ_STATE read_state;
     DList *stream_buf_list;
     int packet_len;
+};
+
+struct _Online {
+    Account *account;
+    int fd;
 };
 
 struct _UserData {
@@ -356,15 +362,10 @@ static char *server_new_account_info(char **payload) {
 
 static Account *server_new_account(char *payload) {
     char *user_id = server_new_account_info(&payload);
-    LOGD("user_id:%s\n", user_id);
     char *pw = server_new_account_info(&payload);
-    LOGD("pw:%s\n", pw);
     char *email = server_new_account_info(&payload);
-    LOGD("email:%s\n", email);
     char *confirm = server_new_account_info(&payload);
-    LOGD("confirm:%s\n", confirm);
     char *mobile = server_new_account_info(&payload);
-    LOGD("mobile:%s\n", mobile);
     
     Account *account = new_account(user_id, pw, email, confirm, mobile);
     free(user_id);
@@ -379,6 +380,53 @@ static Account *server_new_account(char *payload) {
     }
 
     return account;
+}
+
+static Account *server_login(Server *server, char *payload) {
+    char *user_id = server_new_account_info(&payload);
+    char *pw = server_new_account_info(&payload);
+ 
+    Account *account = account_db_identify_account(server->account_db, user_id, pw);
+    free(user_id);
+    free(pw);
+
+    if (!account) {
+        LOGD("Failed to login\n");
+        return -1;
+    }
+
+    return account;
+}
+
+static int server_match_online(void *data1, void *data2) {
+    if (!data1) {
+        return 0;
+    }
+    Online *online = (Online*) data1;
+    Account *account = (Account*) data2;
+
+    int id = account_get_id(account);
+    int cmp_id = account_get_id(online->account);
+
+    if (id == cmp_id) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+static BOOLEAN *server_add_online(Server *server, Account *account, int fd) {
+    if (server->online_list && d_list_find_data(server->online_list, server_match_online, account)) {
+        LOGD("Failed to add online\n");
+        return FALSE;
+    }
+
+    Online *online = new_online(fd, account);
+    if (online) {
+        LOGD("Failed to new online\n");
+    }
+
+    server->online_list = d_list_append(server->online_list, online);
 }
 
 static Packet *server_create_res_packet(Server *server, Packet *req_packet, Client *client, int *read_pos, unsigned int *interval) {
@@ -397,6 +445,7 @@ static Packet *server_create_res_packet(Server *server, Packet *req_packet, Clie
     char more;
     unsigned int micro_sec;
     int id;
+    Account *account;
 
     LOGD("Start server_create_res_packet()\n");
 
@@ -412,7 +461,6 @@ static Packet *server_create_res_packet(Server *server, Packet *req_packet, Clie
     switch(op_code) {
         case REQ_ALL_MSG:
             count = message_db_get_message_count(server->mesg_db);
-            LOGD("count:%d\n", count);
             if (count < 0) {
                 LOGD("Faield to get message\n");
                 return NULL;
@@ -479,9 +527,7 @@ static Packet *server_create_res_packet(Server *server, Packet *req_packet, Clie
             break;
 
         case REQ_INTERVAL_MSG:
-            LOGD("REQ_INTERVAL_MSG\n");
             payload_len = packet_get_payload_len(req_packet, NULL);
-            LOGD("payload_len:%ld\n", payload_len);
             if (payload_len == -1) {
                 LOGD("Failed to get the payload_len\n");
                 return NULL;
@@ -494,7 +540,6 @@ static Packet *server_create_res_packet(Server *server, Packet *req_packet, Clie
             }
 
             memcpy(&micro_sec, req_payload, INTERVAL_SIZE);
-            LOGD("micro_sec:%d\n", micro_sec);
             *interval = micro_sec;
 
             payload_len -= INTERVAL_SIZE;
@@ -522,37 +567,31 @@ static Packet *server_create_res_packet(Server *server, Packet *req_packet, Clie
             op_code = RCV_MSG;
             break;
 
-
         case REQ_FIRST_OR_LAST_MSG:
-            LOGD("REQ_FIRST_OR_LAST_MSG\n");
             if (!read_pos) {
                 LOGD("Can't set last read pos\n");
                 return NULL;
             }
 
             payload_len = packet_get_payload_len(req_packet, NULL);
-            LOGD("payload_len:%ld\n", payload_len);
             payload = packet_get_payload(req_packet, NULL);
             if (!payload) {
                 LOGD("Failed to get the payload\n");
                 return NULL;
             }
             memcpy(&more, payload, sizeof(char));
-            LOGD("more:%c\n", more);
             if (more == '0') {
                 pos = 1;
             } else {
                 pos = client->last_read_pos;
             }
-            LOGD("pos:%d\n", pos);
-
+            
             if (pos < 0) {
                 LOGD("Can't read message\n");
                 return NULL;
             }
 
             count = message_db_get_message_count(server->mesg_db);
-            LOGD("count:%d\n", count);
             if (count < 0) {
                 LOGD("Faield to get message\n");
                 return NULL;
@@ -576,7 +615,6 @@ static Packet *server_create_res_packet(Server *server, Packet *req_packet, Clie
             }
 
             mesg_len = d_list_length(mesg_list);
-            LOGD("mesg_len:%d\n", mesg_len);
             if (!mesg_len) {
                 server_destroy_mesg_list(mesg_list);
                 LOGD("There is no message\n");
@@ -632,9 +670,7 @@ static Packet *server_create_res_packet(Server *server, Packet *req_packet, Clie
             break;
 
         case REQ_MAKE_ACCOUNT:
-            LOGD("REQ_MAKE_ACCOUNT\n");
             payload_len = packet_get_payload_len(req_packet, NULL);
-            LOGD("payload_len:%ld\n", payload_len);
             if (payload_len == -1) {
                 LOGD("Failed to get the payload_len\n");
                 return NULL;
@@ -646,10 +682,40 @@ static Packet *server_create_res_packet(Server *server, Packet *req_packet, Clie
                 return NULL;
             }
             
-            Account *account = server_new_account(req_payload);
+            account = server_new_account(req_payload);
             if (!account) {
                 LOGD("Failed new account\n");
+                return NULL;
             }
+            id = account_db_add_account(server->account_db, account);
+            if (id < 0) {
+                LOGD("Failed to add account\n");
+                return NULL;
+            }
+            result = account_set_id(account, id);
+            if (result == FALSE) {
+                LOGD("Failed to set the id\n");
+                return NULL;
+            }
+            break;
+        
+        case REQ_LOG_IN:
+            payload_len = packet_get_payload_len(req_packet, NULL);
+            if (payload_len == -1) {
+                LOGD("Failed to get the payload_len\n");
+                return NULL;
+            }
+
+            req_payload = packet_get_payload(req_packet, NULL);
+            if (!req_payload) {
+                LOGD("Failed to get the payload\n");
+                return NULL;
+            }
+            account = server_login(server, req_payload);
+            if (account) {
+                result = server_add_online(server, account, client->fd);
+            }
+            LOGD("id:%d\n", id);
         default:
             LOGD("The OPCODE is wrong\n");
             return NULL;
@@ -1001,7 +1067,20 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
                 LOGD("Failed to send packet to client\n");
             }
             destroy_packet(res_packet);
-            return;
+            break;
+        
+        case REQ_LOG_IN:
+            res_packet = server_create_res_packet(server, req_packet, client, &read_pos, NULL);
+            if (!res_packet) {
+                LOGD("Failed to create the res packet\n");
+                return;
+            }
+            result = server_send_packet_to_client(res_packet, client, read_pos);
+            if (result == FALSE) {
+                LOGD("Failed to send packet to client\n");
+            }
+            destroy_packet(res_packet);
+            break;
 
         default:
             LOGD("OPCODE is wrong\n");
@@ -1358,6 +1437,7 @@ Server *new_server(Looper *looper) {
     server->looper= looper;
     server->fd = server_fd;
     server->client_list = NULL;
+    server->online_list = NULL;
     server->mesg_db = mesg_db;
     server->account_db = account_db;
     id = looper_add_watcher(server->looper, server_fd, server_handle_events, server, LOOPER_IN_EVENT | LOOPER_HUP_EVENT);
@@ -1368,7 +1448,7 @@ Server *new_server(Looper *looper) {
         return NULL;
     }
 
-        server->id = id;
+    server->id = id;
     return server;
 }
 

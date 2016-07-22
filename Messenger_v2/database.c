@@ -239,6 +239,11 @@ static void database_comp_data(void *data, void *user_data) {
 
     where = (Where *) data;
     search_data = (struct _SearchData *) user_data;
+    if (search_data->result == FALSE) {
+        LOGD("comp result is false\n");
+        return;
+    }
+
     comp_data = database_get_data(search_data->database, search_data->entry_point, where->column, &field_type);
     buf = stream_buf_get_buf(comp_data);
     i = 0;
@@ -637,6 +642,7 @@ DList *database_search(DataBase *database, DList *where_list) {
     search_data.database = database;
     search_data.matched_entry = NULL;
     search_data.where_list = where_list;
+    search_data.result = TRUE;
     
     d_list_foreach(entry_list, database_match_data, &search_data);
 

@@ -648,11 +648,11 @@ static Stream_Buf *client_new_account_info(char *dest, int *size) {
     return stream_buf;
 }
 
-static Stream_Buf *client_new_account_payload(char *input_str, int input_strlen) {
+static Stream_Buf *client_new_account_data(char *input_str, int input_strlen, int info_num) {
     DList *stream_buf_list = NULL;
     Stream_Buf *stream_buf =  NULL;
-    int n_info = 0;
     int read_size = 0;
+    int count = 0;
 
     input_str += REQ_STR_MIN_LEN;
     input_strlen -= (REQ_STR_MIN_LEN);
@@ -666,12 +666,13 @@ static Stream_Buf *client_new_account_payload(char *input_str, int input_strlen)
             return NULL;
         }
         stream_buf_list = d_list_append(stream_buf_list, stream_buf);
-        n_info++;
+        count++;
         input_strlen -= read_size;
         input_str += read_size;
     } while (input_strlen > 0);
 
-    if (n_info > ACCOUNT_INFO_NUM || n_info < ACCOUNT_INFO_NUM) {
+    LOGD("count:%d info_num%d\n", count, info_num);    
+    if (count > info_num || count < info_num) {
         LOGD("Your command was wrong\n");
         utils_destroy_stream_buf_list(stream_buf_list);
         return NULL;
@@ -683,7 +684,7 @@ static Stream_Buf *client_new_account_payload(char *input_str, int input_strlen)
         utils_destroy_stream_buf_list(stream_buf_list);
         return NULL;
     }
-
+    LOGD("read_size:%d\n", read_size);
     stream_buf = new_stream_buf(read_size);
     if (!stream_buf) {
         LOGD("Failed to make the buf\n");
@@ -699,7 +700,7 @@ static Stream_Buf *client_new_account_payload(char *input_str, int input_strlen)
         return NULL;
     }
 
-    return stream_buf;
+    return stream_buf; 
 }
 
 static Packet *client_create_req_packet(char *input_str, short op_code, int input_strlen) {
@@ -772,7 +773,8 @@ static Packet *client_create_req_packet(char *input_str, short op_code, int inpu
         case REQ_MAKE_ACCOUNT:
             if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
                 LOGD("REQ_MAKE_ACCOUNT\n");
-                payload_buf = client_new_account_payload(input_str, input_strlen);
+                payload_buf = client_new_account_data(input_str, input_strlen, ACCOUNT_INFO_NUM);
+
                 if (!payload_buf) {
                     LOGD("Failed to new the payload\n");
                     return NULL;
@@ -793,7 +795,34 @@ static Packet *client_create_req_packet(char *input_str, short op_code, int inpu
                 LOGD("Request was wrong. Please recommand\n");
                 return NULL;
             }
-        break;
+            break;
+
+        case REQ_LOG_IN:
+            if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
+                LOGD("REQ_MAKE_ACCOUNT\n");
+                payload_buf = client_new_account_data(input_str, input_strlen, LOG_IN_INFO_NUM);
+
+                if (!payload_buf) {
+                    LOGD("Failed to new the payload\n");
+                    return NULL;
+                }
+                payload = stream_buf_get_buf(payload_buf);
+                if (!payload) {
+                    LOGD("Failed to get the buf\n");
+                    destroy_stream_buf(payload_buf);
+                    return NULL;
+                }
+                payload_len = stream_buf_get_position(payload_buf);
+                if (payload_len == 0) {
+                    LOGD("The buf was wrong\n");
+                    destroy_stream_buf(payload_buf);
+                    return NULL;
+                }
+            } else {
+                LOGD("Request was wrong. Please recommand\n");
+                return NULL;
+            }
+            break;
 
         default:
             LOGD("Request number is 0x%02X Please recommand\n", op_code);

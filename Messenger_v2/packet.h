@@ -8,6 +8,7 @@
 #define REQ_FIRST_OR_LAST_MSG  (char) 0x05
 #define RCV_FIRST_OR_LAST_MSG  (char) 0x06
 #define REQ_MAKE_ACCOUNT       (char) 0x07
+#define REQ_LOG_IN             (char) 0x08
 
 #define SOP                    (char) 0xAA
 #define EOP                    (char) 0xFF
@@ -18,6 +19,8 @@
 
 #define HEADER_SIZE            11
 #define TAIL_SIZE              3
+
+#define LOG_IN_INFO_NUM        2
 
 #include "stream_buf.h"
 #include "m_boolean.h"

@@ -23,6 +23,6 @@ BOOLEAN account_db_delete_account(AccountDB *account_db, char *user_id, char *pw
 int account_db_get_account_count(AccountDB *account_db);
 char *account_db_get_pw(AccountDB *account_db, char *id, char *confirm);
 Account *account_db_find_account(AccountDB *account_db, char *user_id);
-BOOLEAN account_db_identify_account(AccountDB *account_db, char *usr_id, char *pw);
+Account *account_db_identify_account(AccountDB *account_db, char *usr_id, char *pw);
 
 #endif

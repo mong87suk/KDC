@@ -29,13 +29,13 @@ int main() {
     assert(account_db_get_account_count(account_db) == (count + 1));
     
     BOOLEAN result = account_set_id(account1, id);
-    assert(result == TRUE);
+    assert(result > 0);
 
     result = account_db_identify_account(account_db, user_id, "222");
-    assert(result == FALSE);
+    assert(result < 0);
 
     result = account_db_identify_account(account_db, user_id, pw);
-    assert(result == TRUE);
+    assert(result > 0);
 
     Account *account2 = account_db_find_account(account_db, user_id);
     assert(account_get_id(account2) == id);

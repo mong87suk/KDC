@@ -73,6 +73,7 @@ static Stream_Buf *account_db_new_entry(Account *account, int field_mask) {
             switch(index) {
             case USER_ID:
                 str = account_get_user_id(account);
+                LOGD("user_id:%s\n", str);
                 len = strlen(str);
                 stream_buf = account_db_new_account_info_buf(str, len);
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
@@ -86,6 +87,7 @@ static Stream_Buf *account_db_new_entry(Account *account, int field_mask) {
 
             case PW:
                 str = account_get_pw(account);
+                LOGD("user_id:%s\n", str);
                 len = strlen(str);
                 stream_buf = account_db_new_account_info_buf(str, len);
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
@@ -99,6 +101,7 @@ static Stream_Buf *account_db_new_entry(Account *account, int field_mask) {
 
             case EMAIL:
                 str = account_get_email(account);
+                LOGD("user_id:%s\n", str);
                 len = strlen(str);
                 stream_buf = account_db_new_account_info_buf(str, len);
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
@@ -112,6 +115,7 @@ static Stream_Buf *account_db_new_entry(Account *account, int field_mask) {
 
             case CONFIRM:
                 str = account_get_confirm(account);
+                LOGD("user_id:%s\n", str);
                 len = strlen(str);
                 stream_buf = account_db_new_account_info_buf(str, len);
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
@@ -125,6 +129,7 @@ static Stream_Buf *account_db_new_entry(Account *account, int field_mask) {
 
             case MOBILE:
                 str = account_get_mobile(account);
+                LOGD("user_id:%s\n", str);
                 len = strlen(str);
                 stream_buf = account_db_new_account_info_buf(str, len);
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
@@ -508,17 +513,6 @@ Account *account_db_find_account(AccountDB *account_db, char *user_id) {
         LOGD("Failed to make the account\n");
         return NULL;
     }
-
-    int entry_id = entry_point_get_id(entry_point);
-    if (entry_id < 0) {
-        LOGD("Failed to get the entry_id\n");
-        return NULL;
-    }
-
-    if (account_set_id(account, entry_id) == FALSE) {
-        LOGD("Failed to set account id\n");
-        return NULL;
-    }
     
     return account;
 }
@@ -694,55 +688,75 @@ char *account_db_get_pw(AccountDB *account_db, char *user_id, char *confirm) {
     return pw;
 }
 
-BOOLEAN account_db_identify_account(AccountDB *account_db, char *user_id, char *pw) {
+Account *account_db_identify_account(AccountDB *account_db, char *user_id, char *pw) {
     if (!account_db || !account_db->database || !user_id || !pw) {
         LOGD("Can't identify the account\n");
-        return FALSE;
+        return -1;
     }
 
     if (!strlen(user_id) || !strlen(pw)) {
         LOGD("Can't identify the account\n");
-        return FALSE;
+        return -1;
     }
 
     Where *where = new_where(USER_ID, user_id);
     if (!where) {
         LOGD("Failed to new where\n");
-        return FALSE;
+        return -1;
     }
     DList *where_list = NULL;
     where_list = d_list_append(where_list, where);
     if (!where_list) {
         LOGD("Failed to add the where\n");
         destory_where(where);
-        return FALSE;
+        return -1;
     }
 
     where = new_where(PW, pw);
     if (!where) {
         LOGD("Failed to new where\n");
         destory_where_list(where_list);
-        return FALSE;
+        return -1;
     }
     where_list = d_list_append(where_list, where);
-    if (!where_list) {
-        LOGD("Failed to add the where\n");
-        destory_where_list(where_list);
-        return FALSE;
-    }
 
     DList *entry_list = database_search(account_db->database, where_list);
     destory_where_list(where_list);
     if (!entry_list) {
         LOGD("The account which matches UserID and PW is not present\n");
-        return FALSE;
+        return -1;
     }
 
     int len = d_list_length(entry_list);
     destroy_matched_list(entry_list);
     if (len == 0 || len > 1) {
         LOGD("Failed to identify the account\n");
-        return FALSE;
+        return -1;
     }
-    return TRUE;
+
+    EntryPoint *entry_point = d_list_get_data(entry_list);
+    if (!entry_point) {
+        LOGD("Failed to get the entry_point\n");
+        return -1;
+    }
+
+    int field_mask = database_get_field_mask(account_db->database);
+    if (field_mask == 0) {
+        LOGD("Field mask was wrong\n");
+        return NULL;
+    }
+
+    Stream_Buf *entry = entry_point_get_value(entry_point);
+    if (!entry) {
+        LOGD("Failed to get the entry\n");
+    }
+
+    Account *account = account_db_new_account(entry, field_mask);
+    destroy_stream_buf(entry);
+    if (!account) {
+        LOGD("Failed to make the account\n");
+        return NULL;
+    }
+
+    return account;
 }
