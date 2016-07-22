@@ -285,6 +285,7 @@ static void database_match_data(void *data, void *user_data) {
 
     search_data = (struct _SearchData *) user_data;
     search_data->entry_point = (EntryPoint *) data;
+    search_data->result = TRUE;
     
     d_list_foreach(search_data->where_list, database_comp_data, search_data);
 
@@ -642,7 +643,6 @@ DList *database_search(DataBase *database, DList *where_list) {
     search_data.database = database;
     search_data.matched_entry = NULL;
     search_data.where_list = where_list;
-    search_data.result = TRUE;
     
     d_list_foreach(entry_list, database_match_data, &search_data);
 

@@ -31,11 +31,8 @@ int main() {
     BOOLEAN result = account_set_id(account1, id);
     assert(result > 0);
 
-    result = account_db_identify_account(account_db, user_id, "222");
-    assert(result < 0);
-
-    result = account_db_identify_account(account_db, user_id, pw);
-    assert(result > 0);
+    assert(account_db_identify_account(account_db, user_id, "222") == NULL);
+    assert(account_db_identify_account(account_db, user_id, pw));
 
     Account *account2 = account_db_find_account(account_db, user_id);
     assert(account_get_id(account2) == id);
@@ -46,7 +43,8 @@ int main() {
     assert(strcmp(account_get_confirm(account2), confirm) == 0);
     assert(strcmp(account_get_mobile(account2), mobile) == 0);
 
-    account_db_delete_account(account_db, user_id, pw);
+    id = account_db_delete_account(account_db, user_id, pw);
+    assert(id > 0);
     assert(account_db_get_account_count(account_db) == count);
 
     count = account_db_get_account_count(account_db);
@@ -60,8 +58,8 @@ int main() {
     assert(account_db_get_account_count(account_db) == count);
 
     error_pw = "qwer223";
-    result = account_db_delete_account(account_db, user_id, error_pw);
-    assert(result == FALSE);
+    id = account_db_delete_account(account_db, user_id, error_pw);
+    assert(id < 0);
     assert(account_db_get_account_count(account_db) == count);
 
     char *cmp_pw = account_db_get_pw(account_db, user_id, "2222");

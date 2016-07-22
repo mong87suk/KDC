@@ -20,6 +20,7 @@
 #include "message_db.h"
 #include "account_db.h"
 #include "account.h"
+#include "result_type.h"
 
 struct _Server {
     int fd;
@@ -382,20 +383,25 @@ static Account *server_new_account(char *payload) {
     return account;
 }
 
-static Account *server_login(Server *server, char *payload) {
-    char *user_id = server_new_account_info(&payload);
-    char *pw = server_new_account_info(&payload);
- 
-    Account *account = account_db_identify_account(server->account_db, user_id, pw);
-    free(user_id);
-    free(pw);
+static void free_online(Online *online) {
+    free(online);
+}
 
-    if (!account) {
-        LOGD("Failed to login\n");
-        return -1;
+static void destroy_online(void *online) {
+    free_online(online);
+}
+
+static Online *new_online(int fd, Account *account) {
+    Online *online = (Online*) malloc(sizeof(Online));
+    if (!online) {
+        LOGD("Failed to new Online\n");
+        return NULL;
     }
 
-    return account;
+    online->fd = fd;
+    online->account = account;
+
+    return online;
 }
 
 static int server_match_online(void *data1, void *data2) {
@@ -403,9 +409,8 @@ static int server_match_online(void *data1, void *data2) {
         return 0;
     }
     Online *online = (Online*) data1;
-    Account *account = (Account*) data2;
 
-    int id = account_get_id(account);
+    int id = *((int *) data2);
     int cmp_id = account_get_id(online->account);
 
     if (id == cmp_id) {
@@ -415,25 +420,134 @@ static int server_match_online(void *data1, void *data2) {
     }
 }
 
-static BOOLEAN *server_add_online(Server *server, Account *account, int fd) {
-    if (server->online_list && d_list_find_data(server->online_list, server_match_online, account)) {
+static int server_add_online(Server *server, Account *account, int fd) {
+    int id = account_get_id(account);
+    if (id < 0) {
+        LOGD("Faild to get the id\n");
+        return ERROR_LOGIN;
+    }
+    if (server->online_list && d_list_find_data(server->online_list, server_match_online, &id)) {
         LOGD("Failed to add online\n");
-        return FALSE;
+        return ERROR_LOGIN;
     }
 
     Online *online = new_online(fd, account);
-    if (online) {
+    if (!online) {
         LOGD("Failed to new online\n");
+        return ERROR_LOGIN;
     }
 
     server->online_list = d_list_append(server->online_list, online);
+    return SUCCESS_LOG_IN;
+}
+
+static int server_login(Server *server, char *payload, int fd) {
+    char *user_id = server_new_account_info(&payload);
+    char *pw = server_new_account_info(&payload);
+ 
+    Account *account = account_db_identify_account(server->account_db, user_id, pw);
+    free(user_id);
+    free(pw);
+
+    if (!account) {
+        LOGD("Failed to login\n");
+        return ERROR_LOGIN;
+    }
+
+    int result = server_add_online(server, account, fd);
+    return result;
+}
+
+static BOOLEAN server_delete_online(Server *server, Account *account, int fd) {
+    if (!server->online_list) {
+        LOGD("Can't delete the Online\n");
+        return FALSE;
+    }
+
+    int id = account_get_id(account);
+    if (id < 0) {
+        LOGD("Failed to get the id\n");
+        return FALSE;
+    }
+
+    Online *online = (Online *) d_list_find_data(server->online_list, server_match_online, &id);
+    if (!online) {
+        LOGD("Can't delete the Online\n");
+        return FALSE;
+    }
+
+    int cmp_id = account_get_id(online->account);
+    if (cmp_id != id || online->fd != fd) {
+        LOGD("Can't delete the Online\n");
+        return FALSE;
+    }
+
+    destroy_online(online);
+    return TRUE;  
+}
+
+static int server_logout(Server *server, char *payload, int fd) {
+    char *user_id = server_new_account_info(&payload);
+    char *pw = server_new_account_info(&payload);
+
+    Account *account = account_db_identify_account(server->account_db, user_id, pw);
+    free(user_id);
+    free(pw);
+
+     if (!account) {
+        LOGD("Failed to logout\n");
+        return ERROR_LOGOUT;
+    }
+    
+    BOOLEAN result = server_delete_online(server, account, fd);
+    if (result == FALSE) {
+        return ERROR_LOGOUT;
+    }
+
+    return SUCCESS_LOG_OUT;
+}
+ 
+static BOOLEAN server_delete_account(Server *server, char *payload, int fd) {
+    char *user_id = server_new_account_info(&payload);
+    char *pw = server_new_account_info(&payload);
+
+    int id = account_db_delete_account(server->account_db, user_id, pw);
+    free(user_id);
+    free(pw);
+    if (id < 0) {
+        LOGD("Failed to delete the account\n");
+        return FALSE;
+    }
+    
+    if (server->online_list) {
+        Online *online = (Online *) d_list_find_data(server->online_list, server_match_online, &id);
+        if (online) {
+            destroy_online(online);
+        }
+    }
+    return TRUE;
+}
+
+static char *server_new_result(short op_code, int result_type) {
+    char *result = (char*) malloc(RESULT_SIZE);
+    if (!result) {
+        LOGD("Failed to new reulst\n");
+        return NULL;
+    }
+    char *tmp = result;
+
+    memcpy(tmp, &op_code, OP_CODE_SIZE);
+    tmp += OP_CODE_SIZE;
+    memcpy(tmp, &result_type, RESULT_TYPE_SIZE);
+
+    return result;
 }
 
 static Packet *server_create_res_packet(Server *server, Packet *req_packet, Client *client, int *read_pos, unsigned int *interval) {
     short op_code, check_sum;
     char *payload, *packet_buf, *tmp, *req_payload;
     Packet *res_packet;
-    BOOLEAN result;
+    int result;
     long int payload_len;
     int mesgs_size, count;
     int packet_len, mesg_len;
@@ -670,12 +784,6 @@ static Packet *server_create_res_packet(Server *server, Packet *req_packet, Clie
             break;
 
         case REQ_MAKE_ACCOUNT:
-            payload_len = packet_get_payload_len(req_packet, NULL);
-            if (payload_len == -1) {
-                LOGD("Failed to get the payload_len\n");
-                return NULL;
-            }
-
             req_payload = packet_get_payload(req_packet, NULL);
             if (!req_payload) {
                 LOGD("Failed to get the payload\n");
@@ -700,22 +808,49 @@ static Packet *server_create_res_packet(Server *server, Packet *req_packet, Clie
             break;
         
         case REQ_LOG_IN:
-            payload_len = packet_get_payload_len(req_packet, NULL);
-            if (payload_len == -1) {
-                LOGD("Failed to get the payload_len\n");
-                return NULL;
-            }
-
             req_payload = packet_get_payload(req_packet, NULL);
             if (!req_payload) {
                 LOGD("Failed to get the payload\n");
                 return NULL;
             }
-            account = server_login(server, req_payload);
-            if (account) {
-                result = server_add_online(server, account, client->fd);
+            result = server_login(server, req_payload, client->fd);
+            payload_len = RESULT_SIZE;
+            payload = server_new_result(op_code, result);
+            if (!payload) {
+                LOGD("Failed to new result\n");
+                return NULL;
             }
-            LOGD("id:%d\n", id);
+            op_code = RES_RESULT;
+            break;
+        
+        case REQ_LOG_OUT:
+            req_payload = packet_get_payload(req_packet, NULL);
+            if (!req_payload) {
+                LOGD("Failed to get the payload\n");
+                return NULL;
+            }
+            result = server_logout(server, req_payload, client->fd);
+            payload_len = RESULT_SIZE;
+            payload = server_new_result(op_code, result);
+            if (!payload) {
+                LOGD("Failed to new result\n");
+                return NULL;
+            }
+            op_code = RES_RESULT;
+            break;
+        
+        case REQ_DELETE_ACCOUNT:
+            req_payload = packet_get_payload(req_packet, NULL);
+            if (!req_payload) {
+                LOGD("Failed to get the payload\n");
+                return NULL;
+            }
+            result = server_delete_account(server, req_payload, client->fd);
+            if (result == FALSE) {
+                return NULL;
+            }
+            payload_len = 0;
+
         default:
             LOGD("The OPCODE is wrong\n");
             return NULL;
@@ -1069,7 +1204,7 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
             destroy_packet(res_packet);
             break;
         
-        case REQ_LOG_IN:
+        case REQ_LOG_IN: case REQ_LOG_OUT: case REQ_DELETE_ACCOUNT:
             res_packet = server_create_res_packet(server, req_packet, client, &read_pos, NULL);
             if (!res_packet) {
                 LOGD("Failed to create the res packet\n");

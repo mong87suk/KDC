@@ -517,73 +517,71 @@ Account *account_db_find_account(AccountDB *account_db, char *user_id) {
     return account;
 }
 
-BOOLEAN account_db_delete_account(AccountDB *account_db, char *user_id, char *pw) {
+int account_db_delete_account(AccountDB *account_db, char *user_id, char *pw) {
     if (!account_db || !account_db->database || !user_id || !pw) {
         LOGD("Can't delete the account\n");
-        return FALSE;
+        return -1;
     }
 
     if (!strlen(user_id) || !strlen(pw)) {
         LOGD("Can't delete the account\n");
-        return FALSE; 
+        return -1; 
     }
 
     Where *where = new_where(USER_ID, user_id);
     if (!where) {
         LOGD("Failed to new where\n");
-        return FALSE;
+        return -1;
     }
     DList *where_list = NULL;
     where_list = d_list_append(where_list, where);
     if (!where_list) {
         LOGD("Failed to add the where\n");
         destory_where(where);
-        return FALSE;
+        return -1;
     }
 
     where = new_where(PW, pw);
     if (!where) {
         LOGD("Failed to new where\n");
         destory_where_list(where_list);
-        return FALSE;
+        return -1;
     }
     where_list = d_list_append(where_list, where);
-    if (!where_list) {
-        LOGD("Failed to add the where\n");
-        destory_where_list(where_list);
-        return FALSE;
-    }
-
+    
     DList *entry_list = database_search(account_db->database, where_list);
     destory_where_list(where_list);
     if (!entry_list) {
         LOGD("The UserID is not present\n");
-        return FALSE;
+        return -1;
     }
 
     int len = d_list_length(entry_list);
     if (len == 0 || len > 1) {
         LOGD("Can't delete the account\n");
         destroy_matched_list(entry_list);
-        return FALSE;
+        return -1;
     }
 
     EntryPoint *entry = (EntryPoint *) d_list_get_data(entry_list);
     destroy_matched_list(entry_list);
     if (!entry) {
         LOGD("Can't delete the account\n");
-        return FALSE;
+        return -1;
     }
 
     int entry_id = entry_point_get_id(entry);
     if (entry_id < 0) {
         LOGD("Can't delete the entry\n");
-        return FALSE;
+        return -1;
     }
 
     BOOLEAN result = database_delete_entry(account_db->database, entry_id);
+    if (result == FALSE) {
+        return -1;
+    }
     
-    return result;
+    return entry_id;
 }
 
 int account_db_get_account_count(AccountDB *account_db) {
@@ -691,32 +689,32 @@ char *account_db_get_pw(AccountDB *account_db, char *user_id, char *confirm) {
 Account *account_db_identify_account(AccountDB *account_db, char *user_id, char *pw) {
     if (!account_db || !account_db->database || !user_id || !pw) {
         LOGD("Can't identify the account\n");
-        return -1;
+        return NULL;
     }
 
     if (!strlen(user_id) || !strlen(pw)) {
         LOGD("Can't identify the account\n");
-        return -1;
+        return NULL;
     }
 
     Where *where = new_where(USER_ID, user_id);
     if (!where) {
         LOGD("Failed to new where\n");
-        return -1;
+        return NULL;
     }
     DList *where_list = NULL;
     where_list = d_list_append(where_list, where);
     if (!where_list) {
         LOGD("Failed to add the where\n");
         destory_where(where);
-        return -1;
+        return NULL;
     }
 
     where = new_where(PW, pw);
     if (!where) {
         LOGD("Failed to new where\n");
         destory_where_list(where_list);
-        return -1;
+        return NULL;
     }
     where_list = d_list_append(where_list, where);
 
@@ -724,20 +722,20 @@ Account *account_db_identify_account(AccountDB *account_db, char *user_id, char 
     destory_where_list(where_list);
     if (!entry_list) {
         LOGD("The account which matches UserID and PW is not present\n");
-        return -1;
+        return NULL;
     }
 
     int len = d_list_length(entry_list);
     destroy_matched_list(entry_list);
     if (len == 0 || len > 1) {
         LOGD("Failed to identify the account\n");
-        return -1;
+        return NULL;
     }
 
     EntryPoint *entry_point = d_list_get_data(entry_list);
     if (!entry_point) {
         LOGD("Failed to get the entry_point\n");
-        return -1;
+        return NULL;
     }
 
     int field_mask = database_get_field_mask(account_db->database);
@@ -749,6 +747,7 @@ Account *account_db_identify_account(AccountDB *account_db, char *user_id, char 
     Stream_Buf *entry = entry_point_get_value(entry_point);
     if (!entry) {
         LOGD("Failed to get the entry\n");
+        return NULL;
     }
 
     Account *account = account_db_new_account(entry, field_mask);

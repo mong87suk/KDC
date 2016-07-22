@@ -217,6 +217,17 @@ static int client_check_overread(Stream_Buf *r_stream_buf, int packet_len) {
     return (pos - packet_len);
 }
 
+static void client_print_result(char *payload) {
+    short op_code = 0;
+    int result_type = 0;
+
+    memcpy(&op_code, payload, OP_CODE_SIZE);
+    payload += OP_CODE_SIZE;
+    memcpy(&result_type, payload, RESULT_TYPE_SIZE);
+
+    LOGD("op_code:%x result_type:%d \n", op_code, result_type);
+}
+
 static void client_handle_res_events(Client *client, int fd) {
     char *buf, *payload;
     Stream_Buf *stream_buf, *r_stream_buf, *c_stream_buf;
@@ -459,6 +470,7 @@ static void client_handle_res_events(Client *client, int fd) {
     free(buf);
 
     payload = packet_get_payload(packet, NULL);
+
     switch (op_code) {
         case RES_ALL_MSG: case RCV_FIRST_OR_LAST_MSG:
             LOGD("RES_ALL_MSG\n");
@@ -475,8 +487,16 @@ static void client_handle_res_events(Client *client, int fd) {
             mesg = convert_payload_to_mesg(payload, &mesg_len);
             utils_print_mesg(mesg);
             break;
+        
+        case RES_RESULT:
+            LOGD("RES_RESULT\n");
+            client_print_result(payload);
+            break;
+        default:
+            LOGD("OP_CODE was wrong\n");
     }
 
+    free(payload);
     LOGD("Finish client_handle_res_events()\n");
 }
 
@@ -797,7 +817,7 @@ static Packet *client_create_req_packet(char *input_str, short op_code, int inpu
             }
             break;
 
-        case REQ_LOG_IN:
+        case REQ_LOG_IN: case REQ_LOG_OUT: case REQ_DELETE_ACCOUNT:
             if (input_strlen > REQ_STR_MIN_LEN && (input_str[REQ_STR_MIN_LEN - 1] == ' ')) {
                 LOGD("REQ_MAKE_ACCOUNT\n");
                 payload_buf = client_new_account_data(input_str, input_strlen, LOG_IN_INFO_NUM);
@@ -920,7 +940,15 @@ static void client_handle_req_input_str(Client *client, char *input_str, int inp
 
     if (input_strlen >= REQ_STR_MIN_LEN && (strncasecmp(input_str, REQ_STR, strlen(REQ_STR))) == 0) {
         LOGD("input_str:%s", input_str);
-        op_code = input_str[8] - '0';
+        op_code = input_str[8];
+        if (op_code >= '0' && op_code <= '9') {
+            op_code -= OP_CODE_NUM;
+        } else if (op_code >= 'A' && op_code <= 'F') {
+            op_code -= OP_CODE_STR;
+        } else {
+            LOGD("Request was wrong. Please recommand\n");
+            return;
+        }
     } else {
         LOGD("Request was wrong. Please recommand\n");
         return;
@@ -1002,19 +1030,18 @@ static void client_handle_stdin_event(Client *client, int fd) {
     }
 
     result = client_append_data_to_buf(stream_buf_list, stream_buf);
-
+    client_destroy_stdin_stream_buf_list(client);
     if (result == FALSE) {
         LOGD("Failed to append input data to buf\n");
+        destroy_stream_buf(stream_buf);
         return;
     }
-    client_destroy_stdin_stream_buf_list(client);
 
     input_str = stream_buf_get_buf(stream_buf);
     input_strlen = input_size;
 
     client_handle_req_input_str(client, input_str, input_strlen);
     destroy_stream_buf(stream_buf);
-
     return;
 }
 
