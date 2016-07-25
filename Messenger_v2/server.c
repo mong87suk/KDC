@@ -507,7 +507,7 @@ static int server_logout(Server *server, char *payload, int fd) {
     return SUCCESS_LOG_OUT;
 }
  
-static BOOLEAN server_delete_account(Server *server, char *payload, int fd) {
+static int server_delete_account(Server *server, char *payload, int fd) {
     char *user_id = server_new_account_info(&payload);
     char *pw = server_new_account_info(&payload);
 
@@ -516,7 +516,7 @@ static BOOLEAN server_delete_account(Server *server, char *payload, int fd) {
     free(pw);
     if (id < 0) {
         LOGD("Failed to delete the account\n");
-        return FALSE;
+        return ERROR_DELETE_ACCOUNT;
     }
     
     if (server->online_list) {
@@ -525,7 +525,7 @@ static BOOLEAN server_delete_account(Server *server, char *payload, int fd) {
             destroy_online(online);
         }
     }
-    return TRUE;
+    return SUCCESS_DELETE_ACCOUNT;
 }
 
 static char *server_new_result(short op_code, int result_type) {
@@ -798,13 +798,25 @@ static Packet *server_create_res_packet(Server *server, Packet *req_packet, Clie
             id = account_db_add_account(server->account_db, account);
             if (id < 0) {
                 LOGD("Failed to add account\n");
+                destroy_account(account);
+                result = ERROR_MAKE_ACCOUNT;
                 return NULL;
             }
+
             result = account_set_id(account, id);
             if (result == FALSE) {
                 LOGD("Failed to set the id\n");
                 return NULL;
             }
+
+            result = SUCCESS_MAKE_ACCOUNT;
+            payload_len = RESULT_SIZE;
+            payload = server_new_result(op_code, result);
+            if (!payload) {
+                LOGD("Failed to new result\n");
+                return NULL;
+            }
+            op_code = RES_RESULT;
             break;
         
         case REQ_LOG_IN:
@@ -846,11 +858,14 @@ static Packet *server_create_res_packet(Server *server, Packet *req_packet, Clie
                 return NULL;
             }
             result = server_delete_account(server, req_payload, client->fd);
-            if (result == FALSE) {
+            payload_len = RESULT_SIZE;
+            payload = server_new_result(op_code, result);
+            if (!payload) {
+                LOGD("Failed to new result\n");
                 return NULL;
             }
-            payload_len = 0;
-
+            op_code = RES_RESULT;
+            break;
         default:
             LOGD("The OPCODE is wrong\n");
             return NULL;

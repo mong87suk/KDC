@@ -406,6 +406,7 @@ void looper_remove_all_watchers(Looper *looper) {
         LOGD("There is nothing to pointer the Looper\n");
         return;
     }
+    LOGD("free\n");
     d_list_free(looper->watcher_list, looper_free_watcher);
     looper->watcher_list = NULL;
 }
@@ -437,6 +438,7 @@ void destroy_looper(Looper *looper) {
         LOGD("There is nothing to pointer the Looper\n");
         return;
     }
+    LOGD("test\n");
     looper_remove_all_watchers(looper);
     looper_remove_all_timer(looper);
     free(looper);

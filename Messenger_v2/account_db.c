@@ -360,12 +360,6 @@ int account_db_add_account(AccountDB *account_db, Account *account) {
         return -1;
     }
 
-    int field_mask = database_get_field_mask(account_db->database);
-    if (field_mask == 0) {
-        LOGD("Field mask was wrong\n");
-        return -1;
-    }
-
     char *user_id = account_get_user_id(account);
     if (!user_id) {
         LOGD("Failed to get the user id\n");
@@ -394,8 +388,13 @@ int account_db_add_account(AccountDB *account_db, Account *account) {
         return -1;
     }
 
+    int field_mask = database_get_field_mask(account_db->database);
+    if (field_mask == 0) {
+        LOGD("Field mask was wrong\n");
+        return -1;
+    }
+
     Stream_Buf *entry = account_db_new_entry(account, field_mask);
-    destroy_matched_list(entry_list);
     if (!entry) {
         LOGD("Failed to new entry\n");
         return -1;

@@ -502,7 +502,8 @@ static void client_handle_res_events(Client *client, int fd) {
 
 static void client_handle_disconnect(Client *client, int fd, unsigned int id) {
     if (client->response_id == id) {
-        destroy_client(client);
+        LOGD("client_handle_disconnect\n");
+        looper_remove_all_watchers(client->looper);
     }
 }
 
@@ -1122,6 +1123,7 @@ Client *new_client(Looper *looper) {
 }
 
 void destroy_client(Client *client) {
+    LOGD("destory client\n");
     if (!client) {
         LOGD("There is nothing to point the Client\n");
         return;
