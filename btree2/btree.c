@@ -1,6 +1,9 @@
-#include<stdlib.h> 
-#include<stdio.h> 
+#define _GNU_SOURCE
+#include <stdlib.h> 
+#include <stdio.h>
+#include <string.h>
 #include "btree.h"
+#include "Queue.h"
 
 struct _Key {
     char *k;
@@ -10,8 +13,21 @@ struct _Key {
 struct _Node { 
     int n; /* n < M No. of keys in node will always less than order of B tree */ 
     struct _Key *keys[M-1]; /*array of keys*/ 
-    struct _Node *p[M];   /* (n+1 pointers will be in use) */ 
-}; 
+    struct _Node *p[M];   /* (n+1 pointers will be in use) */
+    int visit; 
+};
+
+Key *new_key(char *k) {
+    Key *key = (Key *) malloc(KEY_SIZE);
+    if (!key) {
+        printf("Failed to make buf\n");
+        return NULL;
+    }
+    key-> id = -1;
+    key->k = k;
+
+    return key;
+}
 
 Node *insert(Key *key, Node *root) 
 { 
@@ -120,41 +136,93 @@ KeyStatus ins(Node *ptr, Key *key, Key **upKey, Node **newnode)
 }/*End of ins()*/ 
 
 void display(Node *ptr, int blanks) 
-{ 
+{
+    int len;
+    char *k;
+
+    Key *key;
+
     if (ptr) 
     { 
         int i; 
-        for(i=1;i<=blanks;i++) 
+        for(i = 1;i <= blanks; i++) {
             printf(" "); 
-        for (i=0; i < ptr->n; i++) 
-            printf("%d ",ptr->keys[i]); 
+        }
+
+        for (i = 0; i < ptr->n; i++) { 
+            key = ptr->keys[i];
+            k = key->k;
+            memcpy(&len, k, 4);
+            k += 4;
+
+            for (int j = 0; j < len; j++) {
+                printf("%c", k[j]);
+            }
+            printf(" ");
+        }
+
         printf("\n"); 
-        for (i=0; i <= ptr->n; i++) 
-            display(ptr->p[i], blanks+10); 
+        for (i = 0; i <= ptr->n; i++) { 
+            display(ptr->p[i], blanks + 10);
+        } 
     }/*End of if*/ 
 }/*End of display()*/ 
 
-
-void search(int key, Node *root) 
+void find(Key *key, Node *root) 
 { 
-    int pos, i, n; 
-    Node *ptr = root; 
+    int pos, i, n;
+    int len = 0; 
+    char *k;
+
+    Node *ptr = root;
+    Key *cmp_key;
+
     printf("Search path:\n"); 
     while (ptr) 
     { 
         n = ptr->n; 
-        for (i=0; i < ptr->n; i++) 
-            printf(" %d",ptr->keys[i]); 
-        printf("\n"); 
-        pos = searchPos(key, ptr->keys, n); 
-        if (pos < n && key == ptr->keys[pos]) 
-        { 
-            printf("Key %d found in position %d of last dispalyed node\n",key,i); 
-            return; 
+        for (i = 0; i < ptr->n; i++) {
+            cmp_key = ptr->keys[i];
+            k = cmp_key->k;
+            memcpy(&len, k, 4);
+            k += 4;
+            for (int j = 0; j < len; j++) {
+                printf("%c", k[j]);
+            }
+            printf(" ");
         } 
+        printf("\n"); 
+
+        pos = searchPos(key, ptr->keys, n);
+
+        if (pos < n) {
+            k = key->k;
+            memcpy(&len, k, 4);
+            k += 4;
+            cmp_key = ptr->keys[pos];
+            char *cmp_k = cmp_key->k;
+            cmp_k += 4;
+
+            if (strcmp(k, cmp_k) == 0) {
+                printf("Key found in position %d key: ", i);
+                for (int j = 0; j < len; j++) {
+                    printf("%c", k[j]);
+                }
+                printf("\n");
+                return;
+            }
+        }
+
         ptr = ptr->p[pos]; 
     } 
-    printf("Key %d is not available\n",key); 
+    printf("Key is not available Key:");
+    k = key->k;
+    memcpy(&len, k, 4);
+    k += 4;
+    for (int j = 0; j < len; j++) {
+        printf("%c", k[j]);
+    }
+    printf("\n");
 }/*End of search()*/ 
 
 int searchPos(Key *key, Key **key_arr, int n) 
@@ -170,7 +238,7 @@ int searchPos(Key *key, Key **key_arr, int n)
         k = k + 4;
         cmp_key = key_arr[pos];
         cmp_k = cmp_key->k;
-        cmp_k = k + 4;
+        cmp_k = cmp_k + 4;
         if (strcmp(k, cmp_k) > 0) {
             pos++;
         } else {
@@ -178,17 +246,26 @@ int searchPos(Key *key, Key **key_arr, int n)
         }
     }
     return pos; 
-}/*End of searchPos()*/ 
+}/*End of searchPos()*/
 
-void DelNode(int key, Node *root) 
-{ 
+void DelNode(Key *key, Node *root) 
+{
+    int len = 0;
+    char *k = NULL;
+
     Node *uproot; 
     KeyStatus value; 
     value = del(root,key); 
     switch (value) 
     { 
-    case SearchFailure: 
-        printf("Key %d is not available\n",key); 
+    case SearchFailure:     
+        k = key->k;
+        memcpy(&len, k, 4);
+        k += 4;
+        for (int j = 0; j < len; j++) {
+            printf("%c", k[j]);
+        }
+        printf("\n"); 
         break; 
     case LessKeys: 
         uproot = root; 
@@ -204,10 +281,10 @@ void DelNode(int key, Node *root)
 }/*End of delnode()*/  
 
 
-KeyStatus del(Node *ptr, int key) 
+KeyStatus del(Node *ptr, Key *key) 
 { 
     int pos, i, pivot, n ,min; 
-    int *key_arr; 
+    Key **key_arr; 
     KeyStatus value; 
     Node **p,*lptr,*rptr;
     Node *root = ptr; 
@@ -223,8 +300,19 @@ KeyStatus del(Node *ptr, int key)
     pos = searchPos(key, key_arr, n); 
     if (p[0] == NULL) 
     { 
-        if (pos == n || key < key_arr[pos]) 
-            return SearchFailure; 
+        if (pos == n) {
+            return SearchFailure;
+        } else { 
+            char *k = key->k;
+            k += 4;
+            Key *cmp_key = ptr->keys[pos];
+            char *cmp_k = cmp_key->k;
+            cmp_k += 4;
+
+            if (strcmp(k, cmp_k) < 0) {
+                return SearchFailure;
+            }
+        }
         /*Shift keys and pointers left*/ 
         for (i=pos+1; i < n; i++) 
         { 
@@ -315,3 +403,10 @@ KeyStatus del(Node *ptr, int key)
     } 
     return  --ptr->n >= (ptr == root ? 1 : min) ? Success : LessKeys; 
 }/*End of del()*/
+
+void search(Node *ptr) {
+    Queue* q = queue_new();
+    if (!q) {
+        printf("Failed to new queue\n");
+    }
+}
