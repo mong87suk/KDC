@@ -2,16 +2,21 @@
 #include<stdio.h> 
 #include "btree.h"
 
-struct node{ 
+struct _Key {
+    char *k;
+    int id;
+};
+
+struct _Node { 
     int n; /* n < M No. of keys in node will always less than order of B tree */ 
-    int keys[M-1]; /*array of keys*/ 
-    struct node *p[M];   /* (n+1 pointers will be in use) */ 
+    struct _Key *keys[M-1]; /*array of keys*/ 
+    struct _Node *p[M];   /* (n+1 pointers will be in use) */ 
 }; 
 
-Node *insert(int key, Node *root) 
+Node *insert(Key *key, Node *root) 
 { 
     Node *newnode = NULL; 
-    int upKey = 0; 
+    Key *upKey = 0; 
     KeyStatus value; 
     value = ins(root, key, &upKey, &newnode); 
     if (value == Duplicate) { 
@@ -27,26 +32,38 @@ Node *insert(int key, Node *root)
     return root;
 }/*End of insert()*/ 
 
-KeyStatus ins(Node *ptr, int key, int *upKey,Node **newnode) 
+KeyStatus ins(Node *ptr, Key *key, Key **upKey, Node **newnode) 
 { 
     Node *newPtr = NULL;
     Node *lastPtr = NULL; 
     int pos = 0;
     int i = 0;
     int n,splitPos = 0; 
-    int newKey = 0;
-    int lastKey = 0; 
-    KeyStatus value; 
+    Key *newKey = 0;
+    Key *lastKey = 0; 
+    KeyStatus value;
+
     if (ptr == NULL) 
     { 
         *newnode = NULL; 
         *upKey = key; 
         return InsertIt; 
-    } 
+    }
+
     n = ptr->n; 
-    pos = searchPos(key, ptr->keys, n); 
-    if (pos < n && key == ptr->keys[pos]) 
-        return Duplicate; 
+    pos = searchPos(key, ptr->keys, n);
+    if (pos < n) {
+        char *k = key->k;
+        k += 4;
+        Key *cmp_key = ptr->keys[pos];
+        char *cmp_k = cmp_key->k;
+        cmp_k += 4;
+
+        if (strcmp(k, cmp_k) == 0) {
+            return Duplicate;
+        }
+    }
+
     value = ins(ptr->p[pos], key, &newKey, &newPtr); 
     if (value != InsertIt) 
         return value; 
@@ -140,11 +157,26 @@ void search(int key, Node *root)
     printf("Key %d is not available\n",key); 
 }/*End of search()*/ 
 
-int searchPos(int key, int *key_arr, int n) 
+int searchPos(Key *key, Key **key_arr, int n) 
 { 
-    int pos=0; 
-    while (pos < n && key > key_arr[pos]) 
-        pos++; 
+    int pos = 0;
+    char *k;
+    char *cmp_k;
+
+    Key *cmp_key = NULL;
+    
+    while (pos < n) {
+        k = key->k;
+        k = k + 4;
+        cmp_key = key_arr[pos];
+        cmp_k = cmp_key->k;
+        cmp_k = k + 4;
+        if (strcmp(k, cmp_k) > 0) {
+            pos++;
+        } else {
+            break;
+        }
+    }
     return pos; 
 }/*End of searchPos()*/ 
 

@@ -11,14 +11,15 @@ typedef enum {
     LessKeys = 4 
 } KeyStatus; 
 
-typedef struct node Node;
+typedef struct _Key Key;
+typedef struct _Node Node;
 
-Node *insert(int key, Node *node); 
+Node *insert(Key *key, Node *node); 
 void display(Node *root,int); 
 void DelNode(int x, Node *root); 
 void search(int x, Node *root); 
-KeyStatus ins(Node *r, int x, int* y, Node** u); 
-int searchPos(int x,int *key_arr, int n); 
+KeyStatus ins(Node *ptr, Key *key, Key **upKey, Node **newnode); 
+int searchPos(Key *key, Key **key_arr, int n);
 KeyStatus del(Node *r, int x); 
 
 #endif
