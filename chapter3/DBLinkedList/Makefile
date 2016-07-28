@@ -58,7 +58,7 @@ $(STACK_LIBRARY): Stack.o
 
 install:
 	cp *.so $(INSTALL_LIB_PATH)
-	mkdir $(INSTALL_INCLUDE_PATH)
+	mkdir -p $(INSTALL_INCLUDE_PATH)
 	cp *.h $(INSTALL_INCLUDE_PATH)
 
 uninstall:
