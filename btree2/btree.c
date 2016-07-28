@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "btree.h"
-#include "Queue.h"
+#include <kdc/Queue.h>
 
 struct _Key {
     char *k;
@@ -14,8 +14,31 @@ struct _Node {
     int n; /* n < M No. of keys in node will always less than order of B tree */ 
     struct _Key *keys[M-1]; /*array of keys*/ 
     struct _Node *p[M];   /* (n+1 pointers will be in use) */
-    int visit; 
+    int visit;
+    int depth;
 };
+
+static void print_str(char *k) {
+    int len = 0;
+    memcpy(&len, k, 4);
+    k += 4;
+    for (int i = 0; i < len; i++) {
+        printf("%c", k[i]);
+    }
+}
+
+static void print_key(Node *node) {
+    Key *key = NULL;
+    char *k;
+    for (int i = 0; i < node->n; i++) {
+        key = node->keys[i];
+        if (key) {
+            print_str(key->k);
+            printf(" ");  
+        } 
+    }
+    printf("\n");
+}
 
 Key *new_key(char *k) {
     Key *key = (Key *) malloc(KEY_SIZE);
@@ -404,9 +427,33 @@ KeyStatus del(Node *ptr, Key *key)
     return  --ptr->n >= (ptr == root ? 1 : min) ? Success : LessKeys; 
 }/*End of del()*/
 
-void search(Node *ptr) {
+void search(Node *root) {
+    if (!root) {
+        printf("Can't search\n");
+        return;
+    }
     Queue* q = queue_new();
     if (!q) {
         printf("Failed to new queue\n");
+    }
+    root->depth = 1;
+    int result = push(q, root);
+    if (!result) {
+        printf("Failed to push\n");
+    }
+    
+    Node *node = NULL;
+    int i = 0;
+    while (empty(q)) {
+        node = (Node *) pop(q);
+        printf("depth: %d ", node->depth);
+        printf("my addrees: ");
+        print_key(node);
+
+        printf("child address:")
+        while (node->p[i] != NULL) {
+            printf(" ");
+            push(q, node->p[i]);
+        }
     }
 }

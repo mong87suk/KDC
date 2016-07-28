@@ -24,5 +24,6 @@ KeyStatus ins(Node *ptr, Key *key, Key **upKey, Node **newnode);
 int searchPos(Key *key, Key **key_arr, int n);
 KeyStatus del(Node *ptr, Key *key);
 Key *new_key(char *k);
+void search(Node *root);
 
 #endif
