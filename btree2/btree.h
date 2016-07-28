@@ -1,7 +1,7 @@
 #ifndef __B_TREE_H__
 #define __B_TREE_H__
 
-#define M 6
+#define M 3
 #define KEY_SIZE 12
 
 typedef enum { 
