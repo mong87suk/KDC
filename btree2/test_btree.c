@@ -25,6 +25,8 @@ int main()
     char *str;
     char *num = (char *) calloc(2, sizeof(char));
     Key *key;
+    Key *cmp_key1;
+    Key *cmp_key2;
 
     for (int i = 0; i < 9; i++) {
         n = random() % 100;
@@ -34,14 +36,12 @@ int main()
         key = new_key(str);
         root = insert(key, root);
     }
-    //display(root,0);
-    /*
-    DelNode(3, root);
-    display(root,0);*/
+    search(root);
 
-    //find(key5, root); 
-    //find(key3, root);
-
+    sprintf(num, "%d", 83);
+    str = new_str(num);
+    cmp_key1 = new_key(str);
+    DelNode(cmp_key1, root);
     search(root);
 
     return 0; 

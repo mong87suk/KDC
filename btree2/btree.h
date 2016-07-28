@@ -1,7 +1,7 @@
 #ifndef __B_TREE_H__
 #define __B_TREE_H__
 
-#define M 3
+#define M 5
 #define KEY_SIZE 12
 
 typedef enum { 
@@ -17,9 +17,8 @@ typedef struct _Key Key;
 typedef struct _Node Node;
 
 Node *insert(Key *key, Node *node); 
-void display(Node *root,int); 
 void DelNode(Key *key, Node *root);
-void find(Key *key, Node *root); 
+Key *find(Key *key, Node *root); 
 KeyStatus ins(Node *ptr, Key *key, Key **upKey, Node **newnode); 
 int searchPos(Key *key, Key **key_arr, int n);
 KeyStatus del(Node *ptr, Key *key);

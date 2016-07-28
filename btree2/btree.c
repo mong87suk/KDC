@@ -143,13 +143,16 @@ KeyStatus ins(Node *ptr, Key *key, Key **upKey, Node **newnode)
     int key_count = ptr->n;
     ptr->n = splitPos; /*No. of keys for left splitted node*/ 
     (*newnode)->n = M-1-splitPos;/*No. of keys for right splitted node*/ 
-    for (i=0; i < (*newnode)->n; i++) 
+    for (i = 0; i < (*newnode)->n; i++) 
     { 
-        (*newnode)->p[i] = ptr->p[i + splitPos + 1]; 
-        if(i < (*newnode)->n - 1) 
-            (*newnode)->keys[i] = ptr->keys[i + splitPos + 1]; 
-        else 
-            (*newnode)->keys[i] = lastKey; 
+        (*newnode)->p[i] = ptr->p[i + splitPos + 1];
+        ptr->p[i + splitPos + 1] = NULL;
+        if(i < (*newnode)->n - 1) {
+            (*newnode)->keys[i] = ptr->keys[i + splitPos + 1];
+            ptr->keys[i + splitPos + 1] = NULL;
+        } else { 
+            (*newnode)->keys[i] = lastKey;
+        } 
     }
     
     for (i = key_count - 1; i >= splitPos; i--) {
@@ -160,74 +163,32 @@ KeyStatus ins(Node *ptr, Key *key, Key **upKey, Node **newnode)
     return InsertIt; 
 }/*End of ins()*/ 
 
-void display(Node *ptr, int blanks) 
-{
-    char *k;
-
-    Key *key;
-
-    if (ptr) 
-    { 
-        int i; 
-        for(i = 1;i <= blanks; i++) {
-            printf(" "); 
-        }
-
-        for (i = 0; i < ptr->n; i++) { 
-            key = ptr->keys[i];
-            k = key->k;
-            printf("%s", k);
-            printf(" ");
-        }
-
-        printf("\n"); 
-        for (i = 0; i <= ptr->n; i++) { 
-            display(ptr->p[i], blanks + 10);
-        } 
-    }/*End of if*/ 
-}/*End of display()*/ 
-
-void find(Key *key, Node *root) 
+Key *find(Key *key, Node *root) 
 { 
-    int pos, i, n;
+    int pos, n;
     char *k;
 
     Node *ptr = root;
-    Key *cmp_key;
+    Key *cmp_key = NULL;
+    char *cmp_k;
 
-    printf("Search path:\n"); 
-    while (ptr) 
-    { 
-        n = ptr->n; 
-        for (i = 0; i < ptr->n; i++) {
-            cmp_key = ptr->keys[i];
-            k = cmp_key->k;
-            printf("%s", k);
-            printf(" ");
-        } 
-        printf("\n"); 
-
+    while (ptr) {
+        n = ptr->n;
         pos = searchPos(key, ptr->keys, n);
-
         if (pos < n) {
             k = key->k;
             cmp_key = ptr->keys[pos];
-            char *cmp_k = cmp_key->k;
+            cmp_k = cmp_key->k;
 
             if (strcmp(k, cmp_k) == 0) {
-                printf("Key found in position %d key: ", i);
-                printf("%s", k);
-                printf("\n");
-                return;
+                printf("Found key: %s\n", k);
+                return cmp_key;
             }
         }
-
         ptr = ptr->p[pos]; 
     } 
-    printf("Key is not available Key:");
-    k = key->k;
-    printf("%s", k);
-    printf("\n");
+    printf("Key is not available Key: %s\n", key->k);
+    return NULL;
 }/*End of search()*/ 
 
 int searchPos(Key *key, Key **key_arr, int n) 
@@ -318,7 +279,7 @@ KeyStatus del(Node *ptr, Key *key)
         return  --ptr->n >= (ptr==root ? 1 : min) ? Success : LessKeys; 
     }/*End of if */ 
 
-    if (pos < n && key == key_arr[pos]) 
+    if (pos < n && (strcmp(key->k, key_arr[pos]->k) == 0)) 
     { 
         Node *qp = p[pos], *qp1; 
         int nkey; 
