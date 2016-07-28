@@ -43,13 +43,13 @@ $(TEST_BTREE): $(TEST_QUEU_OBJET)
 install: $(PRE_INSTALL)
 		
 $(PRE_INSTALL): $(HEADER) $(SHARED_DBLINKED_LIST_LIBRARY) $(SHARED_QUEUE_LIBRARY)
-	sudo cp $(SHARED_DBLINKED_LIST_LIBRARY) $(SHARED_QUEUE_LIBRARY) /usr/lib/
+	cp $(SHARED_DBLINKED_LIST_LIBRARY) $(SHARED_QUEUE_LIBRARY) /usr/lib/
 
 $(HEADER): $(MAKDE_DIR) 
-	sudo cp ../chapter3/DBLinkedList/DBLinkedList.h ../chapter3/DBLinkedList/Queue.h /usr/include/kdc
+	cp ../chapter3/DBLinkedList/DBLinkedList.h ../chapter3/DBLinkedList/Queue.h /usr/include/kdc
 
 $(MAKDE_DIR):
-	sudo mkdir /usr/include/kdc
+	mkdir /usr/include/kdc
 
 $(SHARED_DBLINKED_LIST_LIBRARY):$(DBLINKED_LIST_OBJECT)
 	$(CC) -shared -o $@ $^
@@ -63,13 +63,13 @@ $(SHARED_QUEUE_LIBRARY):$(QUEUE_OBJECT)
 $(QUEUE_OBJECT):
 	$(CC) -c -Wall -fpic $(QUEUE_SOURCE) -l$(DBLINKED_LIST)
 
-clean: $(DEL_DIR) $(UNINSTALL) 
+clean:
 	$(RM) $(TEST_BTREE) *.o *.so
 
-uninstall: $(UNINSTALL)
+uninstall: $(DEL_DIR) $(UNINSTALL)
 
 $(DEL_DIR):
-	sudo rm -rf /usr/include/kdc
+	rm -rf /usr/include/kdc
 
 $(UNINSTALL):
-	sudo rm /usr/lib/$(SHARED_DBLINKED_LIST_LIBRARY) /usr/lib/$(SHARED_QUEUE_LIBRARY)
+	rm /usr/lib/$(SHARED_DBLINKED_LIST_LIBRARY) /usr/lib/$(SHARED_QUEUE_LIBRARY) -rf
