@@ -1,7 +1,7 @@
-#define _GNU_SOURCE
 #include <stdlib.h> 
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #include "btree.h"
 
 static char *new_str(char *str) {
@@ -11,38 +11,62 @@ static char *new_str(char *str) {
         printf("Failed to make the buf\n");
         return NULL;
     }
-    
     strcpy(new_str, str);
-
     return new_str;    
 }
 
 int main() 
 { 
-    Node *root;
     long int n;
-    root = NULL;
     char *str;
-    char *num = (char *) calloc(2, sizeof(char));
-    Key *key;
-    Key *cmp_key1;
-    Key *cmp_key2;
+    
+    Node *root = NULL;
+    Key *key, *cmp_key1, *cmp_key2;
 
-    for (int i = 0; i < 9; i++) {
+    char *num = (char *) calloc(2, sizeof(char));
+    assert(num);
+
+    for (int i = 0; i < 8; i++) {
         n = random() % 100;
-        printf("n:%ld \n", n);
         sprintf(num, "%ld", n);
         str = new_str(num);
+        assert(str);
         key = new_key(str);
-        root = insert(key, root);
+        assert(key);
+        root = btree_insert(key, root);
+        assert(root);
     }
-    search(root);
+    btree_search(root);
 
     sprintf(num, "%d", 83);
     str = new_str(num);
     cmp_key1 = new_key(str);
-    DelNode(cmp_key1, root);
-    search(root);
+    key = btree_find(cmp_key1, root);
+    assert(key);
+    str = btree_get_str(key);
+    assert(str);
+    assert(strcmp(str, num) == 0);
+
+    sprintf(num, "%d", 15);
+    str = new_str(num);
+    cmp_key2 = new_key(str);
+    key = btree_find(cmp_key2, root);
+    assert(key);
+    str = btree_get_str(key);
+    assert(str);
+    assert(strcmp(str, num) == 0);
+
+    root = btree_delete(cmp_key1, root);
+    assert(root);
+    root = btree_delete(cmp_key2, root);
+    assert(root);
+    btree_search(root);
+
+    root = btree_insert(cmp_key1, root);
+    assert(root);
+    root = btree_insert(cmp_key2, root);
+    assert(root);
+    btree_search(root); 
 
     return 0; 
 }/*End of main()*/ 

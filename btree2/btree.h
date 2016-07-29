@@ -1,28 +1,27 @@
 #ifndef __B_TREE_H__
 #define __B_TREE_H__
 
-#define M 5
+#define M 7
 #define KEY_SIZE 12
 
 typedef enum { 
     Duplicate = 0,
-    SearchFailure =1,
+    Failure =1,
     Success = 2,
     InsertIt = 3,
-    LessKeys = 4 
+    LessKeys = 4, 
 } KeyStatus; 
-
 
 typedef struct _Key Key;
 typedef struct _Node Node;
 
-Node *insert(Key *key, Node *node); 
-void DelNode(Key *key, Node *root);
-Key *find(Key *key, Node *root); 
-KeyStatus ins(Node *ptr, Key *key, Key **upKey, Node **newnode); 
-int searchPos(Key *key, Key **key_arr, int n);
+Node *btree_insert(Key *key, Node *node); 
+Node *btree_delete(Key *key, Node *root);
+Key *btree_find(Key *key, Node *root); 
 KeyStatus del(Node *ptr, Key *key);
 Key *new_key(char *k);
-void search(Node *root);
+void btree_search(Node *root);
+void destroy_key(Key *key);
+char *btree_get_str(Key *key);
 
 #endif
