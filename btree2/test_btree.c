@@ -23,7 +23,7 @@ int main()
     Node *root = NULL;
     Key *key, *cmp_key1, *cmp_key2, *cmp_key3, *cmp_key4;
 
-    char *num = (char *) calloc(2, sizeof(char));
+    char *num = (char *) calloc(3, sizeof(char));
     assert(num);
 
     for (int i = 0; i < 12; i++) {
