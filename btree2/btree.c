@@ -21,7 +21,6 @@ static Node *new_node() {
         printf("Failed to new node\n");
         return NULL;
     }
-
     return node;
 }
 
@@ -29,8 +28,7 @@ static void destroy_node(Node *node) {
     free(node);
 }
 
-static int btree_get_pos(Key *key, Key **key_arr, int n) 
-{ 
+static int btree_get_pos(Key *key, Key **key_arr, int n) { 
     int pos = 0;
     char *k;
     char *cmp_k;
@@ -50,8 +48,7 @@ static int btree_get_pos(Key *key, Key **key_arr, int n)
     return pos; 
 }
 
-static KeyStatus btree_ins(Node *ptr, Key *key, Key **upKey, Node **newnode) 
-{ 
+static KeyStatus btree_ins(Node *ptr, Key *key, Key **upKey, Node **newnode) { 
     Node *newPtr = NULL;
     Node *lastPtr = NULL; 
     int pos = 0;
@@ -87,8 +84,7 @@ static KeyStatus btree_ins(Node *ptr, Key *key, Key **upKey, Node **newnode)
     if (n < M - 1) { 
         pos = btree_get_pos(newKey, ptr->keys, n); 
         /*Shifting the key and pointer right for inserting the new key*/ 
-        for (i=n; i>pos; i--) 
-        { 
+        for (i=n; i>pos; i--) { 
             ptr->keys[i] = ptr->keys[i-1]; 
             ptr->p[i+1] = ptr->p[i]; 
         } 
@@ -103,12 +99,10 @@ static KeyStatus btree_ins(Node *ptr, Key *key, Key **upKey, Node **newnode)
         lastKey = newKey; 
         lastPtr = newPtr; 
     } 
-    else /*If keys in node are maximum and position of node to be inserted is not last*/ 
-    { 
+    else {/*If keys in node are maximum and position of node to be inserted is not last*/  
         lastKey = ptr->keys[M-2]; 
         lastPtr = ptr->p[M-1]; 
-        for (i=M-2; i>pos; i--) 
-        { 
+        for (i=M-2; i>pos; i--) { 
             ptr->keys[i] = ptr->keys[i-1]; 
             ptr->p[i+1] = ptr->p[i]; 
         } 
@@ -123,18 +117,23 @@ static KeyStatus btree_ins(Node *ptr, Key *key, Key **upKey, Node **newnode)
         return Failure;
     }
 
+    int key_count = ptr->n;
     ptr->n = splitPos; /*No. of keys for left splitted node*/ 
     (*newnode)->n = M-1-splitPos;/*No. of keys for right splitted node*/ 
     for (i = 0; i < (*newnode)->n; i++) 
     { 
         (*newnode)->p[i] = ptr->p[i + splitPos + 1];
         ptr->p[i + splitPos + 1] = NULL;
-        if(i < (*newnode)->n - 1) {
+        if (i < (*newnode)->n - 1) {
             (*newnode)->keys[i] = ptr->keys[i + splitPos + 1];
             ptr->keys[i + splitPos + 1] = NULL;
         } else { 
             (*newnode)->keys[i] = lastKey;
         } 
+    }
+
+    for (i = key_count - 1; i >= splitPos; i--) {
+        ptr->keys[i] = NULL; 
     }
     
     (*newnode)->p[(*newnode)->n] = lastPtr; 
@@ -171,8 +170,9 @@ static KeyStatus btree_get_del_result(Node *ptr, Key *key)
     Node **p,*lptr,*rptr;
     Node *root = ptr; 
 
-    if (ptr == NULL) 
-        return Failure; 
+    if (ptr == NULL) {
+        return Failure;
+    } 
     /*Assigns values of node*/ 
     n=ptr->n; 
     key_arr = ptr->keys; 
@@ -180,8 +180,7 @@ static KeyStatus btree_get_del_result(Node *ptr, Key *key)
     min = (M - 1)/2;/*Minimum number of keys*/ 
 
     pos = btree_get_pos(key, key_arr, n); 
-    if (p[0] == NULL) 
-    { 
+    if (p[0] == NULL) { 
         if (pos == n) {
             return Failure;
         } else { 
@@ -193,58 +192,63 @@ static KeyStatus btree_get_del_result(Node *ptr, Key *key)
                 return Failure;
             }
         }
-        /*Shift keys and pointers left*/ 
-        for (i=pos+1; i < n; i++) 
-        { 
-            key_arr[i-1] = key_arr[i]; 
-            p[i] = p[i+1]; 
-        } 
-        return  --ptr->n >= (ptr==root ? 1 : min) ? Success : LessKeys; 
+        /*Shift keys and pointers left*/
+        --ptr->n;
+        if (++pos < n) {
+            for (i = pos; i < n; i++) {
+                if (strcmp(key_arr[i -1]->k, key->k) == 0) {
+                    destroy_key(key_arr[i -1]);
+                } 
+                key_arr[i-1] = key_arr[i]; 
+                p[i] = p[i+1]; 
+            }
+        } else if (strcmp(key_arr[ptr->n]->k, key->k) == 0) {
+            destroy_key(key_arr[ptr->n]);
+        }
+        key_arr[ptr->n] = NULL;
+        return  ptr->n >= (ptr == root ? 1 : min) ? Success : LessKeys; 
     }/*End of if */ 
 
-    if (pos < n && (strcmp(key->k, key_arr[pos]->k) == 0)) 
-    { 
+    if (pos < n && (strcmp(key->k, key_arr[pos]->k) == 0)) { 
         Node *qp = p[pos], *qp1;
+        Key *tmp_key;
 
         int nkey;
-        while(1) 
-        { 
+        while(1) { 
             nkey = qp->n; 
             qp1 = qp->p[nkey]; 
             if (qp1 == NULL) 
                 break; 
             qp = qp1; 
         }/*End of while*/
-        if (strcmp(key_arr[pos]->k, key->k) == 0) {
-            destroy_key(key_arr[pos]);
-        }
+        
+        tmp_key = key_arr[pos];
         key_arr[pos] = qp->keys[nkey - 1];
-        qp->keys[nkey - 1] = key; 
+        qp->keys[nkey - 1] = tmp_key; 
     }/*End of if */ 
     value = btree_get_del_result(p[pos], key); 
-    if (value != LessKeys) 
-        return value; 
+    if (value != LessKeys) {
+        return value;
+    }
 
-    if (pos > 0 && p[pos-1]->n > min) 
-    { 
+    if (pos > 0 && p[pos-1]->n > min) { 
         pivot = pos - 1; /*pivot for left and right node*/ 
         lptr = p[pivot]; 
         rptr = p[pos]; 
         /*Assigns values for right node*/ 
         rptr->p[rptr->n + 1] = rptr->p[rptr->n]; 
-        for (i=rptr->n; i>0; i--) 
-        { 
+        for (i=rptr->n; i>0; i--) { 
             rptr->keys[i] = rptr->keys[i-1]; 
             rptr->p[i] = rptr->p[i-1]; 
         } 
         rptr->n++; 
         rptr->keys[0] = key_arr[pivot]; 
         rptr->p[0] = lptr->p[lptr->n]; 
-        key_arr[pivot] = lptr->keys[--lptr->n]; 
+        key_arr[pivot] = lptr->keys[--lptr->n];
+        lptr->keys[--lptr->n] = NULL;
         return Success; 
     }/*End of if */ 
-    if (pos<n && p[pos+1]->n > min) 
-    { 
+    if (pos<n && p[pos+1]->n > min) { 
         pivot = pos; /*pivot for left and right node*/ 
         lptr = p[pivot]; 
         rptr = p[pivot+1]; 
@@ -254,8 +258,7 @@ static KeyStatus btree_get_del_result(Node *ptr, Key *key)
         key_arr[pivot] = rptr->keys[0]; 
         lptr->n++; 
         rptr->n--; 
-        for (i=0; i < rptr->n; i++) 
-        { 
+        for (i=0; i < rptr->n; i++) { 
             rptr->keys[i] = rptr->keys[i+1]; 
             rptr->p[i] = rptr->p[i+1]; 
         }/*End of for*/ 
@@ -263,29 +266,32 @@ static KeyStatus btree_get_del_result(Node *ptr, Key *key)
         return Success; 
     }/*End of if */ 
 
-    if(pos == n) 
-        pivot = pos-1; 
-    else 
-        pivot = pos; 
+    if (pos == n) { 
+        pivot = pos-1;
+    } 
+    else { 
+        pivot = pos;
+    } 
 
     lptr = p[pivot]; 
     rptr = p[pivot+1]; 
     /*merge right node with left node*/ 
-    lptr->keys[lptr->n] = key_arr[pivot]; 
+    lptr->keys[lptr->n] = key_arr[pivot];
+    key_arr[pivot] = NULL;
     lptr->p[lptr->n + 1] = rptr->p[0]; 
     for (i=0; i < rptr->n; i++) 
     { 
         lptr->keys[lptr->n + 1 + i] = rptr->keys[i];
         lptr->p[lptr->n + 2 + i] = rptr->p[i+1]; 
     } 
-    lptr->n = lptr->n + rptr->n +1; 
+    lptr->n = lptr->n + rptr->n +1;
+    p[pivot+1] = NULL; 
     destroy_node(rptr); /*Remove right node*/ 
-    for (i=pos+1; i < n; i++) 
-    { 
+    for (i = pos+1; i < n; i++) { 
         key_arr[i-1] = key_arr[i]; 
         p[i] = p[i+1]; 
     } 
-    return  --ptr->n >= (ptr == root ? 1 : min) ? Success : LessKeys; 
+    return --ptr->n >= (ptr == root ? 1 : min) ? Success : LessKeys; 
 }
 
 Key *new_key(char *k) {
@@ -366,8 +372,6 @@ Key *btree_find(Key *key, Node *root)
     printf("Key is not available Key: %s\n", key->k);
     return NULL;
 }/*End of search()*/ 
-
-
 
 Node *btree_delete(Key *key, Node *root) 
 {

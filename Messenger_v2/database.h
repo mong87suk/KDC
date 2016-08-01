@@ -11,9 +11,11 @@
 #define LEN_SIZE                 4
 #define FIELD_SIZE               4
 #define FIELD_I_SIZE             4
+#define FIELD_NUM                8
 
 #define INTEGER_FIELD   0x00000001
-#define STRING_FIELD    0x00000002
+#define KEYWORD_FIELD   0x00000002
+#define STRING_FIELD    0x00000004
 
 typedef struct _Where Where;
 DataBase *database_open(char *name, char *filed_mask);

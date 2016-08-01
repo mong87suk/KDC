@@ -41,7 +41,7 @@ static int database_new_field_mask(char *data_format) {
     field_mask = 0;
 
     len = strlen(data_format);
-    if (len > 8) {
+    if (FIELD_NUM > 8) {
         LOGD("Data Format was wrong\n");
         return 0;
     }
@@ -52,6 +52,10 @@ static int database_new_field_mask(char *data_format) {
 
         if (field == 'i') {
             field_mask = field_mask | ((INTEGER_FIELD) << (FIELD_SIZE * i));
+        }
+
+        if (field == 'k') {
+            field_mask = field_mask | ((KEYWORD_FIELD) << (FIELD_SIZE * i));
         }
 
         if (field == 's') {

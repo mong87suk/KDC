@@ -18,7 +18,6 @@ typedef struct _Node Node;
 Node *btree_insert(Key *key, Node *node); 
 Node *btree_delete(Key *key, Node *root);
 Key *btree_find(Key *key, Node *root); 
-KeyStatus del(Node *ptr, Key *key);
 Key *new_key(char *k);
 void btree_search(Node *root);
 void destroy_key(Key *key);
