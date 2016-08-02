@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 int main(void) {
-    GHashTable *hash = g_hash_table_new(g_str_hash, g_str_equal);
+    GHashTable *hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     g_hash_table_insert(hash, g_strdup("key1"), g_strdup("123"));
     g_hash_table_insert(hash, g_strdup("key2"), g_strdup("456"));
     g_hash_table_insert(hash, g_strdup("key3"), g_strdup("7"));
