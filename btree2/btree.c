@@ -295,13 +295,13 @@ static KeyStatus btree_get_del_result(Node *ptr, Key *key)
 }
 
 Key *new_key(char *k) {
-    Key *key = (Key *) malloc(KEY_SIZE);
+    Key *key = (Key *) malloc(sizeof(Key));
     if (!key) {
         printf("Failed to make buf\n");
         return NULL;
     }
     key-> id = -1;
-    key->k = k;
+    key->k = strdup(k);
 
     return key;
 }

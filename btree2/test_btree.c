@@ -1,23 +1,14 @@
+#include <glib.h>
 #include <stdlib.h> 
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <time.h>
 #include "btree.h"
 
-static char *new_str(char *str) {
-    int len = strlen(str);
-    char *new_str = (char*) calloc(len + 1, sizeof(char));
-    if (!new_str) {
-        printf("Failed to make the buf\n");
-        return NULL;
-    }
-    strcpy(new_str, str);
-    return new_str;    
-}
-
 int main() 
-{ 
-    long int n;
+{
+    //long int n;
     char *str;
     
     Node *root = NULL;
@@ -25,54 +16,91 @@ int main()
 
     char *num = (char *) calloc(3, sizeof(char));
     assert(num);
+    printf("insert start\n");
 
-    for (int i = 0; i < 12; i++) {
-        n = random() % 100;
-        sprintf(num, "%ld", n);
-        str = new_str(num);
+    GHashTable *hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    
+    for (int i = 1; i <= 10000000; i++) {
+        sprintf(num, "%d", i);
         assert(str);
-        key = new_key(str);
+        key = new_key(num);
         assert(key);
         root = btree_insert(key, root);
         assert(root);
+        g_hash_table_insert(hash, g_strdup(num), g_strdup(num));
     }
-    btree_search(root);
+    printf("insert finish\n");
+    //btree_search(root);
 
-    sprintf(num, "%d", 83);
-    str = new_str(num);
-    cmp_key1 = new_key(str);
+    sprintf(num, "%d", 130);
+    cmp_key1 = new_key(num);
+    clock_t a1 = clock();
     key = btree_find(cmp_key1, root);
+    clock_t a2 = clock();
+    printf(" tree time %lf, ", ((double) (a2 - a1)) / (CLOCKS_PER_SEC / 1000000));
+    a1 = clock();
+    str = g_hash_table_lookup(hash, num);
+    a2 = clock();
+    printf("glib time %lf, ", ((double) (a2 - a1)) / (CLOCKS_PER_SEC / 1000000));
+    printf(" glib find_key:%s, ", str);
     assert(key);
     str = btree_get_str(key);
     assert(str);
     assert(strcmp(str, num) == 0);
+    printf(" tree find_key:%s\n", str);
 
-    sprintf(num, "%d", 15);
-    str = new_str(num);
-    cmp_key2 = new_key(str);
+    sprintf(num, "%d", 230);
+    cmp_key2 = new_key(num);
+    a1 = clock();
     key = btree_find(cmp_key2, root);
+    a2 = clock();
+    printf(" tree time %lf, ", ((double) (a2 - a1)) / (CLOCKS_PER_SEC / 1000000));
+    a1 = clock();
+    str = g_hash_table_lookup(hash, num);
+    a2 = clock();
+    printf("glib time %lf, ", ((double) (a2 - a1)) / (CLOCKS_PER_SEC / 1000000));
+    printf(" glib find_key:%s, ", str);
     assert(key);
     str = btree_get_str(key);
     assert(str);
     assert(strcmp(str, num) == 0);
+    printf(" tree find_key:%s\n", str);
 
-    sprintf(num, "%d", 77);
-    str = new_str(num);
-    cmp_key3 = new_key(str);
+    sprintf(num, "%d", 10);
+    cmp_key3 = new_key(num);
+    a1 = clock();
     key = btree_find(cmp_key3, root);
+    a2 = clock();
+    printf(" tree time %lf, ", ((double) (a2 - a1)) / (CLOCKS_PER_SEC / 1000000));
+    a1 = clock();
+    str = g_hash_table_lookup(hash, num);
+    a2 = clock();
+    printf("glib time %lf, ", ((double) (a2 - a1)) / (CLOCKS_PER_SEC / 1000000));
+    printf(" glib find_key:%s, ", str);
     assert(key);
     str = btree_get_str(key);
     assert(str);
     assert(strcmp(str, num) == 0);
+    printf(" tree find_key:%s\n", str);
 
-    sprintf(num, "%d", 93);
-    str = new_str(num);
-    cmp_key4 = new_key(str);
-    key = btree_find(cmp_key4, root);
+
+    sprintf(num, "%d", 10);
+    cmp_key4 = new_key(num);
+    a1 = clock();
+    key = btree_find(cmp_key3, root);
+    a2 = clock();
+    printf(" tree time %lf, ", ((double) (a2 - a1)) / (CLOCKS_PER_SEC / 1000000));
+    a1 = clock();
+    str = g_hash_table_lookup(hash, num);
+    a2 = clock();
+    printf("glib time %lf, ", ((double) (a2 - a1)) / (CLOCKS_PER_SEC / 1000000));
+    printf(" glib find_key:%s, ", str);
     assert(key);
     str = btree_get_str(key);
     assert(str);
     assert(strcmp(str, num) == 0);
+    printf(" tree find_key:%s\n", str);
+
 
     root = btree_delete(cmp_key1, root);
     assert(root);
@@ -82,7 +110,7 @@ int main()
     assert(root);
     root = btree_delete(cmp_key4, root);
     assert(root);
-    btree_search(root);
+    //btree_search(root);
 
     root = btree_insert(cmp_key1, root);
     assert(root);
@@ -92,7 +120,7 @@ int main()
     assert(root);
     root = btree_insert(cmp_key4, root);
     assert(root);
-    btree_search(root); 
+    //btree_search(root); 
 
     return 0; 
 }/*End of main()*/ 

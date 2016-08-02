@@ -16,10 +16,10 @@ CFLAGS +=  -Wall -std=gnu99 -g -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-g
 all: $(TEST_BTREE) $(TEST_GHASH)
 
 $(TEST_BTREE): $(TEST_BTREE_OBJET) 
-	$(CC) -o $(TEST_BTREE) $(TEST_BTREE_OBJET) -lkdc_queue -lkdc_dblinked
+	$(CC) -o $(TEST_BTREE) $(TEST_BTREE_OBJET) -lkdc_queue -lkdc_dblinked -lglib-2.0
 
 $(TEST_GHASH): $(TEST_GHASH_OBJECT)
 	$(CC) -o $(TEST_GHASH) $(TEST_GHASH_OBJECT) -lglib-2.0
 
 clean:
-	$(RM) $(TEST_BTREE) *.o
+	$(RM) $(TEST_BTREE) $(TEST_GHASH) *.o
