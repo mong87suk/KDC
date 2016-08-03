@@ -25,7 +25,9 @@ static Node *new_node() {
 }
 
 static void destroy_node(Node *node) {
-    free(node);
+    if (!node) {
+        free(node);
+    }
 }
 
 static int btree_get_pos(Key *key, Key **key_arr, int n) {
