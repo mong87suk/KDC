@@ -397,7 +397,7 @@ Node *btree_delete(Key *key, Node *root)
 }
 /*End of del()*/
 
-void btree_search(Node *root) {
+void btree_print(Node *root) {
     if (!root) {
         printf("Can't search\n");
         return;

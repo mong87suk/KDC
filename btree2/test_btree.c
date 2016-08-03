@@ -30,7 +30,7 @@ int main()
         g_hash_table_insert(hash, g_strdup(num), g_strdup(num));
     }
     printf("insert finish\n");
-    //btree_search(root);
+    //btree_print(root);
 
     sprintf(num, "%d", 130);
     cmp_key1 = new_key(num);
@@ -110,7 +110,7 @@ int main()
     assert(root);
     root = btree_delete(cmp_key4, root);
     assert(root);
-    //btree_search(root);
+    //btree_print(root);
 
     root = btree_insert(cmp_key1, root);
     assert(root);
@@ -120,7 +120,7 @@ int main()
     assert(root);
     root = btree_insert(cmp_key4, root);
     assert(root);
-    //btree_search(root); 
+    //btree_print(root); 
 
     return 0; 
 }/*End of main()*/ 

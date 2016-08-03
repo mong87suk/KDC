@@ -10,6 +10,12 @@ struct _Node
     Node *right;
     int height;
 };
+
+struct _Tree
+{
+    int index;
+    Node *node;
+};
  
 // A utility function to get height of the tree
 static int tree_height(Node *N)
@@ -83,16 +89,31 @@ static int tree_getBalance(Node *N)
     return tree_height(N->left) - tree_height(N->right);
 }
  
-Node * tree_insert(Node *node, int key)
+ 
+/* Given a non-empty binary search tree, return the node with minimum
+   key value found in that tree. Note that the entire tree does not
+   need to be searched. */
+static Node *tree_minValueNode(Node *node)
+{
+    Node * current = node;
+ 
+    /* loop down to find the leftmost leaf */
+    while (current->left != NULL)
+        current = current->left;
+ 
+    return current;
+}
+
+static Node *tree_insert_internal(Node *node, int key)
 {
     /* 1.  Perform the normal BST rotation */
     if (node == NULL)
         return(newNode(key));
  
     if (key < node->key)
-        node->left  = tree_insert(node->left, key);
+        node->left = tree_insert_internal(node->left, key);
     else
-        node->right = tree_insert(node->right, key);
+        node->right = tree_insert_internal(node->right, key);
  
     /* 2. Update height of this ancestor node */
     node->height = tree_max(tree_height(node->left), tree_height(node->right)) + 1;
@@ -129,21 +150,7 @@ Node * tree_insert(Node *node, int key)
     return node;
 }
  
-/* Given a non-empty binary search tree, return the node with minimum
-   key value found in that tree. Note that the entire tree does not
-   need to be searched. */
-static Node *tree_minValueNode(Node *node)
-{
-    Node * current = node;
- 
-    /* loop down to find the leftmost leaf */
-    while (current->left != NULL)
-        current = current->left;
- 
-    return current;
-}
- 
-Node *tree_delete(Node *root, int key)
+static Node *tree_delete_internal(Node *root, int key)
 {
     // STEP 1: PERFORM STANDARD BST DELETE
  
@@ -153,12 +160,12 @@ Node *tree_delete(Node *root, int key)
     // If the key to be deleted is smaller than the root's key,
     // then it lies in left subtree
     if (key < root->key)
-        root->left = tree_delete(root->left, key);
+        root->left = tree_delete_internal(root->left, key);
  
     // If the key to be deleted is greater than the root's key,
     // then it lies in right subtree
     else if( key > root->key )
-        root->right = tree_delete(root->right, key);
+        root->right = tree_delete_internal(root->right, key);
  
     // if key is same as root's key, then This is the node
     // to be deleted
@@ -190,7 +197,7 @@ Node *tree_delete(Node *root, int key)
             root->key = temp->key;
  
             // Delete the inorder successor
-            root->right = tree_delete(root->right, temp->key);
+            root->right = tree_delete_internal(root->right, temp->key);
         }
     }
  
@@ -232,12 +239,85 @@ Node *tree_delete(Node *root, int key)
     return root;
 }
 
-void preOrder(Node *root)
+static void preOrder_internal(Node *root)
 {
     if(root != NULL)
     {
         printf("%d ", root->key);
-        preOrder(root->left);
-        preOrder(root->right);
+        preOrder_internal(root->left);
+        preOrder_internal(root->right);
+    }
+}
+
+static void tree_print_node(Node *node) {
+    sprintf(&child_addrs[0], "%p,", node->left);
+    sprintf(&child_addrs[1], "%p,", node->right);
+        
+    printf("{key:[%-40s]\tmyAddr:%p\tchildAddrs:[%s]}\n", node->key, node, child_addrs);
+}
+
+Tree *new_tree(int index) {
+    if (index < 0) {
+        printf("Can't new tree\n");
+        return NULL;
+    }
+
+    Tree *tree = (Tree*) malloc(sizeof(Tree));
+    tree->node = NULL;
+    tree->index = index;
+
+    return tree;
+}
+
+void tree_delete(Tree *tree, int key) {
+    if (!tree) {
+        printf("Can't delete\n");
+        return;
+    }
+
+    tree->node = tree_delete_internal(tree->node, key);
+}
+
+void tree_insert(Tree *tree, int key) {
+    if (!tree) {
+        printf("Can't insert key\n");
+        return;
+    }
+
+    tree->node = tree_insert_internal(tree->node, key);
+}
+
+void preOrder(Tree *tree) {
+    preOrder_internal(tree->node);
+}
+
+void tree_print(Tree *tree) {
+    if (!tree) {
+        printf("Can't print tree\n");
+        return;
+    }
+    Queue* q = queue_new();
+    if (!q) {
+        printf("Failed to new queue\n");
+    }
+    int result = push(q, tree->node);
+    if (!result) {
+        printf("Failed to push\n");
+    }
+
+    Node *node = NULL;
+    int i = 0;
+    printf("--------------------------print start------------------------------------\n");
+    while (empty(q)) {
+        node = (Node *) pop(q);
+        tree_print_node(node);
+        i = 0;
+        if (node->left) {
+            push(q, node->left);
+        }
+        while (node->p[i] != NULL) {
+            push(q, node->p[i]);
+            i++;
+        }
     }
 }

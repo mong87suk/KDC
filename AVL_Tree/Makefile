@@ -1,25 +1,18 @@
-TEST_BTREE = test_btree
+TEST_TREE = test_tree
 
-TEST_BTREE_OBJET = \
-					btree.o\
-					test_btree.o\
+TEST_TREE_OBJET = \
+				   tree.o\
+				   test_tree.o\
 
-TEST_GHASH = test_ghash
-
-TEST_GHASH_OBJECT = g_hash_test.o
-
-CFLAGS +=  -Wall -std=gnu99 -g -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include
+CFLAGS += -Wall -std=gnu99 -g
 
 .c.o:
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-all: $(TEST_BTREE) $(TEST_GHASH)
+all: $(TEST_TREE)
 
-$(TEST_BTREE): $(TEST_BTREE_OBJET) 
-	$(CC) -o $(TEST_BTREE) $(TEST_BTREE_OBJET) -lkdc_queue -lkdc_dblinked -lglib-2.0
-
-$(TEST_GHASH): $(TEST_GHASH_OBJECT)
-	$(CC) -o $(TEST_GHASH) $(TEST_GHASH_OBJECT) -lglib-2.0
+$(TEST_TREE): $(TEST_TREE_OBJET) 
+	$(CC) -o $(TEST_TREE) $(TEST_TREE_OBJET)
 
 clean:
-	$(RM) $(TEST_BTREE) $(TEST_GHASH) *.o
+	$(RM) $(TEST_TREE) *.o

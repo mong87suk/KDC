@@ -2,8 +2,11 @@
 #define __TREE_H__
 
 typedef struct _Node Node;
+typedef struct _Tree Tree;
 
-Node *tree_insert(Node *node, int key);
-Node *tree_deleteNode(Node *root, int key);
+void tree_insert(Tree *tree, int key);
+void tree_delete(Tree *tree, int key);
+void preOrder(Tree *tree);
+Tree *new_tree(int index);
 
 #endif
