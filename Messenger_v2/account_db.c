@@ -70,11 +70,10 @@ static Stream_Buf *account_db_new_entry(Account *account, int field_mask) {
     
     for (int i = count; i >= 0; i--) {
         column = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;
-        if (column == STRING_FIELD) {
+        if (column == STRING_FIELD || column == KEYWORD_FIELD) {
             switch(index) {
             case USER_ID:
                 str = account_get_user_id(account);
-                LOGD("user_id:%s\n", str);
                 len = strlen(str);
                 stream_buf = account_db_new_account_info_buf(str, len);
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
@@ -88,7 +87,6 @@ static Stream_Buf *account_db_new_entry(Account *account, int field_mask) {
 
             case PW:
                 str = account_get_pw(account);
-                LOGD("user_id:%s\n", str);
                 len = strlen(str);
                 stream_buf = account_db_new_account_info_buf(str, len);
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
@@ -102,7 +100,6 @@ static Stream_Buf *account_db_new_entry(Account *account, int field_mask) {
 
             case EMAIL:
                 str = account_get_email(account);
-                LOGD("user_id:%s\n", str);
                 len = strlen(str);
                 stream_buf = account_db_new_account_info_buf(str, len);
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
@@ -116,7 +113,6 @@ static Stream_Buf *account_db_new_entry(Account *account, int field_mask) {
 
             case CONFIRM:
                 str = account_get_confirm(account);
-                LOGD("user_id:%s\n", str);
                 len = strlen(str);
                 stream_buf = account_db_new_account_info_buf(str, len);
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
@@ -130,7 +126,6 @@ static Stream_Buf *account_db_new_entry(Account *account, int field_mask) {
 
             case MOBILE:
                 str = account_get_mobile(account);
-                LOGD("user_id:%s\n", str);
                 len = strlen(str);
                 stream_buf = account_db_new_account_info_buf(str, len);
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
@@ -148,7 +143,6 @@ static Stream_Buf *account_db_new_entry(Account *account, int field_mask) {
         }
         index++;
     }
-
     stream_buf = new_stream_buf(buf_size);
     BOOLEAN result = utils_append_data_to_buf(stream_buf_list, stream_buf);
     utils_destroy_stream_buf_list(stream_buf_list);
@@ -193,7 +187,7 @@ static Account *account_db_new_account(Stream_Buf *entry, int field_mask) {
     
     for (int i = count; i >= 0; i--) {
         column = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;
-        if (column == STRING_FIELD) {
+        if (column == STRING_FIELD || column == KEYWORD_FIELD) {
             switch(index) {
             case USER_ID:
                 memcpy(&len, buf, sizeof(int));
@@ -204,7 +198,7 @@ static Account *account_db_new_account(Stream_Buf *entry, int field_mask) {
                 buf += sizeof(int);
 
                 user_id = (char*) malloc(len + 1);
-                if (!id) {
+                if (!user_id) {
                     LOGD("Failed to make buf\n");
                     return NULL;
                 }
@@ -377,12 +371,12 @@ int account_db_add_account(AccountDB *account_db, Account *account) {
     where_list = d_list_append(where_list, where);
     if (!where_list) {
         LOGD("Failed to append the where\n");
-        destory_where(where);
+        destroy_where(where);
         return -1;
     }
 
     DList *entry_list = database_search(account_db->database, where_list);
-    destory_where_list(where_list);
+    destroy_where_list(where_list);
     if (entry_list) {
         LOGD("Can't make the account\n");
         destroy_matched_list(entry_list);
@@ -400,11 +394,12 @@ int account_db_add_account(AccountDB *account_db, Account *account) {
         LOGD("Failed to new entry\n");
         return -1;
     }
-
-    int entry_id = database_add_entry(account_db->database, entry);
+    int id = database_get_last_id(account_db->database);
+    
+    id = database_add_entry(account_db->database, entry, id);
     destroy_stream_buf(entry);
 
-    return entry_id;
+    return id;
 }
 
 DList *account_db_get_accounts(AccountDB *account_db) {
@@ -450,73 +445,6 @@ DList *account_db_get_accounts(AccountDB *account_db) {
     return account_list;
 }
 
-Account *account_db_find_account(AccountDB *account_db, char *user_id) {
-    if (!account_db || !user_id) {
-        LOGD("Can't find the account\n");
-        return NULL;
-    }
-
-    if (strlen(user_id) == 0) {
-        LOGD("Can't find the account\n");
-        return NULL;
-    }
-
-    int field_mask = database_get_field_mask(account_db->database);
-    if (field_mask == 0) {
-        LOGD("Field mask was wrong\n");
-        return NULL;
-    }
-
-    Where *where = new_where(USER_ID, user_id);
-    if (!where) {
-        LOGD("Failed to make the where\n");
-        return NULL;
-    }
-
-    DList *where_list = NULL;
-    where_list = d_list_append(where_list, where);
-    if (!where_list) {
-        LOGD("Failed to append the where\n");
-        destory_where(where);
-        return NULL;
-    }
-
-    DList *entry_list = database_search(account_db->database, where_list);
-    destory_where_list(where_list);
-    if (!entry_list) {
-        LOGD("Can't find the account\n");
-        return NULL;
-    }
-
-    int len = d_list_length(entry_list);
-    if (len == 0 || len > 1) {
-        LOGD("Can't find the account\n");
-        destroy_matched_list(entry_list);
-        return NULL;
-    }
-
-    EntryPoint *entry_point = (EntryPoint *) d_list_get_data(entry_list);
-    destroy_matched_list(entry_list);
-    if (!entry_point) {
-        LOGD("Can't find the account\n");
-        return NULL;
-    }
-    
-    Stream_Buf *entry = entry_point_get_value(entry_point);
-    if (!entry) {
-        LOGD("Failed to get the entry\n");
-    }
-
-    Account *account = account_db_new_account(entry, field_mask);
-    destroy_stream_buf(entry);
-    if (!account) {
-        LOGD("Failed to make the account\n");
-        return NULL;
-    }
-    
-    return account;
-}
-
 int account_db_delete_account(AccountDB *account_db, char *user_id, char *pw) {
     if (!account_db || !account_db->database || !user_id || !pw) {
         LOGD("Can't delete the account\n");
@@ -537,20 +465,20 @@ int account_db_delete_account(AccountDB *account_db, char *user_id, char *pw) {
     where_list = d_list_append(where_list, where);
     if (!where_list) {
         LOGD("Failed to add the where\n");
-        destory_where(where);
+        destroy_where(where);
         return -1;
     }
 
     where = new_where(PW, pw);
     if (!where) {
         LOGD("Failed to new where\n");
-        destory_where_list(where_list);
+        destroy_where_list(where_list);
         return -1;
     }
     where_list = d_list_append(where_list, where);
     
     DList *entry_list = database_search(account_db->database, where_list);
-    destory_where_list(where_list);
+    destroy_where_list(where_list);
     if (!entry_list) {
         LOGD("The UserID is not present\n");
         return -1;
@@ -620,25 +548,25 @@ char *account_db_get_pw(AccountDB *account_db, char *user_id, char *confirm) {
     where_list = d_list_append(where_list, where);
     if (!where_list) {
         LOGD("Failed to add the where\n");
-        destory_where(where);
+        destroy_where(where);
         return NULL;
     }
 
     where = new_where(CONFIRM, confirm);
     if (!where) {
         LOGD("Failed to new where\n");
-        destory_where_list(where_list);
+        destroy_where_list(where_list);
         return NULL;
     }
     where_list = d_list_append(where_list, where);
     if (!where_list) {
         LOGD("Failed to add the where\n");
-        destory_where_list(where_list);
+        destroy_where_list(where_list);
         return NULL;
     }
 
     DList *entry_list = database_search(account_db->database, where_list);
-    destory_where_list(where_list);
+    destroy_where_list(where_list);
     if (!entry_list) {
         LOGD("The UserID is not present\n");
         return NULL;
@@ -669,15 +597,13 @@ char *account_db_get_pw(AccountDB *account_db, char *user_id, char *confirm) {
         return NULL;
     }
 
-    len = 0;
-    memcpy(&len, buf, sizeof(len));
+    len = strlen(buf);
     if (len < 0) {
         LOGD("Can't find the password\n");
         destroy_stream_buf(stream_buf);
         return NULL;
     }
-    buf += sizeof(len);
-
+    
     char *pw = (char*) malloc(len + 1);
     memset(pw, 0, len + 1);
     strncpy(pw, buf, len);
@@ -686,76 +612,74 @@ char *account_db_get_pw(AccountDB *account_db, char *user_id, char *confirm) {
     return pw;
 }
 
-Account *account_db_identify_account(AccountDB *account_db, char *user_id, char *pw) {
+int account_db_identify_account(AccountDB *account_db, char *user_id, char *pw) {
     if (!account_db || !account_db->database || !user_id || !pw) {
         LOGD("Can't identify the account\n");
-        return NULL;
+        return -1;
     }
 
     if (!strlen(user_id) || !strlen(pw)) {
         LOGD("Can't identify the account\n");
-        return NULL;
+        return -1;
     }
 
     Where *where = new_where(USER_ID, user_id);
     if (!where) {
         LOGD("Failed to new where\n");
-        return NULL;
+        return -1;
     }
     DList *where_list = NULL;
     where_list = d_list_append(where_list, where);
     if (!where_list) {
         LOGD("Failed to add the where\n");
-        destory_where(where);
-        return NULL;
+        destroy_where(where);
+        return -1;
     }
 
     where = new_where(PW, pw);
     if (!where) {
         LOGD("Failed to new where\n");
-        destory_where_list(where_list);
-        return NULL;
+        destroy_where_list(where_list);
+        return -1;
     }
     where_list = d_list_append(where_list, where);
 
     DList *entry_list = database_search(account_db->database, where_list);
-    destory_where_list(where_list);
+    destroy_where_list(where_list);
     if (!entry_list) {
         LOGD("The account which matches UserID and PW is not present\n");
-        return NULL;
+        return -1;
     }
 
     int len = d_list_length(entry_list);
     destroy_matched_list(entry_list);
     if (len == 0 || len > 1) {
         LOGD("Failed to identify the account\n");
-        return NULL;
+        return -1;
     }
 
     EntryPoint *entry_point = d_list_get_data(entry_list);
     if (!entry_point) {
         LOGD("Failed to get the entry_point\n");
-        return NULL;
+        return -1;
     }
 
-    int field_mask = database_get_field_mask(account_db->database);
-    if (field_mask == 0) {
-        LOGD("Field mask was wrong\n");
-        return NULL;
-    }
-
-    Stream_Buf *entry = entry_point_get_value(entry_point);
-    if (!entry) {
-        LOGD("Failed to get the entry\n");
-        return NULL;
-    }
-
-    Account *account = account_db_new_account(entry, field_mask);
-    destroy_stream_buf(entry);
-    if (!account) {
-        LOGD("Failed to make the account\n");
-        return NULL;
-    }
-
-    return account;
+    return entry_point_get_id(entry_point);
 }
+
+Stream_Buf *account_db_get_data(AccountDB *account_db, int id, int data_type) {
+    if (!account_db || id < 0) {
+        LOGD("Can't get the data\n");
+        return NULL;
+    }
+
+    EntryPoint *entry = database_find_entry_point(account_db->database, id);
+    if (!entry) {
+        LOGD("Can't get the data");
+        return NULL;
+    }
+    int field_type = 0;
+    return utils_get_data(account_db->database, entry, data_type, &field_type);
+}
+
+

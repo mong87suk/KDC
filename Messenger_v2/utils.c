@@ -34,6 +34,7 @@ static void utils_append_data(void *data, void *user_data) {
     }
 
     copy_n = stream_buf_get_position(data_stream_buf);
+    LOGD("copy_n:%d\n", copy_n);
     memcpy(dest, src, copy_n);
     stream_buf_increase_pos(user_data_stream_buf, copy_n);
 }
@@ -235,6 +236,118 @@ char *utils_create_path(char *name, char *file_name) {
     return path;
 }
 
+Stream_Buf *utils_get_data_with_buf(int field_mask, Stream_Buf *entry, int column, int *field_type) {
+    if (!entry) {
+        LOGD("Can't get buf with entry\n");
+        return NULL;
+    }
+    int count = utils_get_colum_count(field_mask);
+    if (count <= 0) {
+        LOGD("Failed to get colum count\n");
+        return NULL;
+    }
+    count -= 1;
+
+    Stream_Buf *stream_buf = NULL;
+    int index = 0;
+    char *buf = NULL;
+    int n_byte = 0;
+    BOOLEAN result;
+    int len = 0;
+    int size = 0;
+    char *entry_buf = stream_buf_get_buf(entry);
+    if (!entry_buf) {
+        LOGD("Can't get buf with entry\n");
+        return NULL;
+    }
+
+    for (int i = count; i >= 0; i--) {
+        int column_type = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;
+        switch (column_type) {
+            case INTEGER_FIELD:
+                if (column == index) {
+                    stream_buf = new_stream_buf(FIELD_I_SIZE);
+                    if (!stream_buf) {
+                        LOGD("Failed to make the StreamBuf\n");
+                        return NULL;
+                    }
+                    buf = stream_buf_get_buf(stream_buf);
+                    if (!buf) {
+                        LOGD("Failed to get the buf\n");
+                        return NULL;
+                    }
+                    memcpy(buf, entry_buf, stream_buf_get_available_size(stream_buf));
+                    if (n_byte != FIELD_I_SIZE) {
+                        LOGD("Failed to write n byte\n");
+                        return NULL;
+                    }
+                    result = stream_buf_increase_pos(stream_buf, n_byte);
+                    if (result == FALSE) {
+                        destroy_stream_buf(stream_buf);
+                        return NULL;
+                    }
+                } else {
+                    entry_buf += FIELD_I_SIZE;
+                    result = stream_buf_increase_pos(entry, FIELD_I_SIZE);
+                    if (result == FALSE) {
+                        return NULL;
+                    }
+                }
+                break;
+
+            case STRING_FIELD: case KEYWORD_FIELD:
+                len = 0;
+                memcpy(&len, entry_buf, sizeof(len));
+                entry_buf += sizeof(len);
+                if (len < 0) {
+                    LOGD("len value was wrong\n");
+                    return NULL;
+                }
+
+                if (column == index) {
+                    size = len + 1 + sizeof(len);
+                    stream_buf = new_stream_buf(size);
+                    if (!stream_buf) {
+                        LOGD("Failed to make the StreamBuf\n");
+                        return NULL;
+                    }
+
+                    buf = stream_buf_get_buf(stream_buf);
+                    if (!buf) {
+                        LOGD("Failed to get the buf\n");
+                        return NULL;
+                    }
+
+                    memcpy(buf, entry_buf, len);
+                    result = stream_buf_increase_pos(stream_buf, len);
+                    if (result == FALSE) {
+                        destroy_stream_buf(stream_buf);
+                        stream_buf = NULL;
+                    }
+
+                } else {
+                    entry_buf += sizeof(len);
+                }
+                break;
+
+            case 0:
+                break;
+
+            default:
+                LOGD("field mask was wrong\n");
+                return NULL;
+        }
+
+        if (column == index) {
+            *field_type = column_type;
+            break;
+        }
+        index++;
+    }
+
+    return stream_buf;
+}
+
 Stream_Buf *utils_get_data(DataBase *database, EntryPoint *entry_point, int column_index, int *field_type) {
     int field_mask, count, column, index;
     int fd, offset, n_byte;
@@ -329,7 +442,7 @@ Stream_Buf *utils_get_data(DataBase *database, EntryPoint *entry_point, int colu
                 }
                 break;
 
-            case STRING_FIELD:
+            case STRING_FIELD: case KEYWORD_FIELD:
                 n_byte = utils_read_n_byte(fd, &len, sizeof(len));
                 if (n_byte != sizeof(len)) {
                     LOGD("Failed to write n byte\n");
@@ -340,9 +453,9 @@ Stream_Buf *utils_get_data(DataBase *database, EntryPoint *entry_point, int colu
                     LOGD("len value was wrong\n");
                     return NULL;
                 }
-                
+
                 if (column_index == index) {
-                    size = len + 1 + sizeof(len);
+                    size = len + 1;
                     stream_buf = new_stream_buf(size);
                     if (!stream_buf) {
                         LOGD("Failed to make the StreamBuf\n");
@@ -354,25 +467,18 @@ Stream_Buf *utils_get_data(DataBase *database, EntryPoint *entry_point, int colu
                         LOGD("Failed to get the buf\n");
                         return NULL;
                     }
-                    memset(buf, 0, size);
-                    memcpy(buf, &len, sizeof(len));
-                    result = stream_buf_increase_pos(stream_buf, LEN_SIZE);
-                    if (result == FALSE) {
-                        destroy_stream_buf(stream_buf);
-                        stream_buf = NULL;
-                    }
-
+        
                     n_byte = utils_read_n_byte(fd, stream_buf_get_available(stream_buf), len);
                     if (n_byte != len) {
                         LOGD("Failed to write n byte\n");
                         return NULL;
                     }
+
                     result = stream_buf_increase_pos(stream_buf, len);
                     if (result == FALSE) {
                         destroy_stream_buf(stream_buf);
                         stream_buf = NULL;
                     }
-
                 } else {
                     if (lseek(fd, len, SEEK_CUR) < 0) {
                         LOGD("Failed to locate the offset\n");

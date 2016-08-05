@@ -44,7 +44,7 @@ struct _Client {
 };
 
 struct _Online {
-    Account *account;
+    int id;
     int fd;
 };
 
@@ -53,6 +53,12 @@ struct _UserData {
     Server *server;
     Client *client;
     Packet *packet;
+};
+
+struct _LoginData {
+    DList *login_list;
+    Server *server;
+    int len;
 };
 
 static void server_free_message(void *data) {
@@ -392,7 +398,7 @@ static void destroy_online(void *online) {
     free_online(online);
 }
 
-static Online *new_online(int fd, Account *account) {
+static Online *new_online(int fd, int id) {
     Online *online = (Online*) malloc(sizeof(Online));
     if (!online) {
         LOGD("Failed to new Online\n");
@@ -400,7 +406,7 @@ static Online *new_online(int fd, Account *account) {
     }
 
     online->fd = fd;
-    online->account = account;
+    online->id = id;
 
     return online;
 }
@@ -411,28 +417,23 @@ static int server_match_online(void *data1, void *data2) {
     }
     Online *online = (Online*) data1;
 
-    int id = *((int *) data2);
-    int cmp_id = account_get_id(online->account);
+    int fd = *((int *) data2);
+    int cmp_fd = online->fd;
 
-    if (id == cmp_id) {
+    if (fd == cmp_fd) {
         return 1;
     } else {
         return 0;
     }
 }
 
-static int server_add_online(Server *server, Account *account, int fd) {
-    int id = account_get_id(account);
-    if (id < 0) {
-        LOGD("Faild to get the id\n");
-        return ERROR_LOGIN;
-    }
-    if (server->online_list && d_list_find_data(server->online_list, server_match_online, &id)) {
+static int server_add_online(Server *server, int id, int fd) {
+    if (server->online_list && d_list_find_data(server->online_list, server_match_online, &fd)) {
         LOGD("Failed to add online\n");
         return ERROR_LOGIN;
     }
 
-    Online *online = new_online(fd, account);
+    Online *online = new_online(fd, id);
     if (!online) {
         LOGD("Failed to new online\n");
         return ERROR_LOGIN;
@@ -445,40 +446,33 @@ static int server_add_online(Server *server, Account *account, int fd) {
 static int server_login(Server *server, char *payload, int fd) {
     char *user_id = server_new_account_info(&payload);
     char *pw = server_new_account_info(&payload);
- 
-    Account *account = account_db_identify_account(server->account_db, user_id, pw);
+    LOGD("user_id:%s pw:%s\n", user_id, pw);
+    int id = account_db_identify_account(server->account_db, user_id, pw);
     free(user_id);
     free(pw);
 
-    if (!account) {
+    if (id < 0) {
         LOGD("Failed to login\n");
         return ERROR_LOGIN;
     }
 
-    int result = server_add_online(server, account, fd);
+    int result = server_add_online(server, id, fd);
     return result;
 }
 
-static BOOLEAN server_delete_online(Server *server, Account *account, int fd) {
+static BOOLEAN server_delete_online(Server *server, int id, int fd) {
     if (!server->online_list) {
         LOGD("Can't delete the Online\n");
         return FALSE;
     }
 
-    int id = account_get_id(account);
-    if (id < 0) {
-        LOGD("Failed to get the id\n");
-        return FALSE;
-    }
-
-    Online *online = (Online *) d_list_find_data(server->online_list, server_match_online, &id);
+    Online *online = (Online *) d_list_find_data(server->online_list, server_match_online, &fd);
     if (!online) {
         LOGD("Can't delete the Online\n");
         return FALSE;
     }
 
-    int cmp_id = account_get_id(online->account);
-    if (cmp_id != id || online->fd != fd) {
+    if (online->id != id || online->fd != fd) {
         LOGD("Can't delete the Online\n");
         return FALSE;
     }
@@ -491,16 +485,16 @@ static int server_logout(Server *server, char *payload, int fd) {
     char *user_id = server_new_account_info(&payload);
     char *pw = server_new_account_info(&payload);
 
-    Account *account = account_db_identify_account(server->account_db, user_id, pw);
+    int id = account_db_identify_account(server->account_db, user_id, pw);
     free(user_id);
     free(pw);
 
-     if (!account) {
+     if (id < 0) {
         LOGD("Failed to logout\n");
         return ERROR_LOGOUT;
     }
     
-    BOOLEAN result = server_delete_online(server, account, fd);
+    BOOLEAN result = server_delete_online(server, id, fd);
     if (result == FALSE) {
         return ERROR_LOGOUT;
     }
@@ -1128,6 +1122,128 @@ static int server_check_overread(Stream_Buf *r_stream_buf, int packet_len) {
     return (pos - packet_len);
 }
 
+static Packet *server_new_res_packet(Stream_Buf *stream_buf, short op_code) {
+    long int payload_len = (long int) stream_buf_get_position(stream_buf);
+    if (!payload_len) {
+        LOGD("Can't make res_packet\n");
+    } 
+    int packet_len = HEADER_SIZE + payload_len + TAIL_SIZE;
+    LOGD("packet_len:%d\n", packet_len);
+    char *packet_buf = (char *) malloc(packet_len);
+    memset(packet_buf, 0, packet_len);
+    if (!packet_buf) {
+        LOGD("Failed to maked the packet_buf\n");
+        return NULL;
+    }
+
+    char *payload = stream_buf_get_buf(stream_buf);
+    char *tmp = packet_buf;
+    char sop = SOP;
+    char eop = EOP;
+
+    memcpy(tmp, &sop, sizeof(sop));
+    tmp += sizeof(sop);
+
+    memcpy(tmp, &op_code, sizeof(op_code));
+    tmp += sizeof(op_code);
+
+    LOGD("payload_len:%ld\n", payload_len);
+    LOGD("payload_size:%ld\n", sizeof(payload_len));
+    memcpy(tmp, &payload_len, sizeof(payload_len));
+    tmp += sizeof(payload_len);
+
+    memcpy(tmp, payload, payload_len);
+    tmp += payload_len;
+
+    memcpy(tmp, &eop, sizeof(eop));
+    tmp += sizeof(eop);
+
+    short check_sum = packet_create_checksum(NULL, packet_buf, packet_len);
+    if (check_sum == -1) {
+        LOGD("Failed to do check_sum\n");
+        free(packet_buf);
+        return NULL;
+    }
+    memcpy(tmp, &check_sum, sizeof(check_sum));
+
+    Packet *res_packet = new_packet(packet_buf);
+    if (!res_packet) {
+        LOGD("Failed to make the Packet\n");
+        return NULL;
+    }
+
+    free(packet_buf);
+    destroy_stream_buf(stream_buf);
+    
+    LOGD("Finished server_create_res_packet()\n");
+    return res_packet;
+}
+
+static void new_login_list_buf(void *data, void *user_data) {
+    Online *online = (Online *) data;
+    struct _LoginData *loginData = (struct _LoginData *) user_data;
+
+    Stream_Buf *stream_buf = account_db_get_data(loginData->server->account_db, online->id, USER_ID);
+    if (!stream_buf) {
+        LOGD("Failed to new login list\n");
+        return;
+    }
+
+    int len = stream_buf_get_position(stream_buf);
+    Stream_Buf *id = new_stream_buf(len + LEN_SIZE);
+    if (!id) {
+        LOGD("Failed to new buf\n");
+        destroy_stream_buf(stream_buf);
+        return;
+    }
+    
+    memcpy(stream_buf_get_available(id), &len, LEN_SIZE);
+    stream_buf_increase_pos(id, LEN_SIZE);
+    strncpy(stream_buf_get_available(id), stream_buf_get_buf(stream_buf), len);
+    stream_buf_increase_pos(id, len);
+    destroy_stream_buf(stream_buf);
+    loginData->len += (len + LEN_SIZE);
+    loginData->login_list = d_list_append(loginData->login_list, id);
+}
+
+static Packet *new_res_login_list_packet(Server *server, short op_code) { 
+    struct _LoginData loginData;
+
+    loginData.server = server;
+    loginData.login_list = NULL;
+    loginData.len = 0;
+
+    d_list_foreach(server->online_list, new_login_list_buf, &loginData);
+    int count = d_list_length(loginData.login_list);
+    Stream_Buf *stream_buf = NULL;
+    LOGD("count:%d\n", count);
+    if (count) {
+        stream_buf = new_stream_buf(loginData.len + LEN_SIZE);
+        if (!stream_buf) {
+            LOGD("Failed to new login list\n");
+            utils_destroy_stream_buf_list(loginData.login_list);
+            return NULL;
+        }
+        memcpy(stream_buf_get_available(stream_buf), &count, LEN_SIZE);
+        BOOLEAN result = stream_buf_increase_pos(stream_buf, LEN_SIZE);
+        if (result == FALSE) {
+            LOGD("Failed to new login list\n");
+            destroy_stream_buf(stream_buf);
+        }
+        LOGD("pos:%d\n", stream_buf_get_position(stream_buf));
+        result = utils_append_data_to_buf(loginData.login_list, stream_buf);
+        utils_destroy_stream_buf_list(loginData.login_list);
+    } else {
+        stream_buf = new_stream_buf(LEN_SIZE + 1);
+        if (!stream_buf) {
+            LOGD("Failed to new login list\n");
+            return NULL;
+        } 
+    }
+
+    return server_new_res_packet(stream_buf, op_code);
+}
+
 static void server_handle_req_packet(Server *server, Client *client, Packet *req_packet) {
     short op_code;
     int count;
@@ -1233,6 +1349,15 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
             destroy_packet(res_packet);
             break;
 
+        case REQ_LOG_IN_LIST:
+            LOGD("REQ_LOG_IN_LIST\n");
+            res_packet = new_res_login_list_packet(server, RES_LOG_IN_LIST);
+            result = server_send_packet_to_client(res_packet, client, read_pos);
+            if (result == FALSE) {
+                LOGD("Failed to send packet to client\n");
+            }
+            destroy_packet(res_packet);
+            break;
         default:
             LOGD("OPCODE is wrong\n");
             return;

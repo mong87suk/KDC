@@ -147,7 +147,7 @@ Stream_Buf *entry_point_get_value(EntryPoint *entry_point) {
                 stream_buf_list = d_list_append(stream_buf_list, stream_buf);
                 break;
 
-            case STRING_FIELD:
+            case STRING_FIELD: case KEYWORD_FIELD:
                 stream_buf = new_stream_buf(sizeof(int));
                 if (!stream_buf) {
                     LOGD("Failed to make the StreamBuf\n");

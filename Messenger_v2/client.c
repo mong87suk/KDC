@@ -229,6 +229,28 @@ static void client_print_result(char *payload) {
     LOGD("op_code:%x result_type:%d \n", op_code, result_type);
 }
 
+static void client_print_id(char *payload, int len) {
+    for (int i = 0; i <len; i++) {
+        printf("%c", payload[i]);
+    }
+    printf("\n");
+}
+
+static void client_print_loggin_list(char *payload) {
+    int count = 0;
+    int len = 0;
+    memcpy(&count, payload, sizeof(count));
+    LOGD("count:%d\n", count);
+    payload += sizeof(count);
+
+    for (int i = 0; i < count; i++) {
+        memcpy(&len, payload, LEN_SIZE);
+        payload += LEN_SIZE;
+        client_print_id(payload, len);
+        payload += len;
+    }
+}
+
 static void client_handle_res_events(Client *client, int fd) {
     char *buf, *payload;
     Stream_Buf *stream_buf, *r_stream_buf, *c_stream_buf;
@@ -493,6 +515,10 @@ static void client_handle_res_events(Client *client, int fd) {
             LOGD("RES_RESULT\n");
             client_print_result(payload);
             break;
+        case RES_LOG_IN_LIST:
+            LOGD("RES_LOG_IN_LIST\n");
+            client_print_loggin_list(payload);
+            break;
         default:
             LOGD("OP_CODE was wrong\n");
     }
@@ -747,7 +773,7 @@ static Packet *client_create_req_packet(char *input_str, short op_code, int inpu
     }
 
     switch(op_code) {
-        case REQ_ALL_MSG:
+        case REQ_ALL_MSG: case REQ_LOG_IN_LIST:
             if (input_strlen != REQ_STR_MIN_LEN) {
                 LOGD("Request was wrong. Please recommand\n");
                 return NULL;
@@ -845,6 +871,7 @@ static Packet *client_create_req_packet(char *input_str, short op_code, int inpu
                 return NULL;
             }
             break;
+
 
         default:
             LOGD("Request number is 0x%02X Please recommand\n", op_code);

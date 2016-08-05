@@ -96,7 +96,7 @@ static void index_file_write_entry_point(void *data, void *user_data) {
     }
 }
 
-int index_file_get_k_coulmn_count(IndexFile *index_file, int field_mask) {
+static int index_file_get_k_coulmn_count(IndexFile *index_file, int field_mask) {
     int count = utils_get_colum_count(field_mask);
     if (count < 0) {
         LOGD("Failed to get column_count\n");
@@ -104,13 +104,15 @@ int index_file_get_k_coulmn_count(IndexFile *index_file, int field_mask) {
     }
 
     int k_count = 0;
+    int column = 0;
     count--;
     for (int i = count; i >= 0; i--) {
-        int column = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;    
-        if (column == KEYWORD_FIELD) {
-            index_file->tree[k_count] = new_tree(k_count);
+        int column_type = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;    
+        if (column_type == KEYWORD_FIELD) {
+            index_file->tree[column] = new_tree(k_count);
             k_count++;
         }
+        column++;
     }
 
     return k_count;   
@@ -162,7 +164,6 @@ static BOOLEAN index_file_load(IndexFile *index_file, DataBase *database) {
         return FALSE;
     }
     index_file->last_id = last_id;
-
     n_byte = utils_read_n_byte(fd, &entry_count, read_size);
     if (n_byte != read_size) {
         LOGD("Failed to read the size\n");
@@ -174,7 +175,6 @@ static BOOLEAN index_file_load(IndexFile *index_file, DataBase *database) {
     
     offset = 0;
     for (i = 0; i < entry_count; i++) {
-
         n_byte = utils_read_n_byte(fd, &id , sizeof(id));
         if (n_byte != sizeof(id)  || id < 0) {
             LOGD("Failed to read the entry point\n");
@@ -256,7 +256,7 @@ IndexFile *index_file_open(char *name, int field_mask, DataBase *database) {
         return NULL;
     }
 
-    index_file = (IndexFile*) malloc(sizeof(IndexFile));
+    index_file = (IndexFile*) calloc(1, sizeof(IndexFile));
     if (!index_file) {
         LOGD("Faield to make the Index File\n");
         if (close(fd) < 0) {
@@ -308,7 +308,7 @@ IndexFile *index_file_open(char *name, int field_mask, DataBase *database) {
             return NULL;
         }
     } else {
-        index_file->last_id = 0;
+        index_file->last_id = -1;
         index_file->entry_count = 0;
         index_file->entry_list = NULL;
         index_file->field_mask = field_mask;
@@ -393,8 +393,15 @@ void index_file_delete_all(IndexFile *index_file) {
 
     d_list_free(index_file->entry_list, index_file_free_entry);
     index_file->entry_list = NULL;
-    index_file->last_id = 0;
+    index_file->last_id = -1;
     index_file->entry_count = 0;
+
+    for (int i = 0; i < FIELD_NUM; i++) {
+        Tree *tree = index_file->tree[i];
+        if (tree) {
+            destroy_tree(tree);
+        }
+    }
 
     result = index_file_update(index_file);
 
@@ -412,7 +419,7 @@ int index_file_get_last_id(IndexFile *index_file) {
         return -1;
     }
 
-    return index_file->last_id;
+    return index_file->last_id + 1;
 }
 
 BOOLEAN index_file_set_last_id(IndexFile *index_file, int last_id) {
@@ -484,7 +491,7 @@ void index_file_delete_entry(IndexFile *index_file, EntryPoint *entry_point) {
 
         if (!list) {
             LOGD("Last entry has been removed\n");
-            index_file->last_id = 0;
+            index_file->last_id = -1;
         } else {
             last = (EntryPoint*) d_list_get_data(list);
             id = entry_point_get_id(last);
@@ -539,6 +546,61 @@ int index_file_get_entry_id(IndexFile *index_file, char *key, int column) {
     }
 
     int id = tree_find(index_file->tree[column], key);
-
     return id;
+}
+
+BOOLEAN index_file_insert_keyword(IndexFile *index_file, int column, char *key, int id) {
+    if (!index_file || !key) {
+        LOGD("Can't insert this keyword\n");
+        return FALSE;
+    }
+
+    if (!strlen(key)) {
+        LOGD("Can't insert this keyword\n");
+        return FALSE;
+    }
+
+    if (!index_file->tree[column]) {
+        index_file->tree[column] = new_tree(column);
+    }
+    tree_insert(index_file->tree[column], key, id);
+    return TRUE;
+}
+
+BOOLEAN index_file_update_keyword(IndexFile *index_file, int column, char *key, int id) {
+    if (!index_file || !key) {
+        LOGD("Can't insert this keyword\n");
+        return FALSE;
+    }
+
+    if (!strlen(key)) {
+        LOGD("Can't insert this keyword\n");
+        return FALSE;
+    }
+
+    if (!index_file->tree[column]) {
+        index_file->tree[column] = new_tree(column);
+    }
+
+    tree_update(index_file->tree[column], key, id);
+    return TRUE;
+}
+
+void index_file_delete_keyword(IndexFile *index_file, int column, char *key) {
+    if (!index_file || !key) {
+        LOGD("Can't insert this keyword\n");
+        return;
+    }
+
+    if (!strlen(key)) {
+        LOGD("Can't insert this keyword\n");
+        return;
+    }
+
+    if (!index_file->tree[column]) {
+        LOGD("Can't delete this keyowrd\n");
+        return;
+    }
+
+    tree_delete(index_file->tree[column], key);
 }

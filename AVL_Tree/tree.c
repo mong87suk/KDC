@@ -395,3 +395,12 @@ int tree_get_index(Tree *tree) {
 
     return tree->index;
 }
+
+void tree_update(Tree *tree, char *key, int id) {
+    if (tree) {
+        printf("Can't update key\n");
+        return;
+    }
+    tree_delete(tree, key);
+    tree_insert(tree, key, id);
+}

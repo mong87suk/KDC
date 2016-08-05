@@ -11,6 +11,8 @@
 #define REQ_LOG_IN             (char) 0x08
 #define REQ_LOG_OUT            (char) 0x09
 #define RES_RESULT             (char) 0x0A
+#define REQ_LOG_IN_LIST        (char) 0x0B
+#define RES_LOG_IN_LIST        (char) 0x0C
 #define REQ_DELETE_ACCOUNT     (char) 0x0D
 
 #define OP_CODE_NUM             '0'

@@ -143,9 +143,10 @@ Packet *convert_buf_to_packet(char *buf) {
     buf += sizeof(sop);
 
     memcpy(&op_code, buf, sizeof(op_code));
+    LOGD("op_code:%d\n", op_code);
     result = packet_set_op_code(packet, op_code);
     buf += sizeof(op_code);
-
+    payload_len = 0;
     memcpy(&payload_len, buf, sizeof(payload_len));
     result = packet_set_payload_len(packet, payload_len);
     buf += sizeof(payload_len);

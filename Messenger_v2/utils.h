@@ -20,4 +20,5 @@ BOOLEAN utils_append_data_to_buf(DList *stream_buf_list, Stream_Buf *stream_buf)
 void utils_destroy_stream_buf_list(DList *stream_buf_list);
 char *utils_create_path(char *name, char *file_name);
 Stream_Buf *utils_get_data(DataBase *database, EntryPoint *entry_point, int column_index, int *field_type);
+Stream_Buf *utils_get_data_with_buf(int field_mask, Stream_Buf *entry, int column, int *field_type);
 #endif

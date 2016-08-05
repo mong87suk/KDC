@@ -26,43 +26,32 @@ int main() {
 
     int count = account_db_get_account_count(account_db);
     int id = account_db_add_account(account_db, account1);
-    assert(id > 0);
     assert(account_db_get_account_count(account_db) == (count + 1));
     
     BOOLEAN result = account_set_id(account1, id);
     assert(result > 0);
 
-    assert(account_db_identify_account(account_db, user_id, "222") == NULL);
-    assert(account_db_identify_account(account_db, user_id, pw));
-
-    Account *account2 = account_db_find_account(account_db, user_id);
-    assert(account_get_id(account2) == id);
-    
-    assert(strcmp(account_get_user_id(account2), user_id) == 0);
-    assert(strcmp(account_get_pw(account2), pw) == 0);
-    assert(strcmp(account_get_email(account2), email) == 0);
-    assert(strcmp(account_get_confirm(account2), confirm) == 0);
-    assert(strcmp(account_get_mobile(account2), mobile) == 0);
+    assert(account_db_identify_account(account_db, user_id, "222") == -1);
+    assert(account_db_identify_account(account_db, user_id, pw) == 0);
 
     id = account_db_delete_account(account_db, user_id, pw);
-    assert(id > 0);
     assert(account_db_get_account_count(account_db) == count);
 
     count = account_db_get_account_count(account_db);
     id = account_db_add_account(account_db, account1);
-    assert(id > 0);
     assert(account_db_get_account_count(account_db) == (count + 1));
 
     count = account_db_get_account_count(account_db);
     id = account_db_add_account(account_db, account1);
     assert(id < 0);
     assert(account_db_get_account_count(account_db) == count);
-
+    
     error_pw = "qwer223";
     id = account_db_delete_account(account_db, user_id, error_pw);
+    
     assert(id < 0);
+    
     assert(account_db_get_account_count(account_db) == count);
-
     char *cmp_pw = account_db_get_pw(account_db, user_id, "2222");
     assert(cmp_pw == NULL);
 
@@ -71,13 +60,11 @@ int main() {
     assert(strcmp(cmp_pw, pw) == 0);
     free(cmp_pw);
     result = account_db_delete_account(account_db, user_id, pw);
-    assert(result == TRUE); 
     assert(account_db_get_account_count(account_db) == (count - 1));
 
     account_db_delete_all(account_db);
     assert(account_db_get_account_count(account_db) == 0);
 
     destroy_account(account1);
-    destroy_account(account2);
     return 0;
 }

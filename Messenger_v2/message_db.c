@@ -266,8 +266,13 @@ int message_db_add_mesg(MessageDB *mesg_db, Message *mesg) {
         LOGD("Failed to new entry\n");
         return -1;
     }
+    id = database_get_last_id(mesg_db->database);
+    if (id < 0) {
+        LOGD("Failed to get the id\n");
+        return -1;
+    }
 
-    id = database_add_entry(mesg_db->database, entry);
+    id = database_add_entry(mesg_db->database, entry, id);
     destroy_stream_buf(entry);
     if (id < 0) {
         LOGD("Failed to add_entry\n");
@@ -340,66 +345,4 @@ int message_db_get_message_count(MessageDB *mesg_db) {
     }
 
     return count;
-}
-
-int message_db_update_str(MessageDB *mesg_db, int id, char *new_str, int str_len) {
-    EntryPoint *entry_point;
-    Message *mesg;
-    Stream_Buf *entry;
-    int field_mask;
-    char *old_str;
-    BOOLEAN result;
-
-    if (!mesg_db) {
-        LOGD("There is nothing to point the MessageDB\n");
-        return FALSE;
-    }
-
-    entry_point = database_find_entry_point(mesg_db->database, id);
-    if (!entry_point) {
-        LOGD("There is nothing to point the EntryPoint\n");
-        return FALSE;
-    }
-
-    entry = entry_point_get_value(entry_point);
-    field_mask = database_get_field_mask(mesg_db->database);
-    mesg = message_db_new_message(entry, field_mask);
-    destroy_stream_buf(entry);
-    if (!mesg) {
-        LOGD("Failed to new message\n");
-        return FALSE;
-    }
-
-    old_str = message_get_str(mesg);
-    if (!old_str) {
-        LOGD("Failed to get the str\n");
-        destroy_mesg(mesg);
-        return FALSE;
-    }
-    free(old_str);
-
-    result = message_set_str(mesg, new_str);
-    if (!result) {
-        LOGD("Failed to set str\n");
-        destroy_mesg(mesg);
-        return FALSE;
-    }
-
-    result = message_set_str_len(mesg, str_len);
-    if (!result) {
-        LOGD("Failed to set str_len\n");
-        destroy_mesg(mesg);
-        return FALSE;
-    }
-
-    entry = message_db_new_entry(mesg, field_mask);
-    destroy_mesg(mesg);
-    result = database_update_entry(mesg_db->database, entry_point, entry, id);
-    destroy_stream_buf(entry);
-    if (!result) {
-        LOGD("Failed to add_entry\n");
-        return FALSE;
-    }
-
-    return TRUE;
 }

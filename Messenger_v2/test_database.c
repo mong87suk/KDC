@@ -39,19 +39,16 @@ static void test_database_cmp_str(DataBase *database, int id, char *test_str) {
     stream_buf = utils_get_data(database, entry_point, 1, &field_type);
     assert(stream_buf);
     buf = stream_buf_get_buf(stream_buf);
-    buf += sizeof(LEN_SIZE);
     assert(strcmp(buf, test_str) == 0);
 
     destroy_stream_buf(stream_buf);
 }
 
 int main() {
-    char *data_format = "is";
-    char *file_name = "test";
+    char *data_format = "is", *file_name = "test";
     char *buf, *str;
     int num, len;
     int count;
-    int result;
     int id;
     int column = 1;
     int id1, id2, id3;
@@ -90,17 +87,17 @@ int main() {
     stream_buf_increase_pos(stream_buf, len);
 
     count = database_get_entry_count(database);
-    id = database_add_entry(database, stream_buf);
-    assert(id > 0);
-
+    id = database_get_last_id(database);
+    id = database_add_entry(database, stream_buf, id);
+    
     assert(database_get_entry_count(database) == (count + 1));
 
     database_delete_entry(database, id);
     assert(database_get_entry_count(database) == count);
-
-    id = database_add_entry(database, stream_buf);
-    assert(id > 0);
-
+    
+    id = database_get_last_id(database);
+    id = database_add_entry(database, stream_buf, id);
+    
     entry_point = database_find_entry_point(database, id);
     assert(entry_point);
     assert(entry_point_get_id(entry_point) == id);
@@ -122,16 +119,18 @@ int main() {
     memcpy(stream_buf_get_available(update_stream_buf), str, len);
     stream_buf_increase_pos(update_stream_buf, len);
 
-    result = database_update_entry(database, entry_point, update_stream_buf, 1);
-    assert(result == TRUE);
+    id = database_update_entry(database, entry_point, update_stream_buf);
     count = database_get_entry_count(database);
-    id1 = database_add_entry(database, stream_buf);
+    id = database_get_last_id(database);
+    id1 = database_add_entry(database, stream_buf, id);
     assert(id1);
     test_database_cmp_str(database, id1, test_str);
-    id2 = database_add_entry(database, stream_buf);
+    id = database_get_last_id(database);
+    id2 = database_add_entry(database, stream_buf, id);
     assert(id2);
     test_database_cmp_str(database, id2, test_str);
-    id3 = database_add_entry(database, update_stream_buf);
+    id = database_get_last_id(database);
+    id3 = database_add_entry(database, update_stream_buf, id);
     assert(id3);
     test_database_cmp_str(database, id3, str);
     assert(database_get_entry_count(database) == (count + 3));
@@ -139,12 +138,15 @@ int main() {
     database_delete_all(database);
     assert(database_get_entry_count(database) == 0);
 
-    id1 = database_add_entry(database, stream_buf);
-    assert(id1);
-    id2 = database_add_entry(database, stream_buf);
-    assert(id2);
-    id3 = database_add_entry(database, update_stream_buf);
-    assert(id3);
+    id = database_get_last_id(database);
+    id1 = database_add_entry(database, stream_buf, id);
+    assert(id == id1);
+    id = database_get_last_id(database);
+    id2 = database_add_entry(database, stream_buf, id);
+    assert(id == id2);
+    id = database_get_last_id(database);
+    id3 = database_add_entry(database, update_stream_buf, id);
+    assert(id == id3);
 
     where = new_where(column, test_str);
     assert(where);
@@ -169,10 +171,11 @@ int main() {
     destroy_stream_buf(stream_buf);
     destroy_stream_buf(update_stream_buf);
 
-    destory_where_list(where_list);
+    destroy_where_list(where_list);
     database_delete_all(database);
     database_close(database);
 
+    
     data_format = "ik";
     file_name = "test2";
     database = database_open(file_name, data_format);
@@ -196,12 +199,13 @@ int main() {
     stream_buf_increase_pos(stream_buf, len);
 
     count = database_get_entry_count(database);
-    id = database_add_entry(database, stream_buf);
-    assert(id > 0);
+    id = database_get_last_id(database);
+    id = database_add_entry(database, stream_buf, id);
 
     assert(database_get_entry_count(database) == (count + 1));
-
+    
     column = 1;
+    where_list = NULL;
     where = new_where(column, str);
     assert(where);
     where_list = d_list_append(where_list, where);
@@ -209,6 +213,7 @@ int main() {
     entry_list = database_search(database, where_list);
     assert(entry_list);
     assert(d_list_length(entry_list) == 1);
+    
 
     column = 0;
     num = 1;
@@ -220,6 +225,11 @@ int main() {
     entry_list = database_search(database, where_list);
     assert(entry_list);
     assert(d_list_length(entry_list) == 1);
+
+    destroy_stream_buf(stream_buf);
+    destroy_where_list(where_list);
+    database_delete_all(database);
+    database_close(database);
 
     return 0;
 }

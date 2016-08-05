@@ -21,5 +21,8 @@ void index_file_delete_entry(IndexFile *index_file, EntryPoint *entry_point);
 DList* index_file_get_list(IndexFile *index_file);
 EntryPoint *index_file_nth_entry(IndexFile *index_file, int nth);
 int index_file_get_entry_id(IndexFile *index_file, char *key, int column);
+BOOLEAN index_file_insert_keyword(IndexFile *index_file, int column, char *key, int id);
+BOOLEAN index_file_update_keyword(IndexFile *index_file, int column, char *key, int id);
+void index_file_delete_keyword(IndexFile *index_file, int column, char *key);
 
 #endif
