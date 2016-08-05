@@ -1,8 +1,9 @@
 #ifndef __ACCOUNT_DB_H__
 #define __ACCOUNT_DB_H__
 
+#include <kdc/DBLinkedList.h>
+
 #include "account.h"
-#include "DBLinkedList.h"
 
 #define ACCOUNT_DATA_FORMAT "sssss"
 #define ACCOUNT_DB          "account_db"

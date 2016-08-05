@@ -4,7 +4,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "DBLinkedList.h"
+#include <kdc/DBLinkedList.h>
+
 #include "database.h"
 #include "index_file.h"
 #include "data_file.h"
@@ -31,6 +32,19 @@ struct _SearchData {
     DList *where_list;
     EntryPoint *entry_point;
     BOOLEAN result;
+};
+
+struct _FieldList {
+    DList *k_list;
+    DList *other_list;
+    int field_mask;
+    int coulumn_count;
+};
+
+struct _CompData {
+    DataBase *database;
+    BOOLEAN boolean;
+    int id;
 };
 
 static int database_new_field_mask(char *data_format) {
@@ -90,7 +104,6 @@ Stream_Buf *database_get_data(DataBase *database, EntryPoint *entry_point, int c
         return NULL;
     }
 
-    index = 0;
     offset = entry_point_get_offset(entry_point);
     if (offset < 0) {
         LOGD("Failed to get the offset\n");
@@ -127,7 +140,7 @@ Stream_Buf *database_get_data(DataBase *database, EntryPoint *entry_point, int c
     count -= 1;
 
     stream_buf = NULL;
-
+    index = 0;
     for (i = count; i >= 0; i--) {
         column = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;
         switch (column) {
@@ -227,13 +240,25 @@ Stream_Buf *database_get_data(DataBase *database, EntryPoint *entry_point, int c
     return stream_buf;
 }
 
+static void destroy_k_list(DList *k_list) {
+    if (k_list) {
+        d_list_remove(k_list, NULL);    
+    }
+}
+
+static void destroy_other_list(DList *other_list) {
+    if (other_list) {
+        d_list_remove(other_list, NULL);
+    }
+}
+
 static void database_comp_data(void *data, void *user_data) {
     int field_type;
     int i;
     Stream_Buf *comp_data;
     char *buf;
     
-    struct _SearchData *search_data;
+    struct _SearchData *search_data; 
     Where *where;
     
     if (!data) {
@@ -248,7 +273,7 @@ static void database_comp_data(void *data, void *user_data) {
         return;
     }
 
-    comp_data = database_get_data(search_data->database, search_data->entry_point, where->column, &field_type);
+    comp_data = utils_get_data(search_data->database, search_data->entry_point, where->column, &field_type);
     buf = stream_buf_get_buf(comp_data);
     i = 0;
 
@@ -300,6 +325,37 @@ static void database_match_data(void *data, void *user_data) {
 
 static void free_where(Where *where) {
     free(where);
+}
+
+static int database_get_field(int field_mask, int column_index, int count) {
+    int index = 0;
+    int field_type = 0;
+    count--;
+    for (int i = count; i >= 0; i--) {
+        int column = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;    
+        if (column_index == index) {
+            field_type = column;
+            break;
+        }
+        index++;
+    }
+    return field_type;
+} 
+
+static void database_compare_field(void *data, void *user_data) {
+    Where *where = (Where *) data;
+    struct _FieldList *fieldList = (struct _FieldList *) user_data;
+    int field = database_get_field(fieldList->field_mask, where->column, fieldList->coulumn_count);
+
+    if (field == KEYWORD_FIELD) {
+        fieldList->k_list = d_list_append(fieldList->k_list, where);
+    } else {
+        fieldList->other_list = d_list_append(fieldList->other_list, where);
+    }
+}
+
+static void database_order_where_list(DList *where_list, struct _FieldList *fieldList) {
+    d_list_foreach(where_list, database_compare_field, fieldList);
 }
 
 Where *new_where(int column,void *data) {
@@ -390,7 +446,7 @@ void database_delete_all(DataBase *database) {
     index_file_update(database->index_file);
 }
 
-int database_add_entry(DataBase *database, Stream_Buf *entry) {
+int database_add_entry(DataBase *database, Stream_Buf *entry, int id, int colum) {
     EntryPoint *entry_point;
     int offset, id;
     BOOLEAN result;
@@ -406,38 +462,44 @@ int database_add_entry(DataBase *database, Stream_Buf *entry) {
         return -1;
     }
 
-    id = index_file_get_last_id(database->index_file);
-    if (id < 0) {
-        LOGD("Failed to create the entry point id\n");
-        return -1;
-    }
-
-    id += 1;
-
-    entry_point = new_entry_point(id, offset, database);
+    entry_point = index_file_find_entry(database->index_file, id);
     if (!entry_point) {
-        LOGD("Failed to make the Entry_Point\n");
-        return -1;
+        id = index_file_get_last_id(database->index_file);
+        if (id < 0) {
+            LOGD("Failed to create the entry point id\n");
+            return -1;
+        }
+
+        id += 1;
+
+        entry_point = new_entry_point(id, offset, database);
+        if (!entry_point) {
+            LOGD("Failed to make the Entry_Point\n");
+            return -1;
+        }
+
+        result = index_file_set_last_id(database->index_file, id);
+        if (!result) {
+            LOGD("Failed to set last id\n");
+            destroy_entry_point(entry_point);
+            return -1;
+        }
+
+        result = index_file_add_entry(database->index_file, entry_point);
+        if (!result) {
+            LOGD("Failed to add EntryPoint\n");
+            destroy_entry_point(entry_point);
+            return -1;
+        }
+    } else {
+        entry_point_set_offset(entry_point, offset);
     }
 
     result = data_file_write_entry(database->data_file, id, entry);
     if (!result) {
         LOGD("Failed to set value\n");
         destroy_entry_point(entry_point);
-        return -1;
-    }
-
-    result = index_file_set_last_id(database->index_file, id);
-    if (!result) {
-        LOGD("Failed to set last id\n");
-        destroy_entry_point(entry_point);
-        return -1;
-    }
-
-    result = index_file_add_entry(database->index_file, entry_point);
-    if (!result) {
-        LOGD("Failed to add EntryPoint\n");
-        destroy_entry_point(entry_point);
+        index_file_delete_entry(database->index_file, entry_point);
         return -1;
     }
 
@@ -445,6 +507,7 @@ int database_add_entry(DataBase *database, Stream_Buf *entry) {
     if (!result) {
         LOGD("Failed to update indexfile\n");
         destroy_entry_point(entry_point);
+        index_file_delete_entry(database->index_file, entry_point);
         return -1;
     }
 
@@ -629,27 +692,87 @@ int database_get_data_file_fd(DataBase *database) {
     return fd;
 }
 
+void database_comp_k_field(void *data, void *user_data) {
+    Where *where = (Where *)data;
+    struct _CompData *comp_data = (struct _CompData *) user_data;
+
+    int id = index_file_get_entry_id(comp_data->database->index_file, (char*) where->data, where->column);
+    if (comp_data->id == -1) {
+        comp_data->id = id;
+    } else {
+        if (comp_data->id != id) {
+            comp_data->boolean = FALSE;
+        }
+    }
+}
+
+static EntryPoint* database_get_entry_point(DataBase *database, DList *k_list) {
+    EntryPoint *entry_point = NULL;
+    struct _CompData comp_data;
+
+    comp_data.database = database;
+    comp_data.boolean = TRUE;
+
+    d_list_foreach(k_list, database_comp_k_field, &comp_data);
+    if (comp_data.boolean == TRUE) {
+        entry_point = database_find_entry_point(database, comp_data.id); 
+    }
+
+    return entry_point;
+}
+
 DList *database_search(DataBase *database, DList *where_list) {
-    DList *entry_list;
+    DList *entry_list = NULL;
+    EntryPoint *entry_point = NULL;
     struct _SearchData search_data;
+    struct _FieldList fieldList;
 
     if (!database || !where_list) {
         LOGD("Can't search a data\n");
         return NULL;
     }
 
-    entry_list = database_get_entry_list(database);
-    if (!entry_list) {
+    int count = utils_get_colum_count(database->field_mask);
+    if (count < 0) {
         LOGD("Can't search a data\n");
         return NULL;
     }
 
+    fieldList.k_list = NULL;
+    fieldList.other_list = NULL;
+    fieldList.field_mask = database->field_mask;
+    fieldList.coulumn_count = count;
+    database_order_where_list(where_list, &fieldList);
+
+    if (fieldList.k_list) {
+        entry_point = database_get_entry_point(database, fieldList.k_list);
+    }
+
+    if (entry_point) {
+        entry_list = d_list_append(entry_list, entry_point);
+    } else {
+        entry_list = database_get_entry_list(database);
+    }
+
+    if (!entry_list) {
+        LOGD("Can't search a data\n");
+        destroy_k_list(fieldList.k_list);
+        destroy_other_list(fieldList.other_list);
+        return NULL;
+    }
+
+    if (!fieldList.other_list) {
+        return entry_list;
+    }
+    
     search_data.database = database;
     search_data.matched_entry = NULL;
-    search_data.where_list = where_list;
+    search_data.where_list = fieldList.other_list;
     
     d_list_foreach(entry_list, database_match_data, &search_data);
-
+    destroy_k_list(fieldList.k_list);
+    destroy_other_list(fieldList.other_list);
+    
     return search_data.matched_entry;
 }
 
@@ -674,4 +797,13 @@ void destroy_matched_list(DList *matched_entry) {
         LOGD("Can't destroy the matched list\n");
     }
     d_list_remove(matched_entry, NULL);
+}
+
+DataFile *database_get_datafile(DataBase *database) {
+    if (!database) {
+        LOGD("Can't get the datafile\n");
+        return NULL;
+    }
+
+    return database->data_file;
 }

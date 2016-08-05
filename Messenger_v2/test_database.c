@@ -4,12 +4,13 @@
 #include <string.h>
 #include <assert.h>
 
+#include <kdc/DBLinkedList.h>
+
 #include "utils.h"
 #include "database.h"
 #include "data_file.h"
 #include "index_file.h"
 #include "entry_point.h"
-#include "DBLinkedList.h"
 #include "stream_buf.h"
 #include "message_db.h"
 
@@ -35,7 +36,7 @@ static void test_database_cmp_str(DataBase *database, int id, char *test_str) {
     entry_point = database_find_entry_point(database, id);
     assert(entry_point);
     field_type = STRING_FIELD;
-    stream_buf = database_get_data(database, entry_point, 1, &field_type);
+    stream_buf = utils_get_data(database, entry_point, 1, &field_type);
     assert(stream_buf);
     buf = stream_buf_get_buf(stream_buf);
     buf += sizeof(LEN_SIZE);
@@ -70,7 +71,7 @@ int main() {
 
     database = database_open(file_name, data_format);
     assert(database);
-    assert(database_get_field_mask(database) == 0x12);
+    assert(database_get_field_mask(database) == 0x14);
 
     stream_buf = new_stream_buf(12);
     assert(stream_buf);
@@ -123,7 +124,6 @@ int main() {
 
     result = database_update_entry(database, entry_point, update_stream_buf, 1);
     assert(result == TRUE);
-
     count = database_get_entry_count(database);
     id1 = database_add_entry(database, stream_buf);
     assert(id1);
@@ -168,6 +168,58 @@ int main() {
 
     destroy_stream_buf(stream_buf);
     destroy_stream_buf(update_stream_buf);
+
+    destory_where_list(where_list);
+    database_delete_all(database);
+    database_close(database);
+
+    data_format = "ik";
+    file_name = "test2";
+    database = database_open(file_name, data_format);
+    assert(database);
+    assert(database_get_field_mask(database) == 0x12);
+
+    stream_buf = new_stream_buf(12);
+    assert(stream_buf);
+    buf = stream_buf_get_buf(stream_buf);
+    assert(buf);
+    num = 1;
+    len = 4;
+    str = "aaaa";
+    memcpy(stream_buf_get_available(stream_buf), &num, sizeof(num));
+    stream_buf_increase_pos(stream_buf, sizeof(num));
+
+    memcpy(stream_buf_get_available(stream_buf), &len, sizeof(len));
+    stream_buf_increase_pos(stream_buf, sizeof(len));
+
+    memcpy(stream_buf_get_available(stream_buf), str, len);
+    stream_buf_increase_pos(stream_buf, len);
+
+    count = database_get_entry_count(database);
+    id = database_add_entry(database, stream_buf);
+    assert(id > 0);
+
+    assert(database_get_entry_count(database) == (count + 1));
+
+    column = 1;
+    where = new_where(column, str);
+    assert(where);
+    where_list = d_list_append(where_list, where);
+    assert(where_list);
+    entry_list = database_search(database, where_list);
+    assert(entry_list);
+    assert(d_list_length(entry_list) == 1);
+
+    column = 0;
+    num = 1;
+    where = new_where(column, &num);
+    assert(where);
+    where_list = d_list_append(where_list, where);
+    assert(where_list);
+    assert(d_list_length(where_list) == 2);
+    entry_list = database_search(database, where_list);
+    assert(entry_list);
+    assert(d_list_length(entry_list) == 1);
 
     return 0;
 }

@@ -6,11 +6,15 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include <kdc/DBLinkedList.h>
+
 #include "message.h"
 #include "utils.h"
 #include "stream_buf.h"
-#include "DBLinkedList.h"
 #include "m_boolean.h"
+#include "database.h"
+#include "data_file.h"
+#include "entry_point.h"
 
 static void utils_append_data(void *data, void *user_data) {
     char *dest, *src;
@@ -229,4 +233,169 @@ char *utils_create_path(char *name, char *file_name) {
 
     strncpy(path + home_pathlen + 1, full_name, full_namelen);
     return path;
+}
+
+Stream_Buf *utils_get_data(DataBase *database, EntryPoint *entry_point, int column_index, int *field_type) {
+    int field_mask, count, column, index;
+    int fd, offset, n_byte;
+    int id, entry_id;
+    int len, size;
+    int i;
+    char *buf;
+    
+    BOOLEAN result;
+    Stream_Buf *stream_buf;
+
+    if (!database || !entry_point || column_index < 0) {
+        LOGD("Can't get the data\n");
+        return NULL;
+    }
+
+    field_mask = database_get_field_mask(database);
+    
+    DataFile *data_file = database_get_datafile(database);
+    if (!data_file) {
+        return NULL;
+    }
+
+    fd = data_file_get_fd(data_file);
+    if (fd < 0) {
+        LOGD("Failed to get the fd\n");
+        return NULL;
+    }
+
+    offset = entry_point_get_offset(entry_point);
+    if (offset < 0) {
+        LOGD("Failed to get the offset\n");
+        return NULL; 
+    }
+
+    if (offset != lseek(fd, offset, SEEK_SET)) {
+        LOGD("Failed to set offset\n");
+        return NULL;
+    }
+
+    n_byte = utils_read_n_byte(fd, &id, sizeof(id));
+    if (n_byte != sizeof(id)) {
+        LOGD("Failed to read id\n");
+        return NULL;
+    }
+
+    entry_id = entry_point_get_id(entry_point);
+    if (entry_id < 0) {
+        LOGD("Failed to get the id\n");
+        return NULL;
+    }
+
+    if (id != entry_id) {
+        LOGD("the entry id was wrong\n");
+        return NULL;
+    }
+
+    count = utils_get_colum_count(field_mask);
+    if (count <= 0) {
+        LOGD("Failed to get colum count\n");
+        return NULL;
+    }
+    count -= 1;
+
+    stream_buf = NULL;
+    index = 0;
+    for (i = count; i >= 0; i--) {
+        column = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;
+        switch (column) {
+            case INTEGER_FIELD:
+                if (column_index == index) {
+                    stream_buf = new_stream_buf(FIELD_I_SIZE);
+                    if (!stream_buf) {
+                        LOGD("Failed to make the StreamBuf\n");
+                        return NULL;
+                    }
+                    n_byte = utils_read_n_byte(fd, stream_buf_get_available(stream_buf), stream_buf_get_available_size(stream_buf));
+                    if (n_byte != FIELD_I_SIZE) {
+                        LOGD("Failed to write n byte\n");
+                        return NULL;
+                    }
+                    result = stream_buf_increase_pos(stream_buf, n_byte);
+                    if (result == FALSE) {
+                        destroy_stream_buf(stream_buf);
+                        stream_buf = NULL;
+                    }
+                } else {
+                    if (lseek(fd, FIELD_I_SIZE, SEEK_CUR) < 0) {
+                        LOGD("Failed to locate the offset\n");
+                        return NULL;
+                    }
+                }
+                break;
+
+            case STRING_FIELD:
+                n_byte = utils_read_n_byte(fd, &len, sizeof(len));
+                if (n_byte != sizeof(len)) {
+                    LOGD("Failed to write n byte\n");
+                    return NULL;
+                }
+
+                if (len < 0) {
+                    LOGD("len value was wrong\n");
+                    return NULL;
+                }
+                
+                if (column_index == index) {
+                    size = len + 1 + sizeof(len);
+                    stream_buf = new_stream_buf(size);
+                    if (!stream_buf) {
+                        LOGD("Failed to make the StreamBuf\n");
+                        return NULL;
+                    }
+
+                    buf = stream_buf_get_buf(stream_buf);
+                    if (!buf) {
+                        LOGD("Failed to get the buf\n");
+                        return NULL;
+                    }
+                    memset(buf, 0, size);
+                    memcpy(buf, &len, sizeof(len));
+                    result = stream_buf_increase_pos(stream_buf, LEN_SIZE);
+                    if (result == FALSE) {
+                        destroy_stream_buf(stream_buf);
+                        stream_buf = NULL;
+                    }
+
+                    n_byte = utils_read_n_byte(fd, stream_buf_get_available(stream_buf), len);
+                    if (n_byte != len) {
+                        LOGD("Failed to write n byte\n");
+                        return NULL;
+                    }
+                    result = stream_buf_increase_pos(stream_buf, len);
+                    if (result == FALSE) {
+                        destroy_stream_buf(stream_buf);
+                        stream_buf = NULL;
+                    }
+
+                } else {
+                    if (lseek(fd, len, SEEK_CUR) < 0) {
+                        LOGD("Failed to locate the offset\n");
+                        return NULL;
+                    }
+                }
+                break;
+
+            case 0:
+                break;
+
+            default:
+                LOGD("field mask was wrong\n");
+                return NULL;
+        }
+
+        if (column_index == index) {
+            *field_type = column;
+            break;
+        }
+
+        index++;
+    }
+
+    return stream_buf;
 }

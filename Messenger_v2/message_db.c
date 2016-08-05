@@ -3,12 +3,13 @@
 #include <time.h>
 #include <string.h>
 
+#include <kdc/DBLinkedList.h>
+
 #include "message_db.h"
 #include "message.h"
 #include "database.h"
 #include "utils.h"
 #include "entry_point.h"
-#include "DBLinkedList.h"
 #include "m_boolean.h"
 
 struct _MessageDB {

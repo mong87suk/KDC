@@ -2,11 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <kdc/DBLinkedList.h>
+
 #include "account_db.h"
 #include "account.h"
 #include "database.h"
 #include "utils.h"
-#include "DBLinkedList.h"
 #include "stream_buf.h"
 #include "entry_point.h"
 
@@ -657,7 +658,7 @@ char *account_db_get_pw(AccountDB *account_db, char *user_id, char *confirm) {
     }
 
     int field_type;
-    Stream_Buf *stream_buf = database_get_data(account_db->database, entry_point, PW, &field_type);
+    Stream_Buf *stream_buf = utils_get_data(account_db->database, entry_point, PW, &field_type);
     if (!stream_buf || field_type != STRING_FIELD) {
         return NULL;
     }

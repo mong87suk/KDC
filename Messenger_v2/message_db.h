@@ -1,8 +1,9 @@
 #ifndef __MESSAGE_DB__
 #define __MESSAGE_DB__
 
+#include <kdc/DBLinkedList.h>
+
 #include "message.h"
-#include "DBLinkedList.h"
 
 #define MEESAGE_DB                      "message_db"
 #define MESSAGE_DB_DATA_FORMAT          "is"  

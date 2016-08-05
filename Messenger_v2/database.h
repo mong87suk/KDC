@@ -1,11 +1,13 @@
 #ifndef __DATABASE_H__
 #define __DATABASE_H__
 
+#include <kdc/DBLinkedList.h>
+
 #include "mesg_type.h"
 #include "stream_buf.h"
-#include "DBLinkedList.h"
 #include "m_boolean.h"
 #include "stream_buf.h"
+#include "data_file.h"
 
 #define ID_SIZE                  4
 #define LEN_SIZE                 4
@@ -33,8 +35,8 @@ int database_get_data_file_fd(DataBase *database);
 EntryPoint *database_nth_entry_point(DataBase *database, int nth);
 DList *database_search(DataBase *database, DList *where_list);
 Where *new_where(int column,void *data);
-Stream_Buf *database_get_data(DataBase *database, EntryPoint *entry_point, int column_index, int *field_type);
 void destory_where(void *where);
 void destory_where_list(DList *where_list);
 void destroy_matched_list(DList *matched_entry);
+DataFile *database_get_datafile(DataBase *database);
 #endif

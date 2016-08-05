@@ -384,4 +384,14 @@ void destroy_tree(Tree *tree) {
     }
 
     destroy_internel(tree->node); 
+    free(tree);
+}
+
+int tree_get_index(Tree *tree) {
+    if (!tree) {
+        printf("Can't get index\n");
+        return -1;
+    }
+
+    return tree->index;
 }

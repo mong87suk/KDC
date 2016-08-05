@@ -13,5 +13,6 @@ void tree_print(Tree *tree);
 int tree_find(Tree *tree, char *key);
 Tree *new_tree(int index);
 void destroy_tree(Tree *tree);
+int tree_get_index(Tree *tree);
 
 #endif

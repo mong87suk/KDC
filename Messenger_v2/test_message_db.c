@@ -3,9 +3,10 @@
 #include <time.h>
 #include <string.h>
 
+#include <kdc/DBLinkedList.h>
+
 #include "message.h"
 #include "message_db.h"
-#include "DBLinkedList.h"
 #include "utils.h"
 
 static void free_message(void *data) {

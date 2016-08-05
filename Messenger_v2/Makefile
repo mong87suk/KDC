@@ -1,7 +1,5 @@
 .SUFFIXES: .c.o
 
-DBLINKED_LIST = DBLinkedList
-
 SERVER_MAIN = server_main
 
 CLIENT_MAIN = client_main
@@ -15,12 +13,6 @@ TEST_WATCHER_LOOPER = test_watcher_looper
 TEST_ACCOUNT_DB = test_account_db
 
 TEST_MESSAGE_DB = test_message_db
-
-DBLINKED_LIST_SOURCE = ../chapter3/DBLinkedList/DBLinkedList.c
-
-INC = -I../chapter3/DBLinkedList/
-
-DBLINKED_LIST_OBJECT = DBLinkedList.o
 
 SERVER_MAIN_OBJECT = \
 					stream_buf.o\
@@ -42,6 +34,10 @@ SERVER_MAIN_OBJECT = \
 CLIENT_MAIN_OBJECT = \
 					client_main.o\
 					client.o\
+					database.o\
+					index_file.o\
+					data_file.o\
+					entry_point.o\
 					looper.o\
 					stream_buf.o\
 					packet.o\
@@ -72,6 +68,10 @@ TEST_WATCHER_LOOPER_OBJECT = \
 						utils.o\
 						stream_buf.o\
 						message.o\
+						database.o\
+						index_file.o\
+						data_file.o\
+						entry_point.o\
 
 TEST_ACCOUNT_DB_OBJECT = \
 						test_account_db.o\
@@ -98,39 +98,33 @@ TEST_MESSAGE_DB_OBJET = \
 
 SHARED_LIBRARY = lib$(DBLINKED_LIST).so
 
-CFLAGS +=  -Wall -std=gnu99 -g $(INC)
+CFLAGS +=  -Wall -std=gnu99 -g 
 
 .c.o:
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 all: $(SERVER_MAIN) $(CLIENT_MAIN) $(TEST_DATABASE) $(TEST_TIMER_LOOPER) $(TEST_ACCOUNT_DB) $(TEST_MESSAGE_DB) $(TEST_WATCHER_LOOPER)
 
-$(SERVER_MAIN) : $(SERVER_MAIN_OBJECT) $(SHARED_LIBRARY)
-	$(CC) -o $(SERVER_MAIN) $(SERVER_MAIN_OBJECT) -L. -l$(DBLINKED_LIST)
+$(SERVER_MAIN) : $(SERVER_MAIN_OBJECT)
+	$(CC) -o $(SERVER_MAIN) $(SERVER_MAIN_OBJECT) -lkdc_dblinked -lkdc_tree -lkdc_queue
 
 $(CLIENT_MAIN) : $(CLIENT_MAIN_OBJECT)
-	$(CC) -o $(CLIENT_MAIN) $(CLIENT_MAIN_OBJECT) -L. -l$(DBLINKED_LIST)
+	$(CC) -o $(CLIENT_MAIN) $(CLIENT_MAIN_OBJECT) -lkdc_dblinked -lkdc_tree -lkdc_queue
 
 $(TEST_DATABASE) : $(TEST_DATABASE_OBJECT)
-	$(CC) -o $(TEST_DATABASE) $(TEST_DATABASE_OBJECT) -L. -l$(DBLINKED_LIST)
+	$(CC) -o $(TEST_DATABASE) $(TEST_DATABASE_OBJECT) -lkdc_dblinked -lkdc_tree -lkdc_queue
 
 $(TEST_TIMER_LOOPER) : $(TEST_TIMER_LOOPER_OBJECT)
-	$(CC) -o $(TEST_TIMER_LOOPER) $(TEST_TIMER_LOOPER_OBJECT) -L. -l$(DBLINKED_LIST)
+	$(CC) -o $(TEST_TIMER_LOOPER) $(TEST_TIMER_LOOPER_OBJECT) -lkdc_dblinked
 
 $(TEST_WATCHER_LOOPER) : $(TEST_WATCHER_LOOPER_OBJECT)
-	$(CC) -o $(TEST_WATCHER_LOOPER) $(TEST_WATCHER_LOOPER_OBJECT) -L. -l$(DBLINKED_LIST)	
+	$(CC) -o $(TEST_WATCHER_LOOPER) $(TEST_WATCHER_LOOPER_OBJECT) -lkdc_dblinked -lkdc_tree -lkdc_queue	
 
 $(TEST_ACCOUNT_DB) : $(TEST_ACCOUNT_DB_OBJECT)
-	$(CC) -o $(TEST_ACCOUNT_DB) $(TEST_ACCOUNT_DB_OBJECT) -L. -l$(DBLINKED_LIST)
+	$(CC) -o $(TEST_ACCOUNT_DB) $(TEST_ACCOUNT_DB_OBJECT) -lkdc_dblinked -lkdc_tree -lkdc_queue
 
 $(TEST_MESSAGE_DB) : $(TEST_MESSAGE_DB_OBJET)
-	$(CC) -o $(TEST_MESSAGE_DB) $(TEST_MESSAGE_DB_OBJET) -L. -l$(DBLINKED_LIST)
-
-$(SHARED_LIBRARY):$(DBLINKED_LIST_OBJECT)
-	$(CC) -shared -o $@ $^
-
-$(DBLINKED_LIST_OBJECT):
-	$(CC) -c -Wall -fpic $(INC) $(DBLINKED_LIST_SOURCE)
+	$(CC) -o $(TEST_MESSAGE_DB) $(TEST_MESSAGE_DB_OBJET) -lkdc_dblinked -lkdc_tree -lkdc_queue
 
 clean:
-	$(RM) $(SERVER_MAIN) $(CLIENT_MAIN) $(TEST_DATABASE) $(TEST_TIMER_LOOPER) $(TEST_WATCHER_LOOPER) $(TEST_ACCOUNT_DB) $(TEST_MESSAGE_DB) *.o *.so
+	$(RM) $(SERVER_MAIN) $(CLIENT_MAIN) $(TEST_DATABASE) $(TEST_TIMER_LOOPER) $(TEST_WATCHER_LOOPER) $(TEST_ACCOUNT_DB) $(TEST_MESSAGE_DB) *.o
