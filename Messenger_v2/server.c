@@ -51,8 +51,9 @@ struct _Online {
 struct _UserData {
     unsigned int id;
     Server *server;
-    Client *client;
     Packet *packet;
+    int snd_type;
+    int fd;
 };
 
 struct _LoginData {
@@ -111,6 +112,32 @@ static int server_match_client(void *data1, void *data2) {
 static Client *server_find_client(Server *server, unsigned int id) {
     Client *client = NULL;
     client = (Client*) d_list_find_data(server->client_list, server_match_client, &id);
+
+    if (client == NULL) {
+        LOGD("Can't find Client\n");
+        return NULL;
+    }
+    return client;
+}
+
+static int server_match_client_with_fd(void *data1, void *data2) {
+    Client *client = (Client*) data1;
+    int fd = *((int*) data2);
+
+    if (!client) {
+        LOGD("There is nothing to point the Client\n");
+    }
+
+    if (client->fd == fd) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+static Client *server_find_client_with_fd(Server *server, int fd) {
+    Client *client = NULL;
+    client = (Client*) d_list_find_data(server->client_list, server_match_client_with_fd, &fd);
 
     if (client == NULL) {
         LOGD("Can't find Client\n");
@@ -417,10 +444,10 @@ static int server_match_online(void *data1, void *data2) {
     }
     Online *online = (Online*) data1;
 
-    int fd = *((int *) data2);
-    int cmp_fd = online->fd;
+    int id = *((int *) data2);
+    int cmp_id = online->id;
 
-    if (fd == cmp_fd) {
+    if (id == cmp_id) {
         return 1;
     } else {
         return 0;
@@ -428,7 +455,7 @@ static int server_match_online(void *data1, void *data2) {
 }
 
 static int server_add_online(Server *server, int id, int fd) {
-    if (server->online_list && d_list_find_data(server->online_list, server_match_online, &fd)) {
+    if (server->online_list && d_list_find_data(server->online_list, server_match_online, &id)) {
         LOGD("Failed to add online\n");
         return ERROR_LOGIN;
     }
@@ -448,6 +475,7 @@ static int server_login(Server *server, char *payload, int fd) {
     char *pw = server_new_account_info(&payload);
     LOGD("user_id:%s pw:%s\n", user_id, pw);
     int id = account_db_identify_account(server->account_db, user_id, pw);
+    LOGD("id:%d\n", id);
     free(user_id);
     free(pw);
 
@@ -466,7 +494,7 @@ static BOOLEAN server_delete_online(Server *server, int id, int fd) {
         return FALSE;
     }
 
-    Online *online = (Online *) d_list_find_data(server->online_list, server_match_online, &fd);
+    Online *online = (Online *) d_list_find_data(server->online_list, server_match_online, &id);
     if (!online) {
         LOGD("Can't delete the Online\n");
         return FALSE;
@@ -986,7 +1014,7 @@ static BOOLEAN server_send_packet_to_all_clients(Server *server, Client *comp_cl
             }
 
             LOGD("Send write the Packet to the Client fd:%d\n", fd);
-            if (write(fd, buf, len) < 0) {
+            if (write_n_byte(fd, buf, len) != len) {
                 LOGD("Failed to send the Packet to server\n");
                 return FALSE;
             }
@@ -1037,7 +1065,7 @@ static void destroy_user_data(UserData *user_data) {
     free(user_data);
 }
 
-static UserData *new_user_data(Server *server, Client *client, Packet *packet) {
+static UserData *new_user_data(Server *server, Packet *packet, int fd, int snd_type) {
     UserData *user_data;
 
     user_data = (UserData*) malloc(sizeof(UserData));
@@ -1047,15 +1075,15 @@ static UserData *new_user_data(Server *server, Client *client, Packet *packet) {
     }
     user_data->id = -1;
     user_data->server = server;
-    user_data->client = client;
     user_data->packet = packet;
+    user_data->fd = fd;
+    user_data->snd_type = snd_type;
 
     return user_data;
 }
 
 static BOOLEAN server_interval_send_packet(void *user_data, unsigned int id) {
     UserData *data;
-    Server *server;
     int result;
 
     if (!user_data) {
@@ -1069,13 +1097,37 @@ static BOOLEAN server_interval_send_packet(void *user_data, unsigned int id) {
         destroy_user_data(user_data);
         return FALSE;
     }
-    
-    server = data->server;
-    result = server_send_packet_to_all_clients(server, data->client, data->packet);
-    if (result == FALSE) {
-        LOGD("Failed to sedn packet to all client\n");
-    }
 
+    LOGD("data->id:%d id:%d,\n", data->id, id);
+    Client *client = server_find_client_with_fd(data->server, data->fd);
+    if (!client) {
+        LOGD("There is nothing to point the Client\n");
+        destroy_packet(data->packet);
+        destroy_user_data(user_data);
+        return FALSE;
+    }
+    
+    switch (data->snd_type) {
+        case SND_ONE:
+            result = server_send_packet_to_client(data->packet, client, client->last_read_pos);
+            if (result == FALSE) {
+                LOGD("Failed to sedn packet to all client\n");
+            }
+        break;
+
+        case SND_ALL:
+            result = server_send_packet_to_all_clients(data->server, client, data->packet);
+            if (result == FALSE) {
+                LOGD("Failed to sedn packet to all client\n");
+            }
+        break;
+
+        default:
+            LOGD("SND TYPE is wrong\n");
+        break;
+        
+    } 
+    
     destroy_packet(data->packet);
     destroy_user_data(user_data);
     return FALSE;
@@ -1123,7 +1175,8 @@ static int server_check_overread(Stream_Buf *r_stream_buf, int packet_len) {
 }
 
 static Packet *server_new_res_packet(Stream_Buf *stream_buf, short op_code) {
-    long int payload_len = (long int) stream_buf_get_position(stream_buf);
+    long int payload_len = stream_buf_get_position(stream_buf);
+
     if (!payload_len) {
         LOGD("Can't make res_packet\n");
     } 
@@ -1216,6 +1269,7 @@ static Packet *new_res_login_list_packet(Server *server, short op_code) {
     d_list_foreach(server->online_list, new_login_list_buf, &loginData);
     int count = d_list_length(loginData.login_list);
     Stream_Buf *stream_buf = NULL;
+    BOOLEAN result;
     LOGD("count:%d\n", count);
     if (count) {
         stream_buf = new_stream_buf(loginData.len + LEN_SIZE);
@@ -1225,7 +1279,7 @@ static Packet *new_res_login_list_packet(Server *server, short op_code) {
             return NULL;
         }
         memcpy(stream_buf_get_available(stream_buf), &count, LEN_SIZE);
-        BOOLEAN result = stream_buf_increase_pos(stream_buf, LEN_SIZE);
+        result = stream_buf_increase_pos(stream_buf, LEN_SIZE);
         if (result == FALSE) {
             LOGD("Failed to new login list\n");
             destroy_stream_buf(stream_buf);
@@ -1234,26 +1288,152 @@ static Packet *new_res_login_list_packet(Server *server, short op_code) {
         result = utils_append_data_to_buf(loginData.login_list, stream_buf);
         utils_destroy_stream_buf_list(loginData.login_list);
     } else {
-        stream_buf = new_stream_buf(LEN_SIZE + 1);
+        stream_buf = new_stream_buf(NO_USER);
         if (!stream_buf) {
             LOGD("Failed to new login list\n");
             return NULL;
+        }
+
+        result = stream_buf_increase_pos(stream_buf, NO_USER);
+        if (result == FALSE) {
+            LOGD("Failed to new login list\n");
+            destroy_stream_buf(stream_buf);
         } 
     }
 
     return server_new_res_packet(stream_buf, op_code);
 }
 
+static Packet* new_snd_msg_packet(Server* server, Packet *req_packet, unsigned int *interval, char **user_id, Message **mesg) {
+    long int payload_len = packet_get_payload_len(req_packet, NULL);
+    if (payload_len <= 0) {
+        LOGD("Can't new snd msg_packet\n");
+        return NULL;
+    }
+
+    char *req_payload = packet_get_payload(req_packet, NULL);
+    if (!req_payload) {
+        LOGD("Failed to get the payload\n");
+        return NULL;
+    }
+    memcpy(interval, req_payload, INTERVAL_SIZE);
+
+    LOGD("interval:%d\n", *interval);
+    payload_len -= INTERVAL_SIZE;
+    req_payload += INTERVAL_SIZE;
+
+    int len = 0;
+    memcpy(&len, req_payload, LEN_SIZE);
+    LOGD("len:%d\n", len);
+    req_payload += LEN_SIZE;
+    payload_len -= LEN_SIZE;
+    if (len == 0) {
+        if (req_payload[0]) {
+            LOGD("Failed to new_snd_msg_packet\n");
+            return NULL;
+        } else {
+            req_payload += NULL_SIZE;
+        } 
+    } else {
+        *user_id = strndup(req_payload, len);
+        LOGD("user_id:%s\n", *user_id);
+        req_payload += len;
+        payload_len -= len;
+    }
+
+    Stream_Buf *payload = new_stream_buf(payload_len);
+    if (!payload) {
+        LOGD("Failed to make buf for payload\n");
+        return NULL;
+    }
+    memcpy(stream_buf_get_available(payload), req_payload, payload_len);
+    BOOLEAN result = stream_buf_increase_pos(payload, payload_len);
+    if (result == FALSE) {
+        LOGD("Failed to new payload\n");
+        destroy_stream_buf(payload);
+        return NULL;
+    }
+
+    *mesg = convert_payload_to_mesg(stream_buf_get_buf(payload), NULL);
+    if (!(*mesg)) {
+        LOGD("Failed to convert payload to the Message\n");
+        return NULL;
+    }
+    
+    return server_new_res_packet(payload, RCV_MSG);
+}
+
+static void server_handle_snd_msg_event(Server *server, Packet *req_packet, Client *client) {
+    unsigned int interval = 0;
+    char *user_id = NULL;
+    int snd_type = 0;
+    int fd;
+    Message *mesg = NULL;
+    
+    Packet *res_packet = new_snd_msg_packet(server, req_packet, &interval, &user_id, &mesg); 
+    if (!res_packet) {
+        LOGD("Failed to new snd_msg_packet\n");
+        if (!user_id) {
+            free(user_id);
+        }
+        return;
+    }
+    if (user_id) {
+        int id = account_db_get_id(server->account_db, user_id);
+        if (id < 0) {
+            LOGD("Failed to get id\n");
+            free(user_id);
+            destroy_packet(res_packet);
+            return;
+        }
+        LOGD("id:%d\n", id);
+        Online *online = (Online *) d_list_find_data(server->online_list, server_match_online, &id);
+        if (!online) {
+            LOGD("Failed to find id\n");
+            free(user_id);
+            destroy_packet(res_packet);
+            return;
+        }
+        snd_type = SND_ONE;
+        fd = online->fd;
+    } else {
+        snd_type = SND_ALL;
+        fd = client->fd;
+    }
+
+    int mesg_id = message_db_add_mesg(server->mesg_db, mesg);
+    destroy_mesg(mesg);
+    if (mesg_id < 0) {
+        LOGD("Failed to add mesg\n");
+        if (user_id) {
+            free(user_id);
+        }
+        destroy_packet(res_packet);    
+        return;
+    }
+
+    UserData *user_data = new_user_data(server, res_packet, fd, snd_type);
+    if (!user_data) {
+        LOGD("Failed to create the user data\n"); 
+        destroy_packet(res_packet);
+        return;
+    }
+
+    unsigned int id = looper_add_timer(server->looper, interval, server_interval_send_packet, user_data);
+    LOGD("id:%d\n", id);
+    if (id < 0) {
+        LOGD("Faield to add timer\n");
+    }
+    user_data->id = id;
+}
+
 static void server_handle_req_packet(Server *server, Client *client, Packet *req_packet) {
     short op_code;
     int count;
     int read_pos;
-    unsigned int interval;
     int result;
-    unsigned int id;
-
+ 
     Packet *res_packet;
-    UserData *user_data;
 
     op_code = packet_get_op_code(req_packet, NULL);
     if (op_code == -1) {
@@ -1261,8 +1441,6 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
         return;
     }
     read_pos = 0;
-    interval = 0;
-    id = 0;
     count = message_db_get_message_count(server->mesg_db);
     LOGD("count:%d\n", count);
 
@@ -1282,28 +1460,6 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
                 LOGD("Failed to send packet to client\n");
             }
             destroy_packet(res_packet);
-            break;
-
-        case REQ_INTERVAL_MSG:
-            res_packet = server_create_res_packet(server, req_packet, NULL, NULL, &interval);
-            if (!res_packet) {
-                LOGD("Failed to create the res packet\n");
-                return;
-            }
-            user_data = new_user_data(server, client, res_packet);
-            if (!user_data) {
-                LOGD("Failed to create the user data\n");
-                destroy_packet(res_packet);
-                return;
-            }
-
-            id = looper_add_timer(server->looper, interval, server_interval_send_packet, user_data);
-            if (id < 0) {
-                LOGD("Faield to add timer\n");
-                destroy_packet(res_packet);
-            }
-            user_data->id = id;
-            LOGD("interval:%d\n", interval);
             break;
 
         case REQ_FIRST_OR_LAST_MSG:
@@ -1357,6 +1513,11 @@ static void server_handle_req_packet(Server *server, Client *client, Packet *req
                 LOGD("Failed to send packet to client\n");
             }
             destroy_packet(res_packet);
+            break;
+
+        case SND_MSG:
+            LOGD("SND_MSG\n");
+            server_handle_snd_msg_event(server, req_packet, client);
             break;
         default:
             LOGD("OPCODE is wrong\n");
@@ -1501,7 +1662,7 @@ static void server_handle_req_event(Server *server, int fd, unsigned int id) {
             stream_buf = new_stream_buf(MAX_BUF_LEN);
             client->stream_buf_list = d_list_append(client->stream_buf_list, stream_buf); 
         }
-        LOGD("read\n");
+
         n_byte = read(fd, stream_buf_get_available(stream_buf), stream_buf_get_available_size(stream_buf));
         if (n_byte < 0) {
             LOGD("Failed to read\n");
@@ -1517,7 +1678,6 @@ static void server_handle_req_event(Server *server, int fd, unsigned int id) {
         }
 
         read_len = server_get_read_size(client->stream_buf_list);
-        LOGD("read_len:%d\n", read_len);
         if (read_len < (client->packet_len)) {
             LOGD("Not enough\n");
             return;
@@ -1561,7 +1721,6 @@ static void server_handle_req_event(Server *server, int fd, unsigned int id) {
     if (client->read_state == FINISH_TO_READ_REQ) {
         LOGD("FINISH_TO_READ_REQ\n");
         packet_len = client->packet_len;
-        LOGD("packet_len:%d\n", packet_len);
         if (buf[packet_len -3] != EOP) {
             LOGD("Packet is wrong\n");
             server_destroy_client_stream_buf_list(client);
@@ -1571,7 +1730,6 @@ static void server_handle_req_event(Server *server, int fd, unsigned int id) {
         }
 
         check_sum = packet_create_checksum(NULL, buf, packet_len);
-        LOGD("check_sum:%d\n", check_sum);
         result = server_is_checksum_true(check_sum, buf, packet_len);
         if (result == FALSE) {
             LOGD("Check_Sum is wrong\n");

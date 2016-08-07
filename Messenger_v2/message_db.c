@@ -308,7 +308,7 @@ DList *message_db_get_messages(MessageDB *mesg_db, int pos, int count) {
 
     mesg_list = NULL;
     LOGD("pos :%d count:%d\n", pos, count);
-
+    pos--;
     for (i = pos; i < (pos +count); i++) {
         entry_point = database_find_entry_point(mesg_db->database, i);
         if (!entry_point) {

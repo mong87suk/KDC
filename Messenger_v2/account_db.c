@@ -395,6 +395,7 @@ int account_db_add_account(AccountDB *account_db, Account *account) {
         return -1;
     }
     int id = database_get_last_id(account_db->database);
+    LOGD("id:%d\n", id);
     
     id = database_add_entry(account_db->database, entry, id);
     destroy_stream_buf(entry);
@@ -652,18 +653,18 @@ int account_db_identify_account(AccountDB *account_db, char *user_id, char *pw) 
     }
 
     int len = d_list_length(entry_list);
-    destroy_matched_list(entry_list);
-    if (len == 0 || len > 1) {
+    if (len == 0) {
         LOGD("Failed to identify the account\n");
         return -1;
     }
 
     EntryPoint *entry_point = d_list_get_data(entry_list);
+    destroy_matched_list(entry_list);
     if (!entry_point) {
         LOGD("Failed to get the entry_point\n");
         return -1;
     }
-
+    
     return entry_point_get_id(entry_point);
 }
 
@@ -682,4 +683,44 @@ Stream_Buf *account_db_get_data(AccountDB *account_db, int id, int data_type) {
     return utils_get_data(account_db->database, entry, data_type, &field_type);
 }
 
+int account_db_get_id(AccountDB *account_db, char *user_id) {
+    if (!account_db || !user_id) {
+        LOGD("Can't get id\n'");
+        return -1;
+    }
 
+    Where *where = new_where(USER_ID, user_id);
+    if (!where) {
+        LOGD("Failed to new where\n");
+        return -1;
+    }
+    DList *where_list = NULL;
+    where_list = d_list_append(where_list, where);
+    if (!where_list) {
+        LOGD("Failed to add the where\n");
+        destroy_where(where);
+        return -1;
+    }
+
+    DList *entry_list = database_search(account_db->database, where_list);
+    destroy_where_list(where_list);
+    if (!entry_list) {
+        LOGD("The account which matches UserID is not present\n");
+        return -1;
+    }
+
+    int len = d_list_length(entry_list);
+    if (len == 0) {
+        LOGD("Failed to identify the account\n");
+        return -1;
+    }
+
+    EntryPoint *entry_point = d_list_get_data(entry_list);
+    destroy_matched_list(entry_list);
+    if (!entry_point) {
+        LOGD("Failed to get the entry_point\n");
+        return -1;
+    }
+    
+    return entry_point_get_id(entry_point);
+}

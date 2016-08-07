@@ -143,7 +143,6 @@ Packet *convert_buf_to_packet(char *buf) {
     buf += sizeof(sop);
 
     memcpy(&op_code, buf, sizeof(op_code));
-    LOGD("op_code:%d\n", op_code);
     result = packet_set_op_code(packet, op_code);
     buf += sizeof(op_code);
     payload_len = 0;
@@ -151,7 +150,6 @@ Packet *convert_buf_to_packet(char *buf) {
     result = packet_set_payload_len(packet, payload_len);
     buf += sizeof(payload_len);
 
-    LOGD("payload_len:%ld\n", payload_len);
     if (payload_len > 0) {
         payload = (char*) malloc(payload_len);
         if (!payload) {
@@ -183,7 +181,6 @@ Packet *convert_buf_to_packet(char *buf) {
     buf += sizeof(eop);
 
     memcpy(&checksum, buf, sizeof(checksum));
-    LOGD("chekc_sum:%d\n", checksum);
     result = packet_set_checksum(packet, checksum);
     if (result == FALSE) {
         LOGD("Failed to set the check_sum\n");

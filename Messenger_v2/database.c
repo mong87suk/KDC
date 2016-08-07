@@ -566,8 +566,9 @@ int database_get_data_file_fd(DataBase *database) {
 void database_comp_k_field(void *data, void *user_data) {
     Where *where = (Where *)data;
     struct _CompData *comp_data = (struct _CompData *) user_data;
-
+    LOGD("data:%s\n", (char*) where->data);
     int id = index_file_get_entry_id(comp_data->database->index_file, (char*) where->data, where->column);
+    LOGD("id:%d\n", id);
     if (comp_data->id == -1) {
         comp_data->id = id;
     } else {
@@ -583,6 +584,7 @@ static EntryPoint* database_get_entry_point(DataBase *database, DList *k_list) {
 
     comp_data.database = database;
     comp_data.boolean = TRUE;
+    comp_data.id = -1;
 
     d_list_foreach(k_list, database_comp_k_field, &comp_data);
     if (comp_data.boolean == TRUE) {
@@ -617,10 +619,13 @@ DList *database_search(DataBase *database, DList *where_list) {
 
     if (fieldList.k_list) {
         entry_point = database_get_entry_point(database, fieldList.k_list);
-    }
-
-    if (entry_point) {
-        entry_list = d_list_append(entry_list, entry_point);
+        LOGD("id:%d\n", entry_point_get_id(entry_point));
+        if (!entry_point) {
+            LOGD("Can't search a data\n");
+            return NULL;    
+        } else {
+            entry_list = d_list_append(entry_list, entry_point);
+        }
     } else {
         entry_list = database_get_entry_list(database);
     }
@@ -632,10 +637,6 @@ DList *database_search(DataBase *database, DList *where_list) {
         return NULL;
     }
 
-    if (!fieldList.other_list) {
-        return entry_list;
-    }
-    
     search_data.database = database;
     search_data.matched_entry = NULL;
     search_data.where_list = fieldList.other_list;

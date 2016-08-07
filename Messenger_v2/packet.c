@@ -320,8 +320,6 @@ BOOLEAN packet_set_checksum(Packet *packet, short checksum) {
 
     tail = packet->tail;
     tail->checksum = checksum;
-    LOGD("checksum:%d\n", tail->checksum);
-
     return TRUE;
 }
 

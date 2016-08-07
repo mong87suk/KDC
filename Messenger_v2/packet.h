@@ -14,6 +14,7 @@
 #define REQ_LOG_IN_LIST        (char) 0x0B
 #define RES_LOG_IN_LIST        (char) 0x0C
 #define REQ_DELETE_ACCOUNT     (char) 0x0D
+#define SND_MSG                (char) 0x0E
 
 #define OP_CODE_NUM             '0'
 #define OP_CODE_STR             55
@@ -27,6 +28,8 @@
 #define STR_LEN_SIZE            4
 #define RESULT_SIZE             6
 #define RESULT_TYPE_SIZE        4
+#define NO_USER                 5
+#define NULL_SIZE               1
 
 #define HEADER_SIZE            11
 #define TAIL_SIZE              3

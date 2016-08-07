@@ -26,5 +26,6 @@ int account_db_get_account_count(AccountDB *account_db);
 char *account_db_get_pw(AccountDB *account_db, char *id, char *confirm);
 int account_db_identify_account(AccountDB *account_db, char *user_id, char *pw);
 Stream_Buf *account_db_get_data(AccountDB *account_db, int id, int data_type);
+int account_db_get_id(AccountDB *account_db, char *user_id);
 
 #endif

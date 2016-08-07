@@ -3,6 +3,9 @@
 
 #include "looper.h"
 
+#define SND_ALL         0
+#define SND_ONE         1
+
 typedef enum {
     READY_TO_READ_REQ = 0,
     START_TO_READ_REQ = 1,
