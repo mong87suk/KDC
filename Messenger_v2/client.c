@@ -716,32 +716,7 @@ static Stream_Buf *client_new_interval_msg_payload(char *input_str, int input_st
     stream_buf_increase_pos(stream_buf, TIME_SIZE);
     stream_buf_list = d_list_append(stream_buf_list, stream_buf);
     body_len += TIME_SIZE;
-    // str_len = input_strlen - 1;
-    // LOGD("str_len:%d\n", str_len);
-
-    // stream_buf = new_stream_buf(STR_LEN_SIZE);
-    // if (!stream_buf) {
-    //     LOGD("Failed to new stream buf\n");
-    //     utils_destroy_stream_buf_list(stream_buf_list);
-    //     return NULL;
-    // }
-    // memcpy(stream_buf_get_available(stream_buf), &str_len, STR_LEN_SIZE);
-    // stream_buf_increase_pos(stream_buf, STR_LEN_SIZE);
-    // stream_buf_list = d_list_append(stream_buf_list, stream_buf);
-    // body_len += STR_LEN_SIZE;
-
-    // LOGD("str_len:%d\n", str_len);
-    // stream_buf = new_stream_buf(str_len);
-    // if (!stream_buf) {
-    //     LOGD("Failed to new stream buf\n");
-    //     utils_destroy_stream_buf_list(stream_buf_list);
-    //     return NULL;
-    // }
-    // LOGD("input_str:%s\n", input_str);
-    // memcpy(stream_buf_get_available(stream_buf), input_str, str_len);
-    // stream_buf_increase_pos(stream_buf, str_len);
-    // stream_buf_list = d_list_append(stream_buf_list, stream_buf);
-    // body_len += str_len;
+    
     int read_size = 0;
     LOGD("input_str:%s\n", input_str);
     Stream_Buf *mesg = client_new_mesg_data(input_str, &read_size);
