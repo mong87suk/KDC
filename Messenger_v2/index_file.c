@@ -22,8 +22,32 @@ struct _IndexFile {
     int entry_count;
     char *path;
     DList *entry_list;
-    Tree *tree[FIELD_NUM];
+    DList *tree_list;
 };
+
+struct _UserData {
+    DataBase *database;
+    EntryPoint *entry_point;
+};
+
+static struct _UserData *new_user_data(DataBase *database, EntryPoint *entry_point) {
+    struct _UserData *user_data = (struct _UserData *) malloc(sizeof(struct _UserData *));
+    user_data->database = database;
+    user_data->entry_point = entry_point;
+
+    return user_data;
+}
+
+static void index_file_load_keyword(void *data, void *user_data) {
+    Tree *tree = (Tree *) data;
+    int field_type = 0;
+    Stream_Buf *stream_buf = utils_get_data(((struct _UserData*) user_data)->database, ((struct _UserData*) user_data)->entry_point, tree_get_index(tree), &field_type);
+
+    if (field_type == KEYWORD_FIELD) {
+        char *keyword = stream_buf_get_buf(stream_buf);
+        tree_insert(tree, keyword, entry_point_get_id(((struct _UserData*) user_data)->entry_point));
+    }  
+}
 
 static void index_file_free_entry(void *data) {
     if (!data) {
@@ -96,7 +120,7 @@ static void index_file_write_entry_point(void *data, void *user_data) {
     }
 }
 
-static int index_file_get_k_coulmn_count(IndexFile *index_file, int field_mask) {
+static int index_file_set_tree(IndexFile *index_file, int field_mask) {
     int count = utils_get_colum_count(field_mask);
     if (count < 0) {
         LOGD("Failed to get column_count\n");
@@ -109,7 +133,7 @@ static int index_file_get_k_coulmn_count(IndexFile *index_file, int field_mask) 
     for (int i = count; i >= 0; i--) {
         int column_type = (field_mask >> (FIELD_SIZE * i)) & FIELD_TYPE_FLAG;    
         if (column_type == KEYWORD_FIELD) {
-            index_file->tree[column] = new_tree(k_count);
+            index_file->tree_list = d_list_append(index_file->tree_list, new_tree(column));
             k_count++;
         }
         column++;
@@ -171,7 +195,7 @@ static BOOLEAN index_file_load(IndexFile *index_file, DataBase *database) {
     }
     index_file->entry_count = entry_count;
 
-    int k_count = index_file_get_k_coulmn_count(index_file, field_mask);
+    int k_count = index_file_set_tree(index_file, field_mask);
     
     offset = 0;
     for (i = 0; i < entry_count; i++) {
@@ -196,29 +220,9 @@ static BOOLEAN index_file_load(IndexFile *index_file, DataBase *database) {
             return FALSE;
         }
 
-        for (int j = 0; j < k_count; j++) {
-            Tree *tree = index_file->tree[j];
-            int column_index = tree_get_index(tree);
-            int field_type = 0;
-            Stream_Buf *stream_buf = utils_get_data(database, entry_point, column_index, &field_type);
-            if (!stream_buf || field_type != KEYWORD_FIELD) {
-                LOGD("Failed to load index_file\n");
-                destroy_stream_buf(stream_buf);
-                d_list_free(index_file->entry_list, index_file_free_entry);
-                destroy_tree(tree);
-                return FALSE;
-            }
-
-            char *key = stream_buf_get_buf(stream_buf);
-            if (!key) {
-                LOGD("Failed to load index_file\n");
-                destroy_stream_buf(stream_buf);
-                d_list_free(index_file->entry_list, index_file_free_entry);
-                destroy_tree(tree);
-                return FALSE;
-            }
-            tree_insert(tree, key, id);
-            destroy_stream_buf(stream_buf);
+        if (k_count > 0) {
+            struct _UserData *user_data = new_user_data(database, entry_point);
+            d_list_foreach(index_file->tree_list, index_file_load_keyword, user_data);
         }
 
         index_file->entry_list = d_list_append(index_file->entry_list, entry_point);
@@ -290,6 +294,8 @@ IndexFile *index_file_open(char *name, int field_mask, DataBase *database) {
     index_file->fd = fd;
     index_file->path = path;
     index_file->field_mask = field_mask;
+    index_file->entry_list = NULL;
+    index_file->tree_list = NULL;
 
     if (size > 0) {
         result = index_file_load(index_file, database);
@@ -310,7 +316,6 @@ IndexFile *index_file_open(char *name, int field_mask, DataBase *database) {
     } else {
         index_file->last_id = -1;
         index_file->entry_count = 0;
-        index_file->entry_list = NULL;
         index_file->field_mask = field_mask;
     }
 
@@ -384,6 +389,12 @@ BOOLEAN index_file_update(IndexFile *index_file) {
     return TRUE;
 }
 
+static void index_file_free_tree(void *data) {
+    Tree *tree = (Tree *) data;
+
+    destroy_tree(tree);
+}
+
 void index_file_delete_all(IndexFile *index_file) {
     int result;
     if (!index_file) {
@@ -396,12 +407,7 @@ void index_file_delete_all(IndexFile *index_file) {
     index_file->last_id = -1;
     index_file->entry_count = 0;
 
-    for (int i = 0; i < FIELD_NUM; i++) {
-        Tree *tree = index_file->tree[i];
-        if (tree) {
-            destroy_tree(tree);
-        }
-    }
+    d_list_free(index_file->tree_list, index_file_free_tree);
 
     result = index_file_update(index_file);
 
@@ -549,6 +555,17 @@ int index_file_get_entry_id(IndexFile *index_file, char *key, int column) {
     return id;
 }
 
+static int index_file_match_tree(void *data1, void *data2) {
+    Tree *tree = (Tree *) data1;
+    int column = *((int *) data2);
+
+    if (column == tree_get_index(tree)) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
 BOOLEAN index_file_insert_keyword(IndexFile *index_file, int column, char *key, int id) {
     if (!index_file || !key) {
         LOGD("Can't insert this keyword\n");
@@ -560,10 +577,12 @@ BOOLEAN index_file_insert_keyword(IndexFile *index_file, int column, char *key, 
         return FALSE;
     }
 
-    if (!index_file->tree[column]) {
-        index_file->tree[column] = new_tree(column);
+    Tree *tree = (Tree *) d_list_find_data(index_file->tree_list, index_file_match_tree, &column);
+    if (!tree) {
+        return FALSE;
     }
-    tree_insert(index_file->tree[column], key, id);
+    
+    tree_insert(tree, key, id);
     return TRUE;
 }
 
