@@ -540,6 +540,17 @@ EntryPoint *index_file_nth_entry(IndexFile *index_file, int nth) {
     return entry;
 }
 
+static int index_file_match_tree(void *data1, void *data2) {
+    Tree *tree = (Tree *) data1;
+    int column = *((int *) data2);
+
+    if (column == tree_get_index(tree)) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
 int index_file_get_entry_id(IndexFile *index_file, char *key, int column) {
     if (!index_file || !key || column < 0) {
         LOGD("Can't get the entry id\n");
@@ -550,20 +561,9 @@ int index_file_get_entry_id(IndexFile *index_file, char *key, int column) {
         LOGD("Can't get the entry id\n");
         return -1;
     }
-
-    int id = tree_find(index_file->tree[column], key);
+    Tree *tree = (Tree *) d_list_find_data(index_file->tree_list, index_file_match_tree, &column);
+    int id = tree_find(tree, key);
     return id;
-}
-
-static int index_file_match_tree(void *data1, void *data2) {
-    Tree *tree = (Tree *) data1;
-    int column = *((int *) data2);
-
-    if (column == tree_get_index(tree)) {
-        return 1;
-    } else {
-        return 0;
-    }
 }
 
 BOOLEAN index_file_insert_keyword(IndexFile *index_file, int column, char *key, int id) {
@@ -597,11 +597,12 @@ BOOLEAN index_file_update_keyword(IndexFile *index_file, int column, char *key, 
         return FALSE;
     }
 
-    if (!index_file->tree[column]) {
-        index_file->tree[column] = new_tree(column);
+    Tree *tree = (Tree *) d_list_find_data(index_file->tree_list, index_file_match_tree, &column);
+    if (!tree) {
+        return FALSE;
     }
 
-    tree_update(index_file->tree[column], key, id);
+    tree_update(tree, key, id);
     return TRUE;
 }
 
@@ -616,10 +617,6 @@ void index_file_delete_keyword(IndexFile *index_file, int column, char *key) {
         return;
     }
 
-    if (!index_file->tree[column]) {
-        LOGD("Can't delete this keyowrd\n");
-        return;
-    }
-
-    tree_delete(index_file->tree[column], key);
+    Tree *tree = (Tree *) d_list_find_data(index_file->tree_list, index_file_match_tree, &column);
+    tree_delete(tree, key);
 }
